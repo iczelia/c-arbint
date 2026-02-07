@@ -1,0 +1,5 @@
+- specialised algorithm for arbint_sqr.
+- speedups to arbint_mul (memory reuse, schonhage-strassen).
+- potential speedups to the comparison functions, if possible. needs investigation.
+- add more comprehensive tests.
+- continue the implementation...

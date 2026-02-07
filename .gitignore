@@ -1,0 +1,61 @@
+# Autotools generated files
+/aclocal.m4
+/ar-lib
+/compile
+/config.guess
+/config.sub
+/config.h.in
+/configure
+/depcomp
+/install-sh
+/ltmain.sh
+/missing
+/test-driver
+m4/lt*
+m4/libtool.m4
+autom4te.cache/
+
+# Make generated files
+/Makefile.in
+/include/Makefile.in
+/src/Makefile.in
+/man/Makefile.in
+/doc/Makefile.in
+/tests/Makefile.in
+
+# Build outputs
+*/.deps/*
+*/.libs/*
+*.lo
+*.Plo
+*.o
+*.la
+*.a
+*.so
+*.so.*
+*.tar.gz
+*.tar.xz
+build-aux/
+*.3
+
+# Configure outputs
+/Makefile
+/include/Makefile
+/src/Makefile
+/man/Makefile
+/doc/Makefile
+/tests/Makefile
+/config.log
+/config.status
+/config.h
+/libtool
+/stamp-h1
+/c-arbint.pc
+configure~
+config.h.in~
+
+# Test artifacts
+/tests/test-suite.log
+/tests/*.log
+/tests/*.trs
+/tests/__pycache__/

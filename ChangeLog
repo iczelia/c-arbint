@@ -1,0 +1,11 @@
+2026-02-07  Kamila Szewczyk  <k@iczelia.net>
+
+	* configure.ac: Add --enable-lto=auto|yes|no and LTO capability check.
+	* src/Makefile.am: Apply LTO compile/link flags to libarbint.
+	* tests/Makefile.am: Apply LTO compile/link flags to test binaries.
+	* README: Add build/install/basic usage instructions and configure options.
+	* NEWS: Add v0.1 release notes.
+
+2026-02-06  Kamila Szewczyk  <k@iczelia.net>
+
+	* Initial bootstrap.

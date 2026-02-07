@@ -1,0 +1,11 @@
+c-arbint 0.1 (2026-02-07)
+=========================
+
+- Initial public release.
+- Core signed arbitrary-precision integer operations:
+  assignment, comparison, add/sub, multiply, square, and truncated division.
+- Binary import/export API and fit-check helpers.
+- Runtime/compile-time BMI2 path selection for multiplication on x86 targets.
+- Autotools build with shared/static library support, pkg-config metadata,
+  manual page, and unit/stochastic tests.
+- Optional LTO support via `--enable-lto=auto|yes|no`.

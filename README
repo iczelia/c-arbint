@@ -1,0 +1,41 @@
+# c-arbint
+
+`c-arbint` is an arbitrary-precision integer library in C.
+
+## Requirements
+
+- C compiler with C99 support
+- autotools + libtool (`autoconf`, `automake`, `libtool`)
+- `make`
+- `pkg-config` (for consumer integration)
+
+## Build from git
+
+```sh
+./bootstrap
+./configure
+make -j"$(nproc)"
+make check
+```
+
+## Install
+
+```sh
+sudo make install
+```
+
+## Configure options
+
+- `--with-base-optimization=default|tuned`
+- `--with-march=<arch>` (used with `tuned`, `native` if not specified)
+- `--enable-warnings`
+- `--enable-lto=auto|yes|no`
+  - `auto` (default): enables `-flto` if supported by the compiler/linker
+  - `yes`: requires `-flto` support and fails otherwise
+  - `no`: disables LTO
+
+## Link in your project
+
+```sh
+cc your_file.c $(pkg-config --cflags --libs c-arbint)
+```

@@ -1,0 +1,224 @@
+.TH C-ARBINT 3 "@MAN_DATE@" "c-arbint @PACKAGE_VERSION@" "Library Functions Manual"
+.SH NAME
+c-arbint \- arbitrary-precision integer library for C
+.SH SYNOPSIS
+.nf
+.B #include <arbint.h>
+.fi
+.PP
+Link with:
+.PP
+.nf
+.B cc ... $(pkg-config --cflags --libs c-arbint)
+.fi
+.SH DESCRIPTION
+.B c-arbint
+provides signed arbitrary-precision integer arithmetic with explicit
+allocator-aware object management.
+.PP
+This page documents the functions currently exported by
+.BR libarbint .
+Additional declarations may exist in
+.BR arbint.h
+for future releases.
+.SH TYPES
+.TP
+.B arbint_t
+Opaque integer object type (single-object array form). Initialize with
+.BR arbint_init ()
+and release with
+.BR arbint_clear ().
+.TP
+.B arbint_ctx_t
+Execution/allocation context. A context carries the allocator used for object
+storage and for exported buffers.
+.TP
+.B arbint_err_t
+Error code enum used by mutating/extracting APIs.
+.SH RETURN VALUES
+.PP
+Functions returning
+.B arbint_err_t
+use
+.B ARBINT_OK
+on success and a nonzero error code on failure.
+.PP
+Predicate/comparison helpers return
+.B int
+(typically boolean-style 0/1 or three-way compare \-1/0/+1).
+.SH ERROR CODES
+.TP
+.B ARBINT_EINVAL
+Invalid argument (for example NULL where not accepted, or invalid object state).
+.TP
+.B ARBINT_ENOMEM
+Allocation failure.
+.TP
+.B ARBINT_EOVERFLOW
+Value/capacity overflow for the requested conversion or operation.
+.TP
+.B ARBINT_ESIGN
+Unsigned extraction requested from a negative value.
+.TP
+.B ARBINT_EZERO
+Division by zero.
+.SH IMPLEMENTED API
+.SS Context and Object Lifetime
+.BR arbint_ctx_init_default (),
+.BR arbint_ctx_init (),
+.BR arbint_ctx_clear (),
+.BR arbint_init (),
+.BR arbint_clear (),
+.BR arbint_get_ctx (),
+.BR arbint_set_ctx (),
+.BR arbint_zero (),
+.BR arbint_resize (),
+.BR arbint_swap ()
+.PP
+These APIs initialize/destroy contexts and integer objects, rebind objects to a
+new context, zero values, reserve limb capacity, and swap complete object state.
+.SS Assignment and Extraction
+.BR arbint_set (),
+.BR arbint_set_i32 (),
+.BR arbint_set_u32 (),
+.BR arbint_get_i32 (),
+.BR arbint_get_u32 ()
+.PP
+Assign from another integer or a 32-bit scalar; extract into 32-bit scalar
+forms with range/sign checking.
+.SS Fit Checks
+.BR arbint_fits_u8 (),
+.BR arbint_fits_u16 (),
+.BR arbint_fits_u32 (),
+.BR arbint_fits_u64 (),
+.BR arbint_fits_i8 (),
+.BR arbint_fits_i16 (),
+.BR arbint_fits_i32 (),
+.BR arbint_fits_i64 ()
+.PP
+Non-allocating representability predicates.
+.SS Sign and Basic Predicates
+.BR arbint_signum (),
+.BR arbint_is_zero (),
+.BR arbint_is_one (),
+.BR arbint_is_neg (),
+.BR arbint_is_odd (),
+.BR arbint_is_even (),
+.BR arbint_abs (),
+.BR arbint_neg ()
+.PP
+Sign/shape queries and sign transforms.
+.SS Comparison
+.BR arbint_cmp (),
+.BR arbint_cmpabs (),
+.BR arbint_cmp_i32 (),
+.BR arbint_cmp_u32 (),
+.BR arbint_eq (),
+.BR arbint_ne (),
+.BR arbint_lt (),
+.BR arbint_le (),
+.BR arbint_gt (),
+.BR arbint_ge (),
+.BR arbint_eq_i32 (),
+.BR arbint_ne_i32 (),
+.BR arbint_lt_i32 (),
+.BR arbint_le_i32 (),
+.BR arbint_gt_i32 (),
+.BR arbint_ge_i32 (),
+.BR arbint_eq_u32 (),
+.BR arbint_ne_u32 (),
+.BR arbint_lt_u32 (),
+.BR arbint_le_u32 (),
+.BR arbint_gt_u32 (),
+.BR arbint_ge_u32 ()
+.PP
+Three-way and predicate comparisons against big integers and 32-bit scalars.
+.SS Arithmetic
+.BR arbint_add (),
+.BR arbint_sub (),
+.BR arbint_mul (),
+.BR arbint_sqr (),
+.BR arbint_add_i32 (),
+.BR arbint_add_u32 (),
+.BR arbint_sub_i32 (),
+.BR arbint_sub_u32 ()
+.PP
+Core signed arithmetic on arbitrary-size integers.
+.SS Truncated Division and Remainder
+.BR arbint_tdiv_qr (),
+.BR arbint_tdiv_q (),
+.BR arbint_tdiv_r (),
+.BR arbint_tdiv_qr_u32 (),
+.BR arbint_tdiv_q_u32 (),
+.BR arbint_tdiv_r_u32 (),
+.BR arbint_tdiv_qr_i32 (),
+.BR arbint_tdiv_q_i32 (),
+.BR arbint_tdiv_r_i32 ()
+.PP
+Truncated division obeys:
+.PP
+.nf
+q = trunc(n / d)
+r = n - q*d
+.fi
+.PP
+with
+.I |r| < |d|
+and remainder sign matching the dividend (or zero).
+.SS Binary Import and Export
+.BR arbint_import (),
+.BR arbint_export ()
+.PP
+Convert between
+.B arbint_t
+and a little-endian magnitude byte buffer.
+.B arbint_export ()
+exports magnitude only (no sign encoding).
+.SH ALIASING RULES
+.PP
+For single-output operations, destination may alias an input.
+.PP
+For two-output division APIs, output aliases are accepted; if both outputs are
+the same object, the last-written output value remains in that object.
+.SH MEMORY NOTES
+.PP
+.B arbint_export ()
+allocates the output buffer using the allocator in the source object's context.
+The caller owns that buffer and must free it with the same allocator contract.
+.SH ALGORITHMIC NOTES
+.PP
+Multiplication dispatches between a generic implementation and an optimized
+BMI2 path on supported x86 targets, switching between the naive
+schoolbook - O(n^2) - and Karatsuba - O(n^log2(3))-  algorithms based
+on operand size.
+.PP
+Division uses magnitude long division and then applies sign rules for
+truncation semantics.
+.SH EXAMPLE
+.nf
+#include <arbint.h>
+
+arbint_ctx_t ctx;
+arbint_t a, b, q, r;
+
+arbint_ctx_init_default(&ctx);
+arbint_init(a, &ctx);
+arbint_init(b, &ctx);
+arbint_init(q, &ctx);
+arbint_init(r, &ctx);
+
+arbint_set_i32(a, -17);
+arbint_set_i32(b, 5);
+arbint_tdiv_qr(q, r, a, b); /* q = -3, r = -2 */
+
+arbint_clear(a);
+arbint_clear(b);
+arbint_clear(q);
+arbint_clear(r);
+.fi
+.SH SEE ALSO
+.BR pkg-config (1)
+.SH AUTHOR
+Kamila Szewczyk <k@iczelia.net>
+.SH LICENSE
+GNU Affero General Public License version 3 or later.

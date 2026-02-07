@@ -1,0 +1,34 @@
+# arbint - portable arbitrary-precision computation library
+# 
+# Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+AM_CPPFLAGS = -I$(top_srcdir)/include
+
+lib_LTLIBRARIES = libarbint.la
+libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c
+EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c
+libarbint_la_LIBADD =
+libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
+libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
+noinst_HEADERS = arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h
+libarbint_la_LDFLAGS = -version-info 0:0:0 -no-undefined $(ARBINT_LTO_LDFLAGS)
+
+if ARBINT_BUILD_BMI2
+libarbint_la_LIBADD += libarbint_la-arbint_mul_bmi2.lo
+endif
+
+libarbint_la-arbint_mul_bmi2.lo: arbint_mul_bmi2.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f 'arbint_mul_bmi2.c' || echo '$(srcdir)/'`arbint_mul_bmi2.c

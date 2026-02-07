@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+autoreconf -fi
+
+echo "Bootstrap complete. Now run: ./configure && make"
