@@ -1,0 +1,798 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt -o Acquire::Retries=5 update
+          sudo apt -o Acquire::Retries=5 install -y autoconf automake libtool pkg-config xz-utils
+
+      - name: Bootstrap, configure, and build dist tarball
+        id: dist
+        run: |
+          ./bootstrap
+          ./configure --enable-lto=auto
+          make -j"$(nproc)" dist-xz
+          dist_tarball="$(ls -t c-arbint-*.tar.xz | head -n1)"
+          echo "dist_tarball=$dist_tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: ${{ steps.dist.outputs.dist_tarball }}
+          if-no-files-found: error
+
+  build-ubuntu:
+    runs-on: ${{ matrix.runner }}
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+        compiler: [gcc, clang, tcc]
+        lto: ['on', 'off']
+        tune: ['on', 'off']
+        exclude:
+          - compiler: tcc
+            lto: 'on'
+          - compiler: tcc
+            tune: 'on'
+    name: build-ubuntu (${{ matrix.arch }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt -o Acquire::Retries=5 update
+          sudo apt -o Acquire::Retries=5 install -y build-essential pkg-config clang tcc
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Extract, build, and test
+        run: |
+          export CC="${{ matrix.compiler }}"
+
+          configure_args=""
+          if [ "${{ matrix.lto }}" = "on" ]; then
+            configure_args="$configure_args --enable-lto=yes"
+          else
+            configure_args="$configure_args --enable-lto=no"
+          fi
+
+          if [ "${{ matrix.tune }}" = "on" ]; then
+            configure_args="$configure_args --with-base-optimization=tuned"
+          else
+            configure_args="$configure_args --with-base-optimization=default"
+          fi
+
+          tarball="$(ls dist/*.tar.xz | head -n1)"
+          srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+          tar -xf "$tarball" -C dist
+          cd "dist/$srcdir"
+          ./configure $configure_args
+          make -j"$(nproc)"
+          make check
+
+  build-docker:
+    runs-on: ubuntu-24.04
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [fedora, alpine]
+        compiler: [gcc, clang]
+        lto: ['on', 'off']
+        tune: ['on', 'off']
+    name: build-docker (${{ matrix.distro }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Build and test in Docker
+        run: |
+          docker run --rm \
+            -e DISTRO="${{ matrix.distro }}" \
+            -e CC="${{ matrix.compiler }}" \
+            -e MATRIX_LTO="${{ matrix.lto }}" \
+            -e MATRIX_TUNE="${{ matrix.tune }}" \
+            -v "$PWD/dist:/work/dist" \
+            -w /work \
+            "${{ matrix.distro }}:latest" \
+            sh -eu -c '
+              if [ "$DISTRO" = "fedora" ]; then
+                dnf -y install gcc clang make pkgconf-pkg-config tar xz groff
+              elif [ "$DISTRO" = "alpine" ]; then
+                apk add --no-cache build-base clang pkgconf tar xz groff
+              else
+                echo "unsupported distro: $DISTRO" >&2
+                exit 1
+              fi
+
+              configure_args=""
+              if [ "$MATRIX_LTO" = "on" ]; then
+                configure_args="$configure_args --enable-lto=yes"
+              else
+                configure_args="$configure_args --enable-lto=no"
+              fi
+
+              if [ "$MATRIX_TUNE" = "on" ]; then
+                configure_args="$configure_args --with-base-optimization=tuned"
+              else
+                configure_args="$configure_args --with-base-optimization=default"
+              fi
+
+              tarball="$(ls dist/*.tar.xz | head -n1)"
+              srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+              tar -xf "$tarball" -C dist
+              cd "dist/$srcdir"
+              ./configure $configure_args
+              jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
+              make -j"$jobs"
+              make check
+            '
+
+  build-linux-86:
+    runs-on: ubuntu-24.04
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        x86_variant: [i686, i386]
+        compiler: [gcc, clang, tcc]
+        lto: ['on', 'off']
+        tune: ['on', 'off']
+        exclude:
+          - compiler: tcc
+            lto: 'on'
+          - compiler: tcc
+            tune: 'on'
+    name: linux-86 (debian-bullseye, ${{ matrix.x86_variant }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Build and test (linux/386 Docker)
+        run: |
+          docker run --rm \
+            --platform linux/386 \
+            -e X86_VARIANT="${{ matrix.x86_variant }}" \
+            -e CC="${{ matrix.compiler }}" \
+            -e MATRIX_LTO="${{ matrix.lto }}" \
+            -e MATRIX_TUNE="${{ matrix.tune }}" \
+            -v "$PWD/dist:/work/dist" \
+            -w /work \
+            debian:bullseye-slim \
+            sh -eu -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get -o Acquire::Retries=5 update
+              apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+                build-essential clang lld tcc pkg-config tar xz-utils groff
+
+              if [ "$X86_VARIANT" = "i686" ]; then
+                march_value="pentium"
+              else
+                march_value="i386"
+              fi
+
+              configure_args=""
+              if [ "$MATRIX_LTO" = "on" ]; then
+                configure_args="$configure_args --enable-lto=yes"
+              else
+                configure_args="$configure_args --enable-lto=no"
+              fi
+
+              if [ "$MATRIX_TUNE" = "on" ]; then
+                configure_args="$configure_args --with-base-optimization=tuned --with-march=$march_value"
+              else
+                configure_args="$configure_args --with-base-optimization=default"
+              fi
+
+              if [ "$CC" = "clang" ] && [ "$MATRIX_LTO" = "on" ]; then
+                export LDFLAGS="${LDFLAGS:-} -fuse-ld=lld"
+              fi
+
+              tarball="$(ls dist/*.tar.xz | head -n1)"
+              srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+              tar -xf "$tarball" -C dist
+              cd "dist/$srcdir"
+              ./configure $configure_args
+              jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
+              make -j"$jobs"
+              make check
+            '
+
+  build-windows-mingw-64:
+    runs-on: windows-latest
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, tcc]
+        lto: ['on', 'off']
+        tune: ['on', 'off']
+        exclude:
+          - compiler: tcc
+            lto: 'on'
+          - compiler: tcc
+            tune: 'on'
+    name: build-windows-mingw (x86_64, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make
+            tar
+            xz
+            bzip2
+            curl
+            groff
+            pkgconf
+            mingw-w64-x86_64-gcc
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Extract, build, and test
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+
+          arch="x86_64"
+          export CC="${{ matrix.compiler }}"
+
+          configure_args="--disable-dependency-tracking"
+          if [ "${{ matrix.lto }}" = "on" ]; then
+            configure_args="$configure_args --enable-lto=yes"
+          else
+            configure_args="$configure_args --enable-lto=no"
+          fi
+
+          if [ "${{ matrix.tune }}" = "on" ]; then
+            configure_args="$configure_args --with-base-optimization=tuned"
+          else
+            configure_args="$configure_args --with-base-optimization=default"
+          fi
+
+          tarball="$(ls dist/*.tar.xz | sed -n '1p')"
+          srcdir="$(tar -tf "$tarball" 2>/dev/null | sed -n '1p' | cut -d/ -f1)"
+          tar -xf "$tarball" -C dist
+          cd "dist/$srcdir"
+          jobs="$(nproc 2>/dev/null || echo 2)"
+
+          if [ "${{ matrix.compiler }}" = "tcc" ]; then
+            tcc_root="$PWD/.tinycc-$arch"
+            tcc_src_dir="$tcc_root/tcc-0.9.27"
+            tcc_prefix="$tcc_root/prefix"
+            rm -rf "$tcc_root"
+            mkdir -p "$tcc_root"
+            tcc_archive="$tcc_root/tcc-0.9.27.tar.bz2"
+            tcc_url_primary="https://download-mirror.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2"
+            tcc_url_fallback="https://download-mirror.savannah.nongnu.org/releases/tinycc/tcc-0.9.27.tar.bz2"
+            if ! curl -fsSL --retry 3 --retry-delay 2 -o "$tcc_archive" "$tcc_url_primary"; then
+              curl -fsSL --retry 3 --retry-delay 2 -o "$tcc_archive" "$tcc_url_fallback"
+            fi
+            echo "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c  $tcc_archive" | sha256sum -c -
+            tar -xf "$tcc_archive" -C "$tcc_root"
+            cd "$tcc_src_dir"
+            tcc_cpu="x86_64"
+            ./configure --prefix="$tcc_prefix" --cpu="$tcc_cpu" --config-mingw32
+            make -j"$jobs"
+            make install
+            export PATH="$tcc_prefix/bin:$tcc_src_dir:$PATH"
+            cd ../..
+
+            tcc_bin=""
+            if [ -x "$tcc_prefix/bin/tcc.exe" ]; then
+              tcc_bin="$tcc_prefix/bin/tcc.exe"
+            elif [ -x "$tcc_prefix/bin/tcc" ]; then
+              tcc_bin="$tcc_prefix/bin/tcc"
+            elif [ -x "$tcc_src_dir/tcc.exe" ]; then
+              tcc_bin="$tcc_src_dir/tcc.exe"
+            elif [ -x "$tcc_src_dir/tcc" ]; then
+              tcc_bin="$tcc_src_dir/tcc"
+            fi
+
+            if [ -z "$tcc_bin" ]; then
+              echo "Unable to locate tcc executable after TinyCC install." >&2
+              exit 1
+            fi
+
+            tcc_runtime="$(find "$tcc_root" -type f -name 'libtcc1.a' | sed -n '1p')"
+            if [ -z "$tcc_runtime" ]; then
+              echo "Unable to locate libtcc1.a after TinyCC install." >&2
+              exit 1
+            fi
+            tcc_libdir="$(dirname "$tcc_runtime")"
+            tcc_runtime_root="$(dirname "$tcc_libdir")"
+            tcc_base_root="$tcc_runtime_root"
+            case "$tcc_libdir" in
+              */lib/tcc)
+                tcc_base_root="$(dirname "$(dirname "$tcc_libdir")")"
+                ;;
+              */lib)
+                tcc_base_root="$(dirname "$tcc_libdir")"
+                ;;
+            esac
+            tcc_base_lib="$tcc_base_root/lib"
+            echo "Using libtcc1 runtime: $tcc_runtime"
+            echo "Using TinyCC base root: $tcc_base_root"
+            tcc_wrapper="$tcc_root/tcc-driver.sh"
+            printf '%s\n' '#!/usr/bin/env bash' \
+              'set -euo pipefail' \
+              'args=()' \
+              'while [ "$#" -gt 0 ]; do' \
+              '  if [ "$1" = "-link" ] && [ "${2-}" = "-dll" ]; then' \
+              '    args+=("-shared")' \
+              '    shift 2' \
+              '    continue' \
+              '  fi' \
+              '  args+=("$1")' \
+              '  shift' \
+              'done' \
+              "exec \"$tcc_bin\" -B\"$tcc_base_root\" -L\"$tcc_base_root\" -L\"$tcc_base_lib\" -L\"$tcc_libdir\" \"\${args[@]}\"" \
+              > "$tcc_wrapper"
+            chmod +x "$tcc_wrapper"
+            export CC="$tcc_wrapper"
+            tcc_internal_cppflags=""
+            if [ -d "$tcc_libdir/include" ]; then
+              tcc_internal_cppflags="$tcc_internal_cppflags -I$tcc_libdir/include"
+            fi
+            if [ -d "$tcc_base_root/include" ]; then
+              tcc_internal_cppflags="$tcc_internal_cppflags -I$tcc_base_root/include"
+            fi
+            export CPPFLAGS="${CPPFLAGS:-}$tcc_internal_cppflags"
+            export LDFLAGS="${LDFLAGS:-} -L$tcc_base_root -L$tcc_base_lib -L$tcc_libdir"
+            tcc_include_path=""
+            if [ -d "$tcc_base_root/include" ]; then
+              tcc_include_path="$tcc_base_root/include"
+            fi
+            if [ -d "$tcc_libdir/include" ]; then
+              if [ -n "$tcc_include_path" ]; then
+                tcc_include_path="$tcc_include_path:$tcc_libdir/include"
+              else
+                tcc_include_path="$tcc_libdir/include"
+              fi
+            fi
+            if [ -n "$tcc_include_path" ]; then
+              export C_INCLUDE_PATH="$tcc_include_path${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
+            fi
+            export LIBRARY_PATH="$tcc_base_root:$tcc_base_lib:$tcc_libdir${LIBRARY_PATH:+:$LIBRARY_PATH}"
+          fi
+
+          dump_logs_on_failure() {
+            rc="$?"
+            if [ "$rc" -ne 0 ]; then
+              for f in configure.log make.log check.log config.log tests/test-suite.log; do
+                if [ -f "$f" ]; then
+                  echo "===== $f ====="
+                  tail -n 300 "$f" || true
+                fi
+              done
+            fi
+          }
+          trap dump_logs_on_failure EXIT
+
+          "$CC" -v || true
+          ./configure $configure_args 2>&1 | tee configure.log
+          make -j"$jobs" 2>&1 | tee make.log
+          if [ "${{ matrix.compiler }}" = "tcc" ]; then
+            dll_path="$(ls src/.libs/libarbint-*.dll 2>/dev/null | sed -n '1p')"
+            if [ -n "$dll_path" ] && [ ! -f src/.libs/libarbint.lib ]; then
+              cp "$dll_path" src/.libs/libarbint.lib
+            fi
+            ls -la src/.libs || true
+            test_bins_raw="$(awk '
+              BEGIN { collecting=0; line="" }
+              /^check_PROGRAMS[[:space:]]*=/ {
+                collecting=1
+                sub(/^[^=]*=[[:space:]]*/, "", $0)
+              }
+              collecting {
+                gsub(/[[:space:]]+$/, "", $0)
+                if (line != "") line = line " "
+                line = line $0
+                if ($0 ~ /\\$/) {
+                  sub(/\\$/, "", line)
+                  next
+                }
+                print line
+                exit
+              }
+            ' tests/Makefile)"
+            exeext="$(sed -n 's/^EXEEXT = //p' tests/Makefile | sed -n '1p')"
+            test_bins="$(printf '%s\n' "$test_bins_raw" | awk -v e="$exeext" '{ gsub(/\$\(EXEEXT\)/, e); print }')"
+            if [ -z "$test_bins" ]; then
+              echo "Unable to resolve \$(check_PROGRAMS) from tests/Makefile" | tee -a check.log
+              exit 1
+            fi
+            make -C tests -j"$jobs" $test_bins 2>&1 | tee check.log
+            export PATH="$PWD/src/.libs:$PWD/tests/.libs:$PATH"
+            for test_name in $test_bins; do
+              test_bin="tests/.libs/${test_name}"
+              if [ ! -x "$test_bin" ]; then
+                test_bin="tests/.libs/${test_name%.exe}"
+              fi
+              echo "Running $test_bin" | tee -a check.log
+              "$test_bin" 2>&1 | tee -a check.log
+            done
+          else
+            make check 2>&1 | tee check.log
+          fi
+
+  build-windows-mingw-32:
+    runs-on: windows-latest
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, tcc]
+        lto: ['on', 'off']
+        tune: ['on', 'off']
+        exclude:
+          - compiler: tcc
+            lto: 'on'
+          - compiler: tcc
+            tune: 'on'
+    name: build-windows-mingw (x86, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: true
+          install: >-
+            make
+            tar
+            xz
+            bzip2
+            curl
+            groff
+            pkgconf
+            mingw-w64-i686-gcc
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Extract, build, and test
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+
+          arch="x86"
+          export CC="${{ matrix.compiler }}"
+
+          configure_args="--disable-dependency-tracking"
+          if [ "${{ matrix.lto }}" = "on" ]; then
+            configure_args="$configure_args --enable-lto=yes"
+          else
+            configure_args="$configure_args --enable-lto=no"
+          fi
+
+          if [ "${{ matrix.tune }}" = "on" ]; then
+            configure_args="$configure_args --with-base-optimization=tuned"
+          else
+            configure_args="$configure_args --with-base-optimization=default"
+          fi
+
+          tarball="$(ls dist/*.tar.xz | sed -n '1p')"
+          srcdir="$(tar -tf "$tarball" 2>/dev/null | sed -n '1p' | cut -d/ -f1)"
+          tar -xf "$tarball" -C dist
+          cd "dist/$srcdir"
+          jobs="$(nproc 2>/dev/null || echo 2)"
+
+          if [ "${{ matrix.compiler }}" = "tcc" ]; then
+            tcc_root="$PWD/.tinycc-$arch"
+            tcc_src_dir="$tcc_root/tcc-0.9.27"
+            tcc_prefix="$tcc_root/prefix"
+            rm -rf "$tcc_root"
+            mkdir -p "$tcc_root"
+            tcc_archive="$tcc_root/tcc-0.9.27.tar.bz2"
+            tcc_url_primary="https://download-mirror.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2"
+            tcc_url_fallback="https://download-mirror.savannah.nongnu.org/releases/tinycc/tcc-0.9.27.tar.bz2"
+            if ! curl -fsSL --retry 3 --retry-delay 2 -o "$tcc_archive" "$tcc_url_primary"; then
+              curl -fsSL --retry 3 --retry-delay 2 -o "$tcc_archive" "$tcc_url_fallback"
+            fi
+            echo "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c  $tcc_archive" | sha256sum -c -
+            tar -xf "$tcc_archive" -C "$tcc_root"
+            cd "$tcc_src_dir"
+            tcc_cpu="i386"
+            ./configure --prefix="$tcc_prefix" --cpu="$tcc_cpu" --config-mingw32
+            make -j"$jobs"
+            make install
+            export PATH="$tcc_prefix/bin:$tcc_src_dir:$PATH"
+            cd ../..
+
+            tcc_bin=""
+            if [ -x "$tcc_prefix/bin/tcc.exe" ]; then
+              tcc_bin="$tcc_prefix/bin/tcc.exe"
+            elif [ -x "$tcc_prefix/bin/tcc" ]; then
+              tcc_bin="$tcc_prefix/bin/tcc"
+            elif [ -x "$tcc_src_dir/tcc.exe" ]; then
+              tcc_bin="$tcc_src_dir/tcc.exe"
+            elif [ -x "$tcc_src_dir/tcc" ]; then
+              tcc_bin="$tcc_src_dir/tcc"
+            fi
+
+            if [ -z "$tcc_bin" ]; then
+              echo "Unable to locate tcc executable after TinyCC install." >&2
+              exit 1
+            fi
+
+            tcc_runtime="$(find "$tcc_root" -type f -name 'libtcc1.a' | sed -n '1p')"
+            if [ -z "$tcc_runtime" ]; then
+              echo "Unable to locate libtcc1.a after TinyCC install." >&2
+              exit 1
+            fi
+            tcc_libdir="$(dirname "$tcc_runtime")"
+            tcc_runtime_root="$(dirname "$tcc_libdir")"
+            tcc_base_root="$tcc_runtime_root"
+            case "$tcc_libdir" in
+              */lib/tcc)
+                tcc_base_root="$(dirname "$(dirname "$tcc_libdir")")"
+                ;;
+              */lib)
+                tcc_base_root="$(dirname "$tcc_libdir")"
+                ;;
+            esac
+            tcc_base_lib="$tcc_base_root/lib"
+            echo "Using libtcc1 runtime: $tcc_runtime"
+            echo "Using TinyCC base root: $tcc_base_root"
+            tcc_wrapper="$tcc_root/tcc-driver.sh"
+            printf '%s\n' '#!/usr/bin/env bash' \
+              'set -euo pipefail' \
+              'args=()' \
+              'while [ "$#" -gt 0 ]; do' \
+              '  if [ "$1" = "-link" ] && [ "${2-}" = "-dll" ]; then' \
+              '    args+=("-shared")' \
+              '    shift 2' \
+              '    continue' \
+              '  fi' \
+              '  args+=("$1")' \
+              '  shift' \
+              'done' \
+              "exec \"$tcc_bin\" -B\"$tcc_base_root\" -L\"$tcc_base_root\" -L\"$tcc_base_lib\" -L\"$tcc_libdir\" \"\${args[@]}\"" \
+              > "$tcc_wrapper"
+            chmod +x "$tcc_wrapper"
+            export CC="$tcc_wrapper"
+            tcc_internal_cppflags=""
+            if [ -d "$tcc_libdir/include" ]; then
+              tcc_internal_cppflags="$tcc_internal_cppflags -I$tcc_libdir/include"
+            fi
+            if [ -d "$tcc_base_root/include" ]; then
+              tcc_internal_cppflags="$tcc_internal_cppflags -I$tcc_base_root/include"
+            fi
+            export CPPFLAGS="${CPPFLAGS:-}$tcc_internal_cppflags"
+            export LDFLAGS="${LDFLAGS:-} -L$tcc_base_root -L$tcc_base_lib -L$tcc_libdir"
+            tcc_include_path=""
+            if [ -d "$tcc_base_root/include" ]; then
+              tcc_include_path="$tcc_base_root/include"
+            fi
+            if [ -d "$tcc_libdir/include" ]; then
+              if [ -n "$tcc_include_path" ]; then
+                tcc_include_path="$tcc_include_path:$tcc_libdir/include"
+              else
+                tcc_include_path="$tcc_libdir/include"
+              fi
+            fi
+            if [ -n "$tcc_include_path" ]; then
+              export C_INCLUDE_PATH="$tcc_include_path${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
+            fi
+            export LIBRARY_PATH="$tcc_base_root:$tcc_base_lib:$tcc_libdir${LIBRARY_PATH:+:$LIBRARY_PATH}"
+          fi
+
+          dump_logs_on_failure() {
+            rc="$?"
+            if [ "$rc" -ne 0 ]; then
+              for f in configure.log make.log check.log config.log tests/test-suite.log; do
+                if [ -f "$f" ]; then
+                  echo "===== $f ====="
+                  tail -n 300 "$f" || true
+                fi
+              done
+            fi
+          }
+          trap dump_logs_on_failure EXIT
+
+          "$CC" -v || true
+          ./configure $configure_args 2>&1 | tee configure.log
+          make -j"$jobs" 2>&1 | tee make.log
+          if [ "${{ matrix.compiler }}" = "tcc" ]; then
+            dll_path="$(ls src/.libs/libarbint-*.dll 2>/dev/null | sed -n '1p')"
+            if [ -n "$dll_path" ] && [ ! -f src/.libs/libarbint.lib ]; then
+              cp "$dll_path" src/.libs/libarbint.lib
+            fi
+            ls -la src/.libs || true
+            test_bins_raw="$(awk '
+              BEGIN { collecting=0; line="" }
+              /^check_PROGRAMS[[:space:]]*=/ {
+                collecting=1
+                sub(/^[^=]*=[[:space:]]*/, "", $0)
+              }
+              collecting {
+                gsub(/[[:space:]]+$/, "", $0)
+                if (line != "") line = line " "
+                line = line $0
+                if ($0 ~ /\\$/) {
+                  sub(/\\$/, "", line)
+                  next
+                }
+                print line
+                exit
+              }
+            ' tests/Makefile)"
+            exeext="$(sed -n 's/^EXEEXT = //p' tests/Makefile | sed -n '1p')"
+            test_bins="$(printf '%s\n' "$test_bins_raw" | awk -v e="$exeext" '{ gsub(/\$\(EXEEXT\)/, e); print }')"
+            if [ -z "$test_bins" ]; then
+              echo "Unable to resolve \$(check_PROGRAMS) from tests/Makefile" | tee -a check.log
+              exit 1
+            fi
+            make -C tests -j"$jobs" $test_bins 2>&1 | tee check.log
+            export PATH="$PWD/src/.libs:$PWD/tests/.libs:$PATH"
+            for test_name in $test_bins; do
+              test_bin="tests/.libs/${test_name}"
+              if [ ! -x "$test_bin" ]; then
+                test_bin="tests/.libs/${test_name%.exe}"
+              fi
+              echo "Running $test_bin" | tee -a check.log
+              "$test_bin" 2>&1 | tee -a check.log
+            done
+          else
+            make check 2>&1 | tee check.log
+          fi
+
+  build-windows-msvc:
+    runs-on: windows-latest
+    needs: package
+    name: build-windows-msvc (x64, lto-off, tune-off)
+
+    steps:
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup MSYS2 tools
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: true
+          install: >-
+            make
+            tar
+            xz
+            groff
+            pkgconf
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Extract, build, and test (MSVC)
+        shell: msys2 {0}
+        env:
+          MSYS2_PATH_TYPE: inherit
+        run: |
+          set -euo pipefail
+
+          export CC=cl
+          export CFLAGS="${CFLAGS:-} /nologo"
+
+          configure_args="--disable-dependency-tracking --enable-lto=no --with-base-optimization=default --disable-shared --enable-static"
+
+          tarball="$(ls dist/*.tar.xz | sed -n '1p')"
+          srcdir="$(tar -tf "$tarball" 2>/dev/null | sed -n '1p' | cut -d/ -f1)"
+          tar -xf "$tarball" -C dist
+          cd "dist/$srcdir"
+          jobs="$(nproc 2>/dev/null || echo 2)"
+
+          dump_logs_on_failure() {
+            rc="$?"
+            if [ "$rc" -ne 0 ]; then
+              for f in configure.log make.log check.log config.log tests/test-suite.log; do
+                if [ -f "$f" ]; then
+                  echo "===== $f ====="
+                  tail -n 300 "$f" || true
+                fi
+              done
+            fi
+          }
+          trap dump_logs_on_failure EXIT
+
+          command -v "$CC" >/dev/null 2>&1 || {
+            echo "MSVC compiler '$CC' not found on PATH" >&2
+            exit 1
+          }
+
+          "$CC" /Bv || true
+          ./configure $configure_args 2>&1 | tee configure.log
+          make -j"$jobs" 2>&1 | tee make.log
+          make check 2>&1 | tee check.log
+
+  build-macos:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            arch: intel
+          - os: macos-15
+            arch: arm64
+        lto: ['on', 'off']
+        tune: ['on', 'off']
+    runs-on: ${{ matrix.os }}
+    name: build-macos (${{ matrix.arch }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Extract, build, and test
+        run: |
+          export CC=clang
+
+          configure_args=""
+          if [ "${{ matrix.lto }}" = "on" ]; then
+            configure_args="$configure_args --enable-lto=yes"
+          else
+            configure_args="$configure_args --enable-lto=no"
+          fi
+
+          if [ "${{ matrix.tune }}" = "on" ]; then
+            configure_args="$configure_args --with-base-optimization=tuned"
+          else
+            configure_args="$configure_args --with-base-optimization=default"
+          fi
+
+          tarball="$(ls dist/*.tar.xz | head -n1)"
+          srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+          tar -xf "$tarball" -C dist
+          cd "dist/$srcdir"
+          ./configure $configure_args
+          jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 3)"
+          make -j"$jobs"
+          make check

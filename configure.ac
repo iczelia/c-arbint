@@ -4,7 +4,7 @@ AC_CONFIG_SRCDIR([src])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
 m4_include([m4/arbint_x86_feature_check.m4])
-AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz dist-bzip3 no-dist-gzip tar-ustar])
+AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz no-dist-gzip tar-ustar])
 AM_SILENT_RULES([yes])
 AC_CANONICAL_HOST
 
@@ -18,7 +18,6 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
 AM_PROG_AR
 LT_INIT
-AM_PATH_PYTHON([3.8])
 
 AC_C_INLINE
 AC_C_RESTRICT
@@ -34,6 +33,8 @@ AC_DEFINE_UNQUOTED([ARBINT_LIMB_BITS], [$arbint_limb_bits],
 
 MAN_DATE=`date "+%B %Y"`
 AC_SUBST([MAN_DATE])
+AC_CHECK_PROGS([NROFF], [nroff], [])
+AM_CONDITIONAL([HAVE_NROFF], [test -n "$NROFF"])
 
 AC_ARG_ENABLE([warnings],
   [AS_HELP_STRING([--enable-warnings], [Enable extra compiler warnings])],

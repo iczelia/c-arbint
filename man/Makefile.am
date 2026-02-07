@@ -18,5 +18,10 @@
 man_MANS = c-arbint.3
 EXTRA_DIST = c-arbint.3.in
 
+if HAVE_NROFF
 check-local: c-arbint.3
 	$(AM_V_at)$(NROFF) -man c-arbint.3 >/dev/null
+else
+check-local:
+	@echo "Skipping manpage nroff check (nroff not found at configure time)."
+endif

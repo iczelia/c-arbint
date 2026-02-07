@@ -7,6 +7,7 @@
 - C compiler with C99 support
 - autotools + libtool (`autoconf`, `automake`, `libtool`)
 - `make`
+- `nroff` (for man page generation, optional)
 - `pkg-config` (for consumer integration)
 
 ## Build from git
@@ -39,3 +40,10 @@ sudo make install
 ```sh
 cc your_file.c $(pkg-config --cflags --libs c-arbint)
 ```
+
+## Supported platforms
+
+The platforms that the code has been verified to compile and pass tests on include:
+- Linux: x86-64 (Ubuntu, Fedora, Alpine; gcc/clang/tcc), arm64 (Ubuntu; gcc/clang/tcc), Pentium i686 (Debian; gcc/clang/tcc), i386 (Debian; gcc/clang/tcc).
+- macOS: x86-64, arm64 (clang).
+- Windows: x86-64, i686 (via MinGW-GCC and TCC).

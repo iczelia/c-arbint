@@ -172,9 +172,60 @@ static void ref_sub_mag(arbint_limb_t * out, size_t * out_n,
 }
 
 #if ARBINT_LIMB_BITS == 64
-__extension__ typedef unsigned __int128 ref_wide_t;
+static void ref_mul64_wide(uint64_t a, uint64_t b, uint64_t * hi,
+                           uint64_t * lo) {
+  uint64_t a0 = (uint32_t) a;
+  uint64_t a1 = a >> 32u;
+  uint64_t b0 = (uint32_t) b;
+  uint64_t b1 = b >> 32u;
+  uint64_t p00 = a0 * b0;
+  uint64_t p01 = a0 * b1;
+  uint64_t p10 = a1 * b0;
+  uint64_t p11 = a1 * b1;
+  uint64_t t = (p00 >> 32u) + (uint32_t) p01 + (uint32_t) p10;
+
+  *lo = (p00 & 0xffffffffull) | (t << 32u);
+  *hi = p11 + (p01 >> 32u) + (p10 >> 32u) + (t >> 32u);
+}
+
+static int ref_mul_add_limb(arbint_limb_t a, arbint_limb_t b, arbint_limb_t in,
+                            arbint_limb_t * carry_io, arbint_limb_t * out) {
+  uint64_t hi;
+  uint64_t lo;
+  uint64_t prev;
+  uint64_t carry = (uint64_t) *carry_io;
+
+  ref_mul64_wide((uint64_t) a, (uint64_t) b, &hi, &lo);
+
+  prev = lo;
+  lo += (uint64_t) in;
+  if (lo < prev) {
+    if (hi == UINT64_MAX)
+      return 0;
+    ++hi;
+  }
+
+  prev = lo;
+  lo += carry;
+  if (lo < prev) {
+    if (hi == UINT64_MAX)
+      return 0;
+    ++hi;
+  }
+
+  *out = (arbint_limb_t) lo;
+  *carry_io = (arbint_limb_t) hi;
+  return 1;
+}
 #elif ARBINT_LIMB_BITS == 32
-typedef uint64_t ref_wide_t;
+static int ref_mul_add_limb(arbint_limb_t a, arbint_limb_t b, arbint_limb_t in,
+                            arbint_limb_t * carry_io, arbint_limb_t * out) {
+  uint64_t acc = (uint64_t) a * (uint64_t) b + (uint64_t) in +
+                 (uint64_t) *carry_io;
+  *out = (arbint_limb_t) acc;
+  *carry_io = (arbint_limb_t) (acc >> 32u);
+  return 1;
+}
 #endif
 
 static int ref_add(refint_t * out, const refint_t * a, const refint_t * b) {
@@ -236,24 +287,25 @@ static int ref_mul(refint_t * out, const refint_t * a, const refint_t * b) {
 
   memset(out->limbs, 0, n * sizeof(arbint_limb_t));
   for (i = 0u; i < a->n; ++i) {
-    ref_wide_t carry = 0u;
+    arbint_limb_t carry = (arbint_limb_t) 0u;
     for (j = 0u; j < b->n; ++j) {
       size_t k = i + j;
-      ref_wide_t acc = (ref_wide_t) a->limbs[i] * (ref_wide_t) b->limbs[j] +
-                       (ref_wide_t) out->limbs[k] + carry;
-      out->limbs[k] = (arbint_limb_t) acc;
-      carry = acc >> ARBINT_LIMB_BITS;
+      if (!ref_mul_add_limb(a->limbs[i], b->limbs[j], out->limbs[k], &carry,
+                            &out->limbs[k]))
+        return 0;
     }
 
     {
       size_t k = i + b->n;
       while (carry != 0u) {
-        ref_wide_t acc;
         if (k >= n)
           return 0;
-        acc = (ref_wide_t) out->limbs[k] + carry;
-        out->limbs[k] = (arbint_limb_t) acc;
-        carry = acc >> ARBINT_LIMB_BITS;
+        {
+          arbint_limb_t prev = out->limbs[k];
+          out->limbs[k] = (arbint_limb_t) (out->limbs[k] + carry);
+          carry = (out->limbs[k] < prev) ? (arbint_limb_t) 1u
+                                         : (arbint_limb_t) 0u;
+        }
         ++k;
       }
     }
