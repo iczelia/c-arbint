@@ -334,6 +334,25 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
   }
 }
 
+size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
+                              size_t an, arbint_limb_t b) {
+  size_t i;
+  arbint_limb_t carry = 0u;
+
+  for (i = 0u; i < an; ++i) {
+    arbint_limb_t out;
+    carry = arbint_muladd_limb(a[i], b, (arbint_limb_t) 0u, carry, &out);
+    dst[i] = out;
+  }
+
+  if (carry != 0u) {
+    dst[an] = carry;
+    return an + 1u;
+  }
+
+  return arbint_norm_used(dst, an);
+}
+
 arbint_err_t arbint_mul_impl_bmi2(arbint_t rop, const arbint_t a,
                                   const arbint_t b) {
   int as;

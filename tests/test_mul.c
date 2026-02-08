@@ -184,9 +184,163 @@ static void test_mul_carry_regression(void) {
   arbint_clear(r);
 }
 
+static void test_mul_u32(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t r;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /* NULL checks */
+  CHECK_EQ_I(arbint_mul_u32(NULL, a, 5u), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_mul_u32(r, NULL, 5u), ARBINT_EINVAL);
+
+  /* 0 * scalar = 0 */
+  CHECK_EQ_I(arbint_set_i32(a, 0), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(r, a, 42u), ARBINT_OK);
+  CHECK(arbint_is_zero(r));
+
+  /* a * 0 = 0 */
+  CHECK_EQ_I(arbint_set_i32(a, 12345), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(r, a, 0u), ARBINT_OK);
+  CHECK(arbint_is_zero(r));
+
+  /* positive * positive */
+  CHECK_EQ_I(arbint_set_i32(a, 1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(r, a, 567u), ARBINT_OK);
+  check_i32_value(r, 699678);
+
+  /* negative * positive */
+  CHECK_EQ_I(arbint_set_i32(a, -1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(r, a, 567u), ARBINT_OK);
+  check_i32_value(r, -699678);
+
+  /* multiply by 1 */
+  CHECK_EQ_I(arbint_set_i32(a, -42), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(r, a, 1u), ARBINT_OK);
+  check_i32_value(r, -42);
+
+  /* aliasing: rop == a */
+  CHECK_EQ_I(arbint_set_i32(a, 1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(a, a, 567u), ARBINT_OK);
+  check_i32_value(a, 699678);
+
+  /* large scalar (max u32) */
+  CHECK_EQ_I(arbint_set_i32(a, 2), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(r, a, UINT32_MAX), ARBINT_OK);
+  {
+    /* 2 * 0xFFFFFFFF = 0x1FFFFFFFE */
+    arbint_t expected;
+    CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+    CHECK_EQ_I(arbint_set_u32(expected, UINT32_MAX), ARBINT_OK);
+    CHECK_EQ_I(arbint_add(expected, expected, expected), ARBINT_OK);
+    CHECK(arbint_eq(r, expected));
+    arbint_clear(expected);
+  }
+
+  /* multi-limb * scalar: cross-check against arbint_mul */
+  {
+    arbint_t b;
+    arbint_t expected;
+    arbint_limb_t am[4];
+
+    CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+    CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+    am[0] = (arbint_limb_t) ~((arbint_limb_t) 0u);
+    am[1] = (arbint_limb_t) ~((arbint_limb_t) 0u);
+    am[2] = (arbint_limb_t) 1u;
+    am[3] = (arbint_limb_t) 42u;
+    set_mag_limbs(a, 1, am, 4u);
+
+    CHECK_EQ_I(arbint_set_u32(b, 12345u), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul(expected, a, b), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul_u32(r, a, 12345u), ARBINT_OK);
+    CHECK(arbint_eq(r, expected));
+
+    /* negative multi-limb */
+    set_mag_limbs(a, -1, am, 4u);
+    CHECK_EQ_I(arbint_mul(expected, a, b), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul_u32(r, a, 12345u), ARBINT_OK);
+    CHECK(arbint_eq(r, expected));
+
+    arbint_clear(expected);
+    arbint_clear(b);
+  }
+
+  arbint_clear(r);
+  arbint_clear(a);
+}
+
+static void test_mul_i32(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t r;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /* NULL checks */
+  CHECK_EQ_I(arbint_mul_i32(NULL, a, 5), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_mul_i32(r, NULL, 5), ARBINT_EINVAL);
+
+  /* 0 * scalar = 0 */
+  CHECK_EQ_I(arbint_set_i32(a, 0), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, 42), ARBINT_OK);
+  CHECK(arbint_is_zero(r));
+
+  /* a * 0 = 0 */
+  CHECK_EQ_I(arbint_set_i32(a, 12345), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, 0), ARBINT_OK);
+  CHECK(arbint_is_zero(r));
+
+  /* positive * positive */
+  CHECK_EQ_I(arbint_set_i32(a, 1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, 567), ARBINT_OK);
+  check_i32_value(r, 699678);
+
+  /* positive * negative */
+  CHECK_EQ_I(arbint_set_i32(a, 1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, -567), ARBINT_OK);
+  check_i32_value(r, -699678);
+
+  /* negative * negative */
+  CHECK_EQ_I(arbint_set_i32(a, -1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, -567), ARBINT_OK);
+  check_i32_value(r, 699678);
+
+  /* negative * positive */
+  CHECK_EQ_I(arbint_set_i32(a, -1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, 567), ARBINT_OK);
+  check_i32_value(r, -699678);
+
+  /* INT32_MIN edge case */
+  CHECK_EQ_I(arbint_set_i32(a, 1), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, INT32_MIN), ARBINT_OK);
+  check_i32_value(r, INT32_MIN);
+
+  /* multiply by -1 */
+  CHECK_EQ_I(arbint_set_i32(a, 42), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(r, a, -1), ARBINT_OK);
+  check_i32_value(r, -42);
+
+  /* aliasing: rop == a */
+  CHECK_EQ_I(arbint_set_i32(a, 1234), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_i32(a, a, -567), ARBINT_OK);
+  check_i32_value(a, -699678);
+
+  arbint_clear(r);
+  arbint_clear(a);
+}
+
 int main(void) {
   test_mul_basic_and_alias();
   test_mul_large_patterns();
   test_mul_carry_regression();
+  test_mul_u32();
+  test_mul_i32();
   ARBINT_TEST_FINISH("test_mul");
 }
