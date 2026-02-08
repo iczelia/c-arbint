@@ -59,3 +59,4 @@ config.h.in~
 /tests/*.log
 /tests/*.trs
 /tests/__pycache__/
+perf.*

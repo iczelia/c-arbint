@@ -18,6 +18,7 @@
 
 #include "arbint_base.h"
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -64,6 +65,35 @@ arbint_err_t arbint_init(arbint_t x, arbint_ctx_t * ctx) {
   return ARBINT_OK;
 }
 
+arbint_err_t arbint_init_all(arbint_ctx_t * ctx, arbint_t a, ...) {
+  va_list ap, ap_saved;
+  arbint_t * p, * failed;
+  arbint_err_t rc;
+
+  rc = arbint_init(a, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  va_start(ap, a);
+  va_copy(ap_saved, ap);
+  while ((p = va_arg(ap, arbint_t *)) != NULL) {
+    rc = arbint_init(*p, ctx);
+    if (rc != ARBINT_OK) {
+      failed = p;
+      va_end(ap);
+      /* Clear everything initialized so far. */
+      arbint_clear(a);
+      while ((p = va_arg(ap_saved, arbint_t *)) != failed)
+        arbint_clear(*p);
+      va_end(ap_saved);
+      return rc;
+    }
+  }
+  va_end(ap);
+  va_end(ap_saved);
+  return ARBINT_OK;
+}
+
 void arbint_clear(arbint_t x) {
   if (x == NULL)
     return;
@@ -75,6 +105,17 @@ void arbint_clear(arbint_t x) {
   x[0]._sz = 0;
   x[0]._ptr = NULL;
   x[0]._ctx = NULL;
+}
+
+void arbint_clear_all(arbint_t a, ...) {
+  va_list ap;
+  arbint_t * p;
+
+  arbint_clear(a);
+  va_start(ap, a);
+  while ((p = va_arg(ap, arbint_t *)) != NULL)
+    arbint_clear(*p);
+  va_end(ap);
 }
 
 arbint_ctx_t * arbint_get_ctx(const arbint_t x) {

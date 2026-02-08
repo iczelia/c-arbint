@@ -68,7 +68,9 @@ Division by zero.
 .BR arbint_ctx_init (),
 .BR arbint_ctx_clear (),
 .BR arbint_init (),
+.BR arbint_init_all (),
 .BR arbint_clear (),
+.BR arbint_clear_all (),
 .BR arbint_get_ctx (),
 .BR arbint_set_ctx (),
 .BR arbint_zero (),
@@ -77,6 +79,28 @@ Division by zero.
 .PP
 These APIs initialize/destroy contexts and integer objects, rebind objects to a
 new context, zero values, reserve limb capacity, and swap complete object state.
+.PP
+.BI "arbint_err_t arbint_init_all(arbint_ctx_t *" ctx ", arbint_t " a ", ...)"
+.RS
+Initialize a NULL-terminated list of
+.B arbint_t
+values with the same context. If any initialization fails, all previously
+initialized values in the list are cleared and the error is returned.
+The argument list must be terminated with a
+.B (arbint_t *) NULL
+sentinel.
+.RE
+.PP
+.BI "void arbint_clear_all(arbint_t " a ", ...)"
+.RS
+Clear a NULL-terminated list of
+.B arbint_t
+values. Each value is passed to
+.BR arbint_clear ().
+The argument list must be terminated with a
+.B (arbint_t *) NULL
+sentinel.
+.RE
 .SS Assignment and Extraction
 .BR arbint_set (),
 .BR arbint_set_i32 (),
@@ -202,19 +226,13 @@ arbint_ctx_t ctx;
 arbint_t a, b, q, r;
 
 arbint_ctx_init_default(&ctx);
-arbint_init(a, &ctx);
-arbint_init(b, &ctx);
-arbint_init(q, &ctx);
-arbint_init(r, &ctx);
+arbint_init_all(&ctx, a, b, q, r, (arbint_t *) NULL);
 
 arbint_set_i32(a, -17);
 arbint_set_i32(b, 5);
 arbint_tdiv_qr(q, r, a, b); /* q = -3, r = -2 */
 
-arbint_clear(a);
-arbint_clear(b);
-arbint_clear(q);
-arbint_clear(r);
+arbint_clear_all(a, b, q, r, (arbint_t *) NULL);
 .fi
 .SH SEE ALSO
 .BR pkg-config (1)

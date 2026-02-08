@@ -3,3 +3,4 @@
 - potential speedups to the comparison functions, if possible. needs investigation.
 - add more comprehensive tests.
 - continue the implementation...
+- clean up the ci configuration.

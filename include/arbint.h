@@ -110,8 +110,15 @@ typedef _arbint_struct arbint_t[1];
 /* ---------------- Lifecycle / memory ---------------- */
 /* Initialize x to numeric zero and bind it to ctx for future allocations. */
 ARBINT_API arbint_err_t arbint_init(arbint_t x, arbint_ctx_t * ctx);
+/* Initialize a NULL-terminated list of arbint_t values with the same context.
+ * If any initialization fails, all previously initialized values are cleared.
+ * Usage: arbint_init_all(ctx, a, b, c, (arbint_t *) NULL); */
+ARBINT_API arbint_err_t arbint_init_all(arbint_ctx_t * ctx, arbint_t a, ...);
 /* Release storage owned by x and reset it to an empty state. */
 ARBINT_API void arbint_clear(arbint_t x);
+/* Clear a NULL-terminated list of arbint_t values.
+ * Usage: arbint_clear_all(a, b, c, (arbint_t *) NULL); */
+ARBINT_API void arbint_clear_all(arbint_t a, ...);
 /* Return the context currently associated with x (may be NULL). */
 ARBINT_API arbint_ctx_t * arbint_get_ctx(const arbint_t x);
 /* Rebind x to ctx. If x owns allocated storage, implementation may migrate it
