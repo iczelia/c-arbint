@@ -231,6 +231,9 @@ int arbint_set_signed_sz(arbint_t x, size_t used, int sign) {
   return 1;
 }
 
+/*  Benchmarks show that this is far from being a hot spot.
+    However, this can still be optimised using similar techniques to
+    memcmp in the future.  */
 int arbint_cmp_mag_limbs(const arbint_limb_t * a, size_t an,
                          const arbint_limb_t * b, size_t bn) {
   size_t i;

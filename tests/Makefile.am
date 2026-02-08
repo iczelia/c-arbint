@@ -19,7 +19,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src -I$(top_builddir)
 AM_CFLAGS = $(ARBINT_LTO_CFLAGS)
 AM_LDFLAGS = $(ARBINT_LTO_LDFLAGS)
 
-check_PROGRAMS = test_basic test_mul test_tdiv test_large test_stochastic compute_pi
+check_PROGRAMS = test_basic test_mul test_tdiv test_large test_stochastic test_addsub_avx2 compute_pi
 TESTS = $(check_PROGRAMS)
 
 TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH"
@@ -44,10 +44,14 @@ test_stochastic_SOURCES = test_stochastic.c
 test_stochastic_LDADD = $(top_builddir)/src/libarbint.la
 test_stochastic_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
+test_addsub_avx2_SOURCES = test_addsub_avx2.c
+test_addsub_avx2_LDADD = $(top_builddir)/src/libarbint.la
+test_addsub_avx2_DEPENDENCIES = $(top_builddir)/src/libarbint.la
+
 compute_pi_SOURCES = compute_pi.c
 compute_pi_LDADD = $(top_builddir)/src/libarbint.la
 compute_pi_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 noinst_HEADERS = test_framework.h
 
-EXTRA_DIST = test_basic.c test_mul.c test_tdiv.c test_large.c test_stochastic.c compute_pi.c test_framework.h pi10k.txt
+EXTRA_DIST = test_basic.c test_mul.c test_tdiv.c test_large.c test_stochastic.c test_addsub_avx2.c compute_pi.c test_framework.h pi10k.txt

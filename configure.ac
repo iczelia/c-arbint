@@ -231,6 +231,33 @@ AS_IF([test "x$arbint_cv_have_bmi2_plain" = "xyes"], [
 AM_CONDITIONAL([ARBINT_BUILD_BMI2], [test "x$arbint_build_bmi2" = "xyes"])
 AC_SUBST([ARBINT_BMI2_CFLAGS])
 
+ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+  [AVX2 intrinsics], [arbint_cv_have_avx2_plain], [arbint_cv_have_avx2_mavx2],
+  [-mavx2],
+  [[
+#include <immintrin.h>
+  ]],
+  [[
+__m256i a = _mm256_setzero_si256();
+__m256i b = _mm256_add_epi64(a, a);
+(void)b;
+  ]],
+  [HAS_AVX2], [HAS_AVX2_ALWAYS],
+  [Define to 1 if AVX2 intrinsics are available (with or without -mavx2).],
+  [Define to 1 if AVX2 intrinsics are available globally.]
+)
+
+arbint_build_avx2=no
+ARBINT_AVX2_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_avx2_plain" = "xyes"], [
+  arbint_build_avx2=yes
+], [test "x$arbint_cv_have_avx2_mavx2" = "xyes"], [
+  arbint_build_avx2=yes
+  ARBINT_AVX2_CFLAGS="-mavx2"
+])
+AM_CONDITIONAL([ARBINT_BUILD_AVX2], [test "x$arbint_build_avx2" = "xyes"])
+AC_SUBST([ARBINT_AVX2_CFLAGS])
+
 AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
   arbint_cv_cc_visibility_hidden=no
 ], [

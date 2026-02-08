@@ -17,6 +17,10 @@
 
 #include "arbint_addsub.h"
 
+#include "config.h"
+
+#include "arbint_cpu.h"
+
 #include <assert.h>
 #include <limits.h>
 #include <string.h>
@@ -83,8 +87,30 @@ size_t arbint__add_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
 #endif
 }
 
-size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
-                       size_t nx) {
+/*  Forward declaration of scalar implementation.  */
+static size_t arbint__dbl_mag_scalar(arbint_limb_t * dst,
+                                     const arbint_limb_t * x, size_t nx);
+
+/*  Function pointer type for doubling magnitude implementation.  */
+typedef size_t (*arbint_dbl_mag_fn_t)(arbint_limb_t * dst,
+                                      const arbint_limb_t * x, size_t nx);
+
+/*  Select the optimal doubling implementation based on CPU features.  */
+static arbint_dbl_mag_fn_t arbint_select_dbl_mag(void) {
+#if HAS_AVX2_ALWAYS
+  return arbint__dbl_mag_avx2;
+#elif HAS_AVX2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_AVX2)
+             ? arbint__dbl_mag_avx2
+             : arbint__dbl_mag_scalar;
+#else
+  return arbint__dbl_mag_scalar;
+#endif
+}
+
+/*  Scalar implementation of magnitude doubling (original implementation).  */
+static size_t arbint__dbl_mag_scalar(arbint_limb_t * dst,
+                                     const arbint_limb_t * x, size_t nx) {
 #if ARBINT_HAVE_X86_CARRY_KERNEL
   size_t i;
   unsigned char carry = 0u;
@@ -116,6 +142,22 @@ size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
   }
   return nx;
 #endif
+}
+
+/*  Public doubling function with runtime dispatch and threshold check.  */
+size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
+                       size_t nx) {
+  static arbint_dbl_mag_fn_t impl = NULL;
+
+  /*  One-time initialization: select implementation based on CPU features.  */
+  if (impl == NULL)
+    impl = arbint_select_dbl_mag();
+
+  /*  Threshold check: avoid SIMD overhead for small operands.  */
+  if (impl == arbint__dbl_mag_avx2 && nx < ARBINT_DBL_AVX2_THRESHOLD)
+    return arbint__dbl_mag_scalar(dst, x, nx);
+
+  return impl(dst, x, nx);
 }
 
 size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,

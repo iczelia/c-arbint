@@ -4,4 +4,5 @@ test_mul
 test_stochastic
 test_tdiv
 test_large
+test_addsub_avx2
 compute_pi

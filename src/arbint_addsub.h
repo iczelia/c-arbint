@@ -54,4 +54,15 @@ size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
 size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
                        size_t nx);
 
+/*  Threshold for AVX2 vectorization of doubling operation.
+    Below this threshold, scalar implementation is used to avoid SIMD overhead.
+ */
+#define ARBINT_DBL_AVX2_THRESHOLD 16u
+
+#if HAS_AVX2
+/*  AVX2-optimized magnitude doubling implementation.  */
+size_t arbint__dbl_mag_avx2(arbint_limb_t * dst, const arbint_limb_t * x,
+                            size_t nx);
+#endif
+
 #endif

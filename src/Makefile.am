@@ -19,7 +19,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libarbint.la
 libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c
-EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c
+EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c
 libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
@@ -31,8 +31,15 @@ libarbint_la_LIBADD += libarbint_la-arbint_mul_bmi2.lo
 libarbint_la_LIBADD += libarbint_la-arbint_tdiv_bmi2.lo
 endif
 
+if ARBINT_BUILD_AVX2
+libarbint_la_LIBADD += libarbint_la-arbint_addsub_avx2.lo
+endif
+
 libarbint_la-arbint_mul_bmi2.lo: arbint_mul_bmi2.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f 'arbint_mul_bmi2.c' || echo '$(srcdir)/'`arbint_mul_bmi2.c
 
 libarbint_la-arbint_tdiv_bmi2.lo: arbint_tdiv_bmi2.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f 'arbint_tdiv_bmi2.c' || echo '$(srcdir)/'`arbint_tdiv_bmi2.c
+
+libarbint_la-arbint_addsub_avx2.lo: arbint_addsub_avx2.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_AVX2_CFLAGS) -c -o $@ `test -f 'arbint_addsub_avx2.c' || echo '$(srcdir)/'`arbint_addsub_avx2.c
