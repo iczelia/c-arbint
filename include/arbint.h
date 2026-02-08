@@ -1,20 +1,19 @@
-/* arbint - portable arbitrary-precision computation library
- *
- * Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- */
+/*  arbint - portable arbitrary-precision computation library
+
+    Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef ARBINT_H
 #define ARBINT_H
@@ -65,10 +64,10 @@ typedef enum arbint_err {
 } arbint_err_t;
 
 /* ---------------- Context / allocator ---------------- */
-/* Reallocator contract: behaves like realloc(ptr, new_size).
- * - ptr == NULL allocates.
- * - new_size == 0 frees and may return NULL.
- * - ud is the allocator user cookie from arbint_alloc_t. */
+/*  Reallocator contract: behaves like realloc(ptr, new_size).
+    - ptr == NULL allocates.
+    - new_size == 0 frees and may return NULL.
+    - ud is the allocator user cookie from arbint_alloc_t.  */
 typedef void * (*arbint_realloc_fn)(void * ud, void * ptr, size_t new_size);
 
 typedef struct arbint_alloc {
@@ -92,11 +91,11 @@ ARBINT_API arbint_err_t arbint_ctx_init(arbint_ctx_t * ctx,
 ARBINT_API void arbint_ctx_clear(arbint_ctx_t * ctx);
 
 /* ---------------- Core type ---------------- */
-/* Internal normalization invariant:
- * - _sz == 0 represents zero.
- * - abs(_sz) is the number of used limbs.
- * - sign(_sz) is the sign of the integer.
- * - limbs are stored little-endian in _ptr. */
+/*  Internal normalization invariant:
+    - _sz == 0 represents zero.
+    - abs(_sz) is the number of used limbs.
+    - sign(_sz) is the sign of the integer.
+    - limbs are stored little-endian in _ptr.  */
 typedef struct {
   size_t _cap;         /* allocated limbs in _ptr */
   ptrdiff_t _sz;       /* used limbs; sign is sign of _sz */
@@ -110,19 +109,19 @@ typedef _arbint_struct arbint_t[1];
 /* ---------------- Lifecycle / memory ---------------- */
 /* Initialize x to numeric zero and bind it to ctx for future allocations. */
 ARBINT_API arbint_err_t arbint_init(arbint_t x, arbint_ctx_t * ctx);
-/* Initialize a NULL-terminated list of arbint_t values with the same context.
- * If any initialization fails, all previously initialized values are cleared.
- * Usage: arbint_init_all(ctx, a, b, c, (arbint_t *) NULL); */
+/*  Initialize a NULL-terminated list of arbint_t values with the same
+    context. If any initialization fails, all previously initialized values
+    are cleared. Usage: arbint_init_all(ctx, a, b, c, (arbint_t *) NULL).  */
 ARBINT_API arbint_err_t arbint_init_all(arbint_ctx_t * ctx, arbint_t a, ...);
 /* Release storage owned by x and reset it to an empty state. */
 ARBINT_API void arbint_clear(arbint_t x);
-/* Clear a NULL-terminated list of arbint_t values.
- * Usage: arbint_clear_all(a, b, c, (arbint_t *) NULL); */
+/*  Clear a NULL-terminated list of arbint_t values.
+    Usage: arbint_clear_all(a, b, c, (arbint_t *) NULL).  */
 ARBINT_API void arbint_clear_all(arbint_t a, ...);
 /* Return the context currently associated with x (may be NULL). */
 ARBINT_API arbint_ctx_t * arbint_get_ctx(const arbint_t x);
-/* Rebind x to ctx. If x owns allocated storage, implementation may migrate it
- * so future resize/clear calls remain allocator-safe. */
+/*  Rebind x to ctx. If x owns allocated storage, implementation may migrate
+    it so future resize/clear calls remain allocator-safe.  */
 ARBINT_API arbint_err_t arbint_set_ctx(arbint_t x, arbint_ctx_t * ctx);
 
 /* Set x to exact zero without releasing reserved capacity. */
@@ -141,9 +140,9 @@ ARBINT_API arbint_err_t arbint_set_u32(arbint_t rop, uint32_t v);
 /* Parse optional sign + digits in base 2..36 and assign the parsed value. */
 ARBINT_API arbint_err_t arbint_set_str(arbint_t rop, const char * s,
                                        int base); // UNIMPLEMENTED
-/* Format op in base 2..36 into a newly allocated NUL-terminated string.
- * Allocation is performed through op's context allocator and ownership
- * transfers to the caller. */
+/*  Format op in base 2..36 into a newly allocated NUL-terminated string.
+    Allocation is performed through op's context allocator and ownership
+    transfers to the caller.  */
 ARBINT_API arbint_err_t arbint_get_str(const arbint_t op, char ** out_str,
                                        int base); // UNIMPLEMENTED
 
@@ -203,12 +202,12 @@ ARBINT_API int arbint_gt_u32(const arbint_t a, uint32_t b);
 ARBINT_API int arbint_ge_u32(const arbint_t a, uint32_t b);
 
 /* ---------------- Basic arithmetic ---------------- */
-/* Aliasing contract:
- * - Any arbint_t argument may alias any input argument.
- * - Functions may internally reuse storage from aliased inputs.
- * - For functions with multiple outputs (e.g., *_qr), output aliases are
- *   accepted; because only one object exists, the final value in that object
- *   is whichever output is written last by that routine. */
+/*  Aliasing contract:
+    - Any arbint_t argument may alias any input argument.
+    - Functions may internally reuse storage from aliased inputs.
+    - For functions with multiple outputs (e.g., *_qr), output aliases are
+      accepted; because only one object exists, the final value in that object
+      is whichever output is written last by that routine.  */
 ARBINT_API arbint_err_t arbint_add(arbint_t rop, const arbint_t a,
                                    const arbint_t b);
 ARBINT_API arbint_err_t arbint_sub(arbint_t rop, const arbint_t a,
@@ -246,8 +245,8 @@ ARBINT_API arbint_err_t arbint_submul_i32(arbint_t a, const arbint_t b,
                                           int32_t c);
 
 /* ---------------- Division, remainder, rounding modes ---------------- */
-/* Truncated quotient/remainder: q = trunc(n/d), r = n - q*d  (|r| < |d|,
- * sign(r)=sign(n) or r=0) */
+/*  Truncated quotient/remainder: q = trunc(n/d), r = n - q*d (|r| < |d|,
+    sign(r)=sign(n) or r=0).  */
 ARBINT_API arbint_err_t arbint_tdiv_qr(arbint_t q, arbint_t r,
                                        const arbint_t n, const arbint_t d);
 ARBINT_API arbint_err_t arbint_tdiv_q(arbint_t q, const arbint_t n,
@@ -255,8 +254,8 @@ ARBINT_API arbint_err_t arbint_tdiv_q(arbint_t q, const arbint_t n,
 ARBINT_API arbint_err_t arbint_tdiv_r(arbint_t r, const arbint_t n,
                                       const arbint_t d);
 
-/* Floor division: q = floor(n/d), r = n - q*d  (0 <= r < |d| if d>0; adjust
- * consistently for d<0) */
+/*  Floor division: q = floor(n/d), r = n - q*d (0 <= r < |d| if d>0;
+    adjust consistently for d<0).  */
 ARBINT_API arbint_err_t arbint_fdiv_qr(arbint_t q, arbint_t r,
                                        const arbint_t n, const arbint_t d);
 ARBINT_API arbint_err_t arbint_fdiv_q(arbint_t q, const arbint_t n,
@@ -302,8 +301,8 @@ ARBINT_API arbint_err_t arbint_divisible_u32(const arbint_t n, uint32_t d,
 ARBINT_API arbint_err_t arbint_pow_u32(arbint_t rop, const arbint_t base,
                                        uint32_t exp);
 
-/* Modular exponentiation: rop = base^exp mod mod.
- * Intended domain is exp >= 0 and mod != 0. */
+/*  Modular exponentiation: rop = base^exp mod mod.
+    Intended domain is exp >= 0 and mod != 0.  */
 ARBINT_API arbint_err_t arbint_pow_mod(arbint_t rop, const arbint_t base,
                                        const arbint_t exp, const arbint_t mod);
 ARBINT_API arbint_err_t arbint_pow_u32_mod(arbint_t rop, const arbint_t base,
@@ -321,13 +320,13 @@ ARBINT_API size_t arbint_sizeinbase(
 ARBINT_API size_t
 arbint_nbits(const arbint_t x); /* number of significant bits; 0 for x=0 */
 
-/* Bit semantics use two's-complement integers.
- * - testbit/or/and/xor/not/setbit/clrbit behave as if over infinite
- *   sign-extended two's-complement representations, then normalize.
- * - not(a) is therefore equivalent to (-a - 1).
- * For APIs that must return finite counts, define canonical width W(x):
- * the smallest positive multiple of the implementation limb width that can
- * represent x in two's-complement form. */
+/*  Bit semantics use two's-complement integers.
+    - testbit/or/and/xor/not/setbit/clrbit behave as if over infinite
+      sign-extended two's-complement representations, then normalize.
+    - not(a) is therefore equivalent to (-a - 1).
+    For APIs that must return finite counts, define canonical width W(x):
+    the smallest positive multiple of the implementation limb width that can
+    represent x in two's-complement form.  */
 ARBINT_API arbint_err_t arbint_testbit(const arbint_t x, size_t bit_index,
                                        int * out); /* out = 0/1 */
 ARBINT_API arbint_err_t arbint_setbit(arbint_t x, size_t bit_index);
@@ -335,8 +334,8 @@ ARBINT_API arbint_err_t arbint_clrbit(arbint_t x, size_t bit_index);
 
 ARBINT_API arbint_err_t arbint_ctz(
     const arbint_t x, size_t * out); /* count trailing zeros; EDOM if x=0 */
-/* Count leading zero bits within canonical width W(x); for x<0 this is 0.
- * Returns EDOM if x=0. */
+/*  Count leading zero bits within canonical width W(x); for x<0 this is 0.
+    Returns EDOM if x=0.  */
 ARBINT_API arbint_err_t arbint_clz(const arbint_t x, size_t * out);
 /* Count set bits in the low W(x) bits of x. */
 ARBINT_API arbint_err_t arbint_popcount(const arbint_t x, size_t * out);
@@ -437,17 +436,17 @@ ARBINT_API arbint_err_t arbint_export(const arbint_t op, void ** out_buf,
                                       size_t * out_nbytes);
 
 /* ---------------- Hashing ---------------- */
-/* Hash canonical integer value into hash_len bytes at out_hash.
- * Intended for hash tables only; algorithm and output are intentionally
- * unstable across library versions and may also vary across process runs. */
+/*  Hash canonical integer value into hash_len bytes at out_hash.
+    Intended for hash tables only; algorithm and output are intentionally
+    unstable across library versions and may also vary across process runs.  */
 ARBINT_API arbint_err_t arbint_hash(const arbint_t op, uint8_t * out_hash,
                                     size_t hash_len);
 
 /* ---------------- Random ---------------- */
 typedef struct arbint_rng {
   void * ud;
-  /* Fill dst with len random bytes. Return 0 on success, nonzero on failure.
-   */
+  /*  Fill dst with len random bytes. Return 0 on success, nonzero on
+      failure.  */
   int (*read)(void * ud, uint8_t * dst, size_t len);
 } arbint_rng_t;
 

@@ -5,3 +5,6 @@ PointerAlignment: Middle
 IndentPPDirectives: BeforeHash
 BreakBeforeBraces: Attach
 SpaceAfterCStyleCast: true
+ReflowComments: true
+CommentPragmas: '^//'
+SpaceBeforeAssignmentOperators: true

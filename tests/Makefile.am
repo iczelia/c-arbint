@@ -26,21 +26,27 @@ TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH
 
 test_basic_SOURCES = test_basic.c
 test_basic_LDADD = $(top_builddir)/src/libarbint.la
+test_basic_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 test_mul_SOURCES = test_mul.c
 test_mul_LDADD = $(top_builddir)/src/libarbint.la
+test_mul_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 test_tdiv_SOURCES = test_tdiv.c
 test_tdiv_LDADD = $(top_builddir)/src/libarbint.la
+test_tdiv_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 test_large_SOURCES = test_large.c
 test_large_LDADD = $(top_builddir)/src/libarbint.la
+test_large_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 test_stochastic_SOURCES = test_stochastic.c
 test_stochastic_LDADD = $(top_builddir)/src/libarbint.la
+test_stochastic_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 compute_pi_SOURCES = compute_pi.c
 compute_pi_LDADD = $(top_builddir)/src/libarbint.la
+compute_pi_DEPENDENCIES = $(top_builddir)/src/libarbint.la
 
 noinst_HEADERS = test_framework.h
 

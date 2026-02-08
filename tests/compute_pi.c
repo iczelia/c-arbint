@@ -1,35 +1,33 @@
-/* arbint - portable arbitrary-precision computation library
- *
- * Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- */
+/*  arbint - portable arbitrary-precision computation library
 
-/* Calculate pi to 10000 digits using the Chudnovsky algorithm and compare
- * against known-good reference digits in pi10k.txt.
- *
- * This variant purposefully relies only on the most basic functionality
- * of the library to test the core features and memory management in
- * particular. It might be useful to bisect issues that appear
- * in the kernels of basic operations.
- *
- * The Chudnovsky algorithm:
- *   1/pi = 12 * sum(k=0 to oo) [(-1)^k (6k)! (13591409 + 545140134k)] /
- *                           [(3k)! (k!)^3 (640320)^(3k + 3/2)]
- *
- * Each term adds approximately 14.18 decimal digits of precision.
- */
+    Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.  */
+
+/*  Calculate pi to 10000 digits using the Chudnovsky algorithm and
+    compare against known-good reference digits in pi10k.txt.
+
+    This variant purposefully relies only on the most basic functionality
+    of the library to test the core features and memory management in
+    particular. It might be useful to bisect issues that appear
+    in the kernels of basic operations.
+
+    The Chudnovsky algorithm:
+      1/pi = 12 * sum(k=0 to oo) [(-1)^k (6k)! (13591409 + 545140134k)] /
+                              [(3k)! (k!)^3 (640320)^(3k + 3/2)]
+
+    Each term adds approximately 14.18 decimal digits of precision.  */
 
 #include "test_framework.h"
 
@@ -133,16 +131,16 @@ static double sqrt(double x) {
 }
 #endif
 
-/* Fixed-point square root: result = floor(sqrt(n_val) * one).
- *
- * Uses floating-point arithmetic on n_val (a small integer) to produce
- * an initial guess accurate to ~15 digits, then refines with Newton's
- * method.  Since Newton doubles the number of correct digits each
- * iteration, only about log2(total_digits / 15) ≈ 10 iterations are
- * needed for 10000+ digit precision.
- *
- * The iteration is:  x_{k+1} = (x_k + n_val * one^2 / x_k) / 2
- * which converges to sqrt(n_val) * one. */
+/*  Fixed-point square root: result = floor(sqrt(n_val) * one).
+
+    Uses floating-point arithmetic on n_val (a small integer) to produce
+    an initial guess accurate to ~15 digits, then refines with Newton's
+    method. Since Newton doubles the number of correct digits each
+    iteration, only about log2(total_digits / 15) ≈ 10 iterations are
+    needed for 10000+ digit precision.
+
+    The iteration is: x_{k+1} = (x_k + n_val * one^2 / x_k) / 2
+    which converges to sqrt(n_val) * one.  */
 static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
                                const arbint_t one, arbint_ctx_t * ctx) {
   arbint_t x, x_old, n_one, s;
@@ -160,15 +158,15 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
   if (rc != ARBINT_OK)
     goto cleanup;
 
-  /* Initial guess via double:  x0 = round(sqrt(n_val) * one)
-   *
-   * We can't multiply a double by `one` directly (it's huge), so we
-   * build x0 = int(sqrt(n_val) * 10^16) * one / 10^16, which gives
-   * ~15 correct digits. */
+  /*  Initial guess via double: x0 = round(sqrt(n_val) * one).
+
+      We can't multiply a double by `one` directly (it's huge), so we
+      build x0 = int(sqrt(n_val) * 10^16) * one / 10^16, which gives
+      ~15 correct digits.  */
   {
     double sqrt_approx = sqrt((double) n_val);
-    /* fp_prec = 10^16 -- fits in a uint64, and 16 significant digits
-     * is about the limit of double precision. */
+    /*  fp_prec = 10^16 -- fits in a uint64, and 16 significant digits
+        is about the limit of double precision.  */
     uint64_t fp_prec_hi = 10000000u;            /* 10^7  */
     uint64_t fp_prec_lo = 1000000000u;          /* 10^9  */
     uint64_t fp_prec = fp_prec_hi * fp_prec_lo; /* 10^16 */
@@ -185,8 +183,8 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
 
     arbint_mul(x, x, one);
 
-    /* x = x / fp_prec.  Split into two u32 divisions since fp_prec
-     * = 10^7 * 10^9 and the result is only an initial guess. */
+    /*  x = x / fp_prec. Split into two u32 divisions since fp_prec
+        = 10^7 * 10^9 and the result is only an initial guess.  */
     rc = arbint_tdiv_q_u32(x, x, (uint32_t) fp_prec_hi);
     if (rc != ARBINT_OK)
       goto cleanup;
@@ -195,8 +193,8 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
       goto cleanup;
   }
 
-  /* Newton iterations: x = (x + n_one / x) / 2
-   * Converge until x stops changing. */
+  /*  Newton iterations: x = (x + n_one / x) / 2
+      Converge until x stops changing.  */
   {
     int iter = 0;
     while (1) {
@@ -228,14 +226,14 @@ cleanup:
   return rc;
 }
 
-/* Compute pi using Chudnovsky algorithm with incremental term computation.
- *
- * Uses the recurrence: a_{k+1} = a_k * -(6k-5)(2k-1)(6k-1) / (k^3 * C3/24)
- * where C = 640320, C3/24 = 640320^3 / 24.
- *
- * Maintains running sums a_sum and b_sum in fixed-point (scaled by 10^N),
- * then computes pi = 426880 * sqrt(10005 * one) * one / total
- * where total = 13591409 * a_sum + 545140134 * b_sum. */
+/*  Compute pi using Chudnovsky algorithm with incremental term computation.
+
+    Uses the recurrence: a_{k+1} = a_k * -(6k-5)(2k-1)(6k-1) / (k^3 * C3/24)
+    where C = 640320, C3/24 = 640320^3 / 24.
+
+    Maintains running sums a_sum and b_sum in fixed-point (scaled by 10^N),
+    then computes pi = 426880 * sqrt(10005 * one) * one / total
+    where total = 13591409 * a_sum + 545140134 * b_sum.  */
 static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
                                           arbint_ctx_t * ctx) {
   arbint_t a_k, a_sum, b_sum, tmp, tmp2, total, one, sqrt_val, s;
@@ -260,9 +258,9 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
   if ((rc = arbint_init(c3_24, ctx)) != ARBINT_OK)
     goto cleanup;
 
-  /* Build 10939058860032000 from two 32-bit halves:
-   * 10939058860032000 = 2546948 * 2^32 + 1502527488
-   * Or more simply: 10939058860032000 = 10939058 * 10^9 + 860032000 */
+  /*  Build 10939058860032000 from two 32-bit halves:
+      10939058860032000 = 2546948 * 2^32 + 1502527488
+      Or more simply: 10939058860032000 = 10939058 * 10^9 + 860032000.  */
   arbint_set_u32(c3_24, 10939058u);
   arbint_mul_u32(c3_24, c3_24, 1000000000u);
   arbint_add_u32(c3_24, c3_24, 860032000u);
@@ -324,8 +322,8 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
 
     k++;
 
-    /* Terminate when a_k reaches zero (all remaining terms are zero
-     * at this precision) */
+    /*  Terminate when a_k reaches zero (all remaining terms are zero
+        at this precision).  */
     if (arbint_is_zero(a_k))
       break;
   }
@@ -426,8 +424,8 @@ int main(void) {
   char * reference = NULL;
   char pi10k_path[4096];
 
-  /* Locate pi10k.txt: check srcdir env var (set by automake),
-   * then fall back to current directory */
+  /*  Locate pi10k.txt: check srcdir env var (set by automake),
+      then fall back to current directory.  */
   const char * srcdir = getenv("srcdir");
   if (srcdir)
     snprintf(pi10k_path, sizeof(pi10k_path), "%s/pi10k.txt", srcdir);
@@ -469,10 +467,10 @@ int main(void) {
       fprintf(stderr, "Computed %zu digits, reference has %zu digits\n",
               computed_len, reference_len);
 
-      /* The computed result is pi * 10^(digits+10), so it should have
-       * digits+11 characters (the '3' plus digits+10 fractional digits).
-       * We compare the first digits+1 characters (the leading '3' plus
-       * the requested number of fractional digits). */
+      /*  The computed result is pi * 10^(digits+10), so it should have
+          digits+11 characters (the '3' plus digits+10 fractional digits).
+          We compare the first digits+1 characters (the leading '3' plus
+          the requested number of fractional digits).  */
       size_t compare_len = PI_DIGITS + 1; /* "3" + 10000 fractional digits */
       CHECK(computed_len >= compare_len);
       CHECK(reference_len >= compare_len);

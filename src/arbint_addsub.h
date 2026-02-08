@@ -1,20 +1,19 @@
-/* arbint - portable arbitrary-precision computation library
- *
- * Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- */
+/*  arbint - portable arbitrary-precision computation library
+
+    Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef ARBINT_ADDSUB_H
 #define ARBINT_ADDSUB_H
@@ -45,9 +44,9 @@ typedef unsigned int arbint_x86_carry_word_t;
   #define ARBINT_HAVE_X86_CARRY_KERNEL 0
 #endif
 
-/* Magnitude arithmetic; callers ensure valid non-overflowing dimensions.
- * - arbint__add_mag handles either operand order.
- * - arbint__sub_mag requires |x| >= |y| and nx >= ny. */
+/*  Magnitude arithmetic; callers ensure valid non-overflowing dimensions.
+    - arbint__add_mag handles either operand order.
+    - arbint__sub_mag requires |x| >= |y| and nx >= ny.  */
 size_t arbint__add_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
                        const arbint_limb_t * y, size_t ny);
 size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,

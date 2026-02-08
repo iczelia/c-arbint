@@ -1,20 +1,19 @@
-/* arbint - portable arbitrary-precision computation library
- *
- * Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- */
+/*  arbint - portable arbitrary-precision computation library
+
+    Copyright (C) 2026 Kamila Szewczyk (k@iczelia.net)
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef ARBINT_MUL_H
 #define ARBINT_MUL_H
@@ -39,7 +38,5 @@ size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
 #endif
 
 #define ARBINT_KARATSUBA_THRESHOLD 32u
-#define ARBINT_HALF_BITS (ARBINT_LIMB_BITS / 2u)
-#define ARBINT_HALF_MASK ((((arbint_limb_t) 1u) << ARBINT_HALF_BITS) - 1u)
 
 #endif
