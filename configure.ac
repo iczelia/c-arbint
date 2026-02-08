@@ -52,6 +52,20 @@ AC_CACHE_CHECK([whether $CC is Microsoft cl (not clang-cl)], [arbint_cv_cc_msvc_
 ])
 arbint_cc_msvc_cl="$arbint_cv_cc_msvc_cl"
 
+AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+  AC_CACHE_CHECK([whether $CC supports /FS], [arbint_cv_cc_fs], [
+    arbint_saved_cflags="$CFLAGS"
+    CFLAGS="$CFLAGS /FS"
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[]])],
+      [arbint_cv_cc_fs=yes],
+      [arbint_cv_cc_fs=no])
+    CFLAGS="$arbint_saved_cflags"
+  ])
+  AS_IF([test "x$arbint_cv_cc_fs" = "xyes"], [
+    CFLAGS="$CFLAGS /FS"
+  ])
+])
+
 AS_IF([test "x$enable_warnings" = "xyes"], [
   AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
     CFLAGS="$CFLAGS /W4"
@@ -85,7 +99,8 @@ AC_ARG_WITH([base-optimization],
 AC_ARG_WITH([march],
   [AS_HELP_STRING([--with-march=ARCH],
                   [Architecture/tune target to use when base optimization is tuned
-                   (default: native)])],
+                   (default: native). GCC/Clang: passed to -march/-mtune.
+                   MSVC: passed to /arch: (e.g. AVX2, AVX512)])],
   [arbint_cfg_march="$withval"],
   [arbint_cfg_march=""])
 
@@ -105,7 +120,7 @@ AS_IF([test "x$arbint_base_optimization" = "xdefault"], [
   AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
     CFLAGS="$CFLAGS /O2 /Zi"
     AS_IF([test "x$arbint_cfg_march" != "x"], [
-      AC_MSG_WARN([ignoring --with-march=$arbint_cfg_march for MSVC compiler $CC])
+      CFLAGS="$CFLAGS /arch:$arbint_cfg_march"
     ])
   ], [
     arbint_effective_march="$arbint_cfg_march"

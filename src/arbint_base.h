@@ -46,6 +46,12 @@ typedef uint32_t arbint_limb_t;
   #define ARBINT_COMPILER_GNU_CLANG 0
 #endif
 
+#if defined(_MSC_VER)
+  #define ARBINT_COMPILER_MSVC 1
+#else
+  #define ARBINT_COMPILER_MSVC 0
+#endif
+
 #define ARBINT_LIMBS(x) ((arbint_limb_t *) ((x)[0]._ptr))
 #define ARBINT_CLIMBS(x) ((const arbint_limb_t *) ((x)[0]._ptr))
 

@@ -24,6 +24,9 @@
 #if ARBINT_TARGET_X86_FAMILY && ARBINT_COMPILER_GNU_CLANG
   #include <immintrin.h>
   #define ARBINT_HAVE_X86_INTRIN 1
+#elif ARBINT_TARGET_X86_FAMILY && ARBINT_COMPILER_MSVC
+  #include <intrin.h>
+  #define ARBINT_HAVE_X86_INTRIN 1
 #else
   #define ARBINT_HAVE_X86_INTRIN 0
 #endif

@@ -23,10 +23,16 @@
 #include <stdint.h>
 #include <string.h>
 
-#if ARBINT_TARGET_X86_FAMILY && ARBINT_COMPILER_GNU_CLANG
+#if ARBINT_TARGET_X86_FAMILY &&                                               \
+    (ARBINT_COMPILER_GNU_CLANG || ARBINT_COMPILER_MSVC)
   #define ARBINT_CPU_CAN_QUERY_X86_CPUID 1
 #else
   #define ARBINT_CPU_CAN_QUERY_X86_CPUID 0
+#endif
+
+#if ARBINT_COMPILER_MSVC
+  #include <intrin.h>
+  #include <immintrin.h>
 #endif
 
 #define ARBINT_CPUID1_ECX_SSE3 (1u << 0)
@@ -61,7 +67,16 @@ static void arbint_cpu_cpuid_count(unsigned int leaf, unsigned int subleaf,
   unsigned int ecx = 0u;
   unsigned int edx = 0u;
 
-#if ARBINT_CPU_CAN_QUERY_X86_CPUID
+#if ARBINT_CPU_CAN_QUERY_X86_CPUID && ARBINT_COMPILER_MSVC
+  {
+    int regs[4] = {0, 0, 0, 0};
+    __cpuidex(regs, (int) leaf, (int) subleaf);
+    eax = (unsigned int) regs[0];
+    ebx = (unsigned int) regs[1];
+    ecx = (unsigned int) regs[2];
+    edx = (unsigned int) regs[3];
+  }
+#elif ARBINT_CPU_CAN_QUERY_X86_CPUID
   #if defined(__i386__) && defined(__PIC__)
   __asm__ volatile("xchgl %%ebx, %1\n\t"
                    "cpuid\n\t"
@@ -124,8 +139,12 @@ typedef struct {
 } arbint_cpu_caps_t;
 
 static int arbint_cpu_can_call_cpuid(void) {
-#if !ARBINT_TARGET_X86_FAMILY || !ARBINT_COMPILER_GNU_CLANG
+#if !ARBINT_TARGET_X86_FAMILY ||                                               \
+    !(ARBINT_COMPILER_GNU_CLANG || ARBINT_COMPILER_MSVC)
   return 0;
+#elif ARBINT_COMPILER_MSVC
+  /* All x86/x64 targets supported by MSVC have CPUID. */
+  return 1;
 #elif defined(__x86_64__) || defined(_M_X64)
   return 1;
 #elif defined(__i386__) || defined(_M_IX86)
@@ -153,7 +172,13 @@ static int arbint_cpu_can_call_cpuid(void) {
 }
 
 static int arbint_cpu_read_xcr0(uint64_t * out_xcr0) {
-#if ARBINT_TARGET_X86_FAMILY && ARBINT_COMPILER_GNU_CLANG
+#if ARBINT_TARGET_X86_FAMILY && ARBINT_COMPILER_MSVC
+  if (out_xcr0 == NULL)
+    return 0;
+
+  *out_xcr0 = _xgetbv(0);
+  return 1;
+#elif ARBINT_TARGET_X86_FAMILY && ARBINT_COMPILER_GNU_CLANG
   unsigned int eax;
   unsigned int edx;
 
