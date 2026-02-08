@@ -117,6 +117,23 @@ cleanup:
   return str;
 }
 
+/*  Make TinyCC happy: define a simple sqrt via Newton-Raphson on doubles.  */
+#ifdef __TINYC__
+static double sqrt(double x) {
+  if (x < 0) return -1;
+  if (x == 0) return 0;
+
+  double guess = x;
+  double epsilon = 1e-9;
+
+  while ((guess * guess - x) > epsilon || (x - guess * guess) > epsilon) {
+    guess = 0.5 * (guess + x / guess);
+  }
+
+  return guess;
+}
+#endif
+
 /* Fixed-point square root: result = floor(sqrt(n_val) * one).
  *
  * Uses floating-point arithmetic on n_val (a small integer) to produce
