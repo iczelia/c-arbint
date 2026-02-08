@@ -41,22 +41,37 @@ AC_ARG_ENABLE([warnings],
   [],
   [enable_warnings=yes])
 
+AC_CACHE_CHECK([whether $CC is Microsoft cl (not clang-cl)], [arbint_cv_cc_msvc_cl], [
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#if !defined(_MSC_VER) || defined(__clang__)
+#error not msvc cl
+#endif
+  ]], [[]])],
+    [arbint_cv_cc_msvc_cl=yes],
+    [arbint_cv_cc_msvc_cl=no])
+])
+arbint_cc_msvc_cl="$arbint_cv_cc_msvc_cl"
+
 AS_IF([test "x$enable_warnings" = "xyes"], [
-  arbint_warning_cflags=""
-  for arbint_warning_flag in -Wall -Wextra -pedantic -Werror=implicit-function-declaration; do
-    AC_MSG_CHECKING([whether $CC supports $arbint_warning_flag])
-    arbint_saved_cflags="$CFLAGS"
-    CFLAGS="$CFLAGS $arbint_warning_flag"
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[]])],
-      [arbint_flag_supported=yes],
-      [arbint_flag_supported=no])
-    CFLAGS="$arbint_saved_cflags"
-    AC_MSG_RESULT([$arbint_flag_supported])
-    AS_IF([test "x$arbint_flag_supported" = "xyes"], [
-      arbint_warning_cflags="$arbint_warning_cflags $arbint_warning_flag"
-    ])
-  done
-  CFLAGS="$CFLAGS$arbint_warning_cflags"
+  AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+    CFLAGS="$CFLAGS /W4"
+  ], [
+    arbint_warning_cflags=""
+    for arbint_warning_flag in -Wall -Wextra -pedantic -Werror=implicit-function-declaration; do
+      AC_MSG_CHECKING([whether $CC supports $arbint_warning_flag])
+      arbint_saved_cflags="$CFLAGS"
+      CFLAGS="$CFLAGS $arbint_warning_flag"
+      AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[]])],
+        [arbint_flag_supported=yes],
+        [arbint_flag_supported=no])
+      CFLAGS="$arbint_saved_cflags"
+      AC_MSG_RESULT([$arbint_flag_supported])
+      AS_IF([test "x$arbint_flag_supported" = "xyes"], [
+        arbint_warning_cflags="$arbint_warning_cflags $arbint_warning_flag"
+      ])
+    done
+    CFLAGS="$CFLAGS$arbint_warning_cflags"
+  ])
 ])
 
 AC_ARG_WITH([base-optimization],
@@ -81,13 +96,24 @@ AS_CASE([$arbint_base_optimization],
 arbint_effective_march=""
 arbint_effective_mtune=""
 AS_IF([test "x$arbint_base_optimization" = "xdefault"], [
-  CFLAGS="$CFLAGS -O2 -g3"
-], [
-  arbint_effective_march="$arbint_cfg_march"
-  AS_IF([test "x$arbint_effective_march" = "x"], [
-    arbint_effective_march="native"
+  AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+    CFLAGS="$CFLAGS /O2 /Zi"
+  ], [
+    CFLAGS="$CFLAGS -O2 -g3"
   ])
-  CFLAGS="$CFLAGS -O3 -march=$arbint_effective_march -mtune=$arbint_effective_march"
+], [
+  AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+    CFLAGS="$CFLAGS /O2 /Zi"
+    AS_IF([test "x$arbint_cfg_march" != "x"], [
+      AC_MSG_WARN([ignoring --with-march=$arbint_cfg_march for MSVC compiler $CC])
+    ])
+  ], [
+    arbint_effective_march="$arbint_cfg_march"
+    AS_IF([test "x$arbint_effective_march" = "x"], [
+      arbint_effective_march="native"
+    ])
+    CFLAGS="$CFLAGS -O3 -march=$arbint_effective_march -mtune=$arbint_effective_march"
+  ])
 ])
 
 AC_ARG_ENABLE([lto],
@@ -105,25 +131,48 @@ ARBINT_LTO_CFLAGS=""
 ARBINT_LTO_LDFLAGS=""
 arbint_enable_lto_effective=no
 AS_IF([test "x$arbint_enable_lto" != "xno"], [
-  AC_CACHE_CHECK([whether $CC supports LTO with -flto], [arbint_cv_cc_lto], [
-    arbint_saved_cflags="$CFLAGS"
-    arbint_saved_ldflags="$LDFLAGS"
-    CFLAGS="$CFLAGS -flto"
-    LDFLAGS="$LDFLAGS -flto"
-    AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[return 0;]])],
-      [arbint_cv_cc_lto=yes],
-      [arbint_cv_cc_lto=no])
-    CFLAGS="$arbint_saved_cflags"
-    LDFLAGS="$arbint_saved_ldflags"
+  AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+    AC_CACHE_CHECK([whether $CC supports LTO with /GL and /LTCG], [arbint_cv_cc_lto], [
+      arbint_saved_cflags="$CFLAGS"
+      arbint_saved_ldflags="$LDFLAGS"
+      CFLAGS="$CFLAGS /GL"
+      LDFLAGS="$LDFLAGS /LTCG"
+      AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[return 0;]])],
+        [arbint_cv_cc_lto=yes],
+        [arbint_cv_cc_lto=no])
+      CFLAGS="$arbint_saved_cflags"
+      LDFLAGS="$arbint_saved_ldflags"
+    ])
+  ], [
+    AC_CACHE_CHECK([whether $CC supports LTO with -flto], [arbint_cv_cc_lto], [
+      arbint_saved_cflags="$CFLAGS"
+      arbint_saved_ldflags="$LDFLAGS"
+      CFLAGS="$CFLAGS -flto"
+      LDFLAGS="$LDFLAGS -flto"
+      AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[return 0;]])],
+        [arbint_cv_cc_lto=yes],
+        [arbint_cv_cc_lto=no])
+      CFLAGS="$arbint_saved_cflags"
+      LDFLAGS="$arbint_saved_ldflags"
+    ])
   ])
 
   AS_IF([test "x$arbint_cv_cc_lto" = "xyes"], [
     arbint_enable_lto_effective=yes
-    ARBINT_LTO_CFLAGS="-flto"
-    ARBINT_LTO_LDFLAGS="-flto"
+    AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+      ARBINT_LTO_CFLAGS="/GL"
+      ARBINT_LTO_LDFLAGS="/LTCG"
+    ], [
+      ARBINT_LTO_CFLAGS="-flto"
+      ARBINT_LTO_LDFLAGS="-flto"
+    ])
   ], [
     AS_IF([test "x$arbint_enable_lto" = "xyes"], [
-      AC_MSG_ERROR([--enable-lto was requested, but $CC/$LD does not support -flto])
+      AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+        AC_MSG_ERROR([--enable-lto was requested, but $CC/$LD does not support /GL and /LTCG])
+      ], [
+        AC_MSG_ERROR([--enable-lto was requested, but $CC/$LD does not support -flto])
+      ])
     ])
   ])
 ])
@@ -167,13 +216,17 @@ AS_IF([test "x$arbint_cv_have_bmi2_plain" = "xyes"], [
 AM_CONDITIONAL([ARBINT_BUILD_BMI2], [test "x$arbint_build_bmi2" = "xyes"])
 AC_SUBST([ARBINT_BMI2_CFLAGS])
 
-AC_CACHE_CHECK([whether $CC supports -fvisibility=hidden], [arbint_cv_cc_visibility_hidden], [
-  arbint_saved_cflags="$CFLAGS"
-  CFLAGS="$CFLAGS -fvisibility=hidden"
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[]])],
-    [arbint_cv_cc_visibility_hidden=yes],
-    [arbint_cv_cc_visibility_hidden=no])
-  CFLAGS="$arbint_saved_cflags"
+AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
+  arbint_cv_cc_visibility_hidden=no
+], [
+  AC_CACHE_CHECK([whether $CC supports -fvisibility=hidden], [arbint_cv_cc_visibility_hidden], [
+    arbint_saved_cflags="$CFLAGS"
+    CFLAGS="$CFLAGS -fvisibility=hidden"
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[]])],
+      [arbint_cv_cc_visibility_hidden=yes],
+      [arbint_cv_cc_visibility_hidden=no])
+    CFLAGS="$arbint_saved_cflags"
+  ])
 ])
 
 AS_IF([test "x$arbint_cv_cc_visibility_hidden" = "xyes"], [
