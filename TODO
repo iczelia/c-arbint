@@ -1,6 +1,6 @@
 - specialised algorithm for arbint_sqr.
-- speedups to arbint_mul (memory reuse, schonhage-strassen).
-- potential speedups to the comparison functions, if possible. needs investigation.
+- speedups to arbint_mul (memory reuse, schonhage-strassen, toom-cook).
+- potential speedups to the comparison functions, if possible via vector instructions. needs investigation.
 - add more comprehensive tests.
 - continue the implementation...
 - clean up the ci configuration.

@@ -145,14 +145,12 @@ static double sqrt(double x) {
  * which converges to sqrt(n_val) * one. */
 static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
                                const arbint_t one, arbint_ctx_t * ctx) {
-  arbint_t x, x_old, n_one, two, s;
+  arbint_t x, x_old, n_one, s;
   arbint_err_t rc;
 
-  rc = arbint_init_all(ctx, x, x_old, n_one, two, s, (arbint_t *) NULL);
+  rc = arbint_init_all(ctx, x, x_old, n_one, s, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  arbint_set_u32(two, 2);
 
   /* n_one = n_val * one * one  (the value whose isqrt we want) */
   rc = arbint_mul_u32(n_one, one, n_val);
@@ -187,10 +185,12 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
 
     arbint_mul(x, x, one);
 
-    /* x = x / fp_prec.  Build fp_prec as arbint. */
-    arbint_set_u32(s, (uint32_t) fp_prec_hi);
-    arbint_mul_u32(s, s, (uint32_t) fp_prec_lo);
-    rc = arbint_tdiv_q(x, x, s);
+    /* x = x / fp_prec.  Split into two u32 divisions since fp_prec
+     * = 10^7 * 10^9 and the result is only an initial guess. */
+    rc = arbint_tdiv_q_u32(x, x, (uint32_t) fp_prec_hi);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_tdiv_q_u32(x, x, (uint32_t) fp_prec_lo);
     if (rc != ARBINT_OK)
       goto cleanup;
   }
@@ -210,7 +210,7 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
       rc = arbint_add(x, x, s);
       if (rc != ARBINT_OK)
         goto cleanup;
-      rc = arbint_tdiv_q(x, x, two);
+      rc = arbint_tdiv_q_u32(x, x, 2);
       if (rc != ARBINT_OK)
         goto cleanup;
 
@@ -224,7 +224,7 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
   rc = arbint_set(result, x);
 
 cleanup:
-  arbint_clear_all(s, two, n_one, x_old, x, (arbint_t *) NULL);
+  arbint_clear_all(s, n_one, x_old, x, (arbint_t *) NULL);
   return rc;
 }
 

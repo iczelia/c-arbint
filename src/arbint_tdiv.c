@@ -297,31 +297,95 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
   return ARBINT_OK;
 }
 
-static arbint_err_t arbint_tdiv_qr_small_impl(arbint_t q, arbint_t r,
-                                              const arbint_t n,
-                                              arbint_limb_t dmag, int dsign) {
+static arbint_err_t arbint_tdiv_qr_u32_impl(arbint_t q, arbint_t r,
+                                             const arbint_t n, uint32_t dmag,
+                                             int dsign) {
   const arbint_limb_t * np;
   size_t nn;
   int nsign;
-  arbint_limb_t dtmp[1];
-  const arbint_alloc_t * alloc;
   arbint_err_t rc;
+  size_t i;
+  uint64_t rem;
+  int qsign;
+  int rsign;
+  size_t q_used;
 
   if ((q == NULL && r == NULL) || n == NULL)
     return ARBINT_EINVAL;
-  if (dmag == (arbint_limb_t) 0u)
+  if (dmag == 0u)
     return ARBINT_EZERO;
 
   rc = arbint_get_mag_view(n, &np, &nn, &nsign);
   if (rc != ARBINT_OK)
     return rc;
 
-  alloc = arbint_pick_alloc(q, r, n, NULL);
-  if (alloc == NULL)
-    return ARBINT_EINVAL;
+  if (nn == 0u) {
+    if (q != NULL)
+      arbint_zero(q);
+    if (r != NULL)
+      arbint_zero(r);
+    return ARBINT_OK;
+  }
 
-  dtmp[0] = dmag;
-  return arbint_tdiv_qr_mag_impl(q, r, np, nn, nsign, dtmp, 1u, dsign, alloc);
+  if (q != NULL) {
+    rc = arbint_resize(q, nn);
+    if (rc != ARBINT_OK)
+      return rc;
+  }
+
+  rem = 0u;
+  for (i = nn; i != 0u; --i) {
+#if ARBINT_LIMB_BITS == 64
+    /*
+     * 64-bit limbs: split each limb into two 32-bit halves, since
+     * the divisor is 32-bit and we need the accumulator to not
+     * overflow a uint64_t.  Process high half then low half.
+     */
+    uint64_t limb = (uint64_t) np[i - 1u];
+    uint32_t hi = (uint32_t) (limb >> 32u);
+    uint32_t lo = (uint32_t) limb;
+    uint64_t cur_hi;
+    uint64_t cur_lo;
+    uint32_t q_hi;
+    uint32_t q_lo;
+
+    cur_hi = (rem << 32u) | (uint64_t) hi;
+    q_hi = (uint32_t) (cur_hi / dmag);
+    rem = cur_hi % dmag;
+
+    cur_lo = (rem << 32u) | (uint64_t) lo;
+    q_lo = (uint32_t) (cur_lo / dmag);
+    rem = cur_lo % dmag;
+
+    if (q != NULL)
+      ARBINT_LIMBS(q)[i - 1u] =
+          ((uint64_t) q_hi << 32u) | (uint64_t) q_lo;
+#elif ARBINT_LIMB_BITS == 32
+    uint64_t cur = (rem << 32u) | (uint64_t) np[i - 1u];
+    if (q != NULL)
+      ARBINT_LIMBS(q)[i - 1u] = (arbint_limb_t) (cur / dmag);
+    rem = cur % dmag;
+#endif
+  }
+
+  if (q != NULL) {
+    q_used = arbint_norm_used(ARBINT_LIMBS(q), nn);
+    qsign = (q_used == 0u || nsign == 0) ? 0 : ((nsign == dsign) ? 1 : -1);
+    if (!arbint_set_signed_sz(q, q_used, qsign))
+      return ARBINT_EOVERFLOW;
+  }
+
+  if (r != NULL) {
+    rsign = (rem == 0u || nsign == 0) ? 0 : nsign;
+    rc = arbint_resize(r, 1u);
+    if (rc != ARBINT_OK)
+      return rc;
+    ARBINT_LIMBS(r)[0] = (arbint_limb_t) rem;
+    if (!arbint_set_signed_sz(r, (rem != 0u) ? 1u : 0u, rsign))
+      return ARBINT_EOVERFLOW;
+  }
+
+  return ARBINT_OK;
 }
 
 static arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r,
@@ -374,15 +438,15 @@ arbint_err_t arbint_tdiv_qr_u32(arbint_t q, arbint_t r, const arbint_t n,
                                 uint32_t d) {
   if (q == NULL || r == NULL)
     return ARBINT_EINVAL;
-  return arbint_tdiv_qr_small_impl(q, r, n, (arbint_limb_t) d, 1);
+  return arbint_tdiv_qr_u32_impl(q, r, n, d, 1);
 }
 
 arbint_err_t arbint_tdiv_q_u32(arbint_t q, const arbint_t n, uint32_t d) {
-  return arbint_tdiv_qr_small_impl(q, NULL, n, (arbint_limb_t) d, 1);
+  return arbint_tdiv_qr_u32_impl(q, NULL, n, d, 1);
 }
 
 arbint_err_t arbint_tdiv_r_u32(arbint_t r, const arbint_t n, uint32_t d) {
-  return arbint_tdiv_qr_small_impl(NULL, r, n, (arbint_limb_t) d, 1);
+  return arbint_tdiv_qr_u32_impl(NULL, r, n, d, 1);
 }
 
 arbint_err_t arbint_tdiv_qr_i32(arbint_t q, arbint_t r, const arbint_t n,
@@ -395,8 +459,7 @@ arbint_err_t arbint_tdiv_qr_i32(arbint_t q, arbint_t r, const arbint_t n,
     return ARBINT_EZERO;
 
   mag = (d < 0) ? (uint32_t) (-(d + 1)) + 1u : (uint32_t) d;
-  return arbint_tdiv_qr_small_impl(q, r, n, (arbint_limb_t) mag,
-                                   (d < 0) ? -1 : 1);
+  return arbint_tdiv_qr_u32_impl(q, r, n, mag, (d < 0) ? -1 : 1);
 }
 
 arbint_err_t arbint_tdiv_q_i32(arbint_t q, const arbint_t n, int32_t d) {
@@ -406,8 +469,7 @@ arbint_err_t arbint_tdiv_q_i32(arbint_t q, const arbint_t n, int32_t d) {
     return ARBINT_EZERO;
 
   mag = (d < 0) ? (uint32_t) (-(d + 1)) + 1u : (uint32_t) d;
-  return arbint_tdiv_qr_small_impl(q, NULL, n, (arbint_limb_t) mag,
-                                   (d < 0) ? -1 : 1);
+  return arbint_tdiv_qr_u32_impl(q, NULL, n, mag, (d < 0) ? -1 : 1);
 }
 
 arbint_err_t arbint_tdiv_r_i32(arbint_t r, const arbint_t n, int32_t d) {
@@ -417,6 +479,5 @@ arbint_err_t arbint_tdiv_r_i32(arbint_t r, const arbint_t n, int32_t d) {
     return ARBINT_EZERO;
 
   mag = (d < 0) ? (uint32_t) (-(d + 1)) + 1u : (uint32_t) d;
-  return arbint_tdiv_qr_small_impl(NULL, r, n, (arbint_limb_t) mag,
-                                   (d < 0) ? -1 : 1);
+  return arbint_tdiv_qr_u32_impl(NULL, r, n, mag, (d < 0) ? -1 : 1);
 }
