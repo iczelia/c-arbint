@@ -714,11 +714,12 @@ jobs:
         shell: msys2 {0}
         env:
           MSYS2_PATH_TYPE: inherit
+          MSYS2_ARG_CONV_EXCL: '*'
         run: |
           set -euo pipefail
 
           export CC=cl
-          export CFLAGS="${CFLAGS:-} /nologo"
+          export CL="${CL:-} -nologo"
 
           configure_args="--disable-dependency-tracking --enable-lto=no --with-base-optimization=default --disable-shared --enable-static"
 
@@ -747,7 +748,7 @@ jobs:
             exit 1
           }
 
-          "$CC" /Bv || true
+          "$CC" -Bv || true
           if ! ./configure $configure_args 2>&1 | tee configure.log; then
             if [ -f config.log ]; then
               echo "===== config.log ====="
