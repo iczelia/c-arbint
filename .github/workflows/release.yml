@@ -41,7 +41,7 @@ jobs:
           ./configure --enable-lto=auto
           make -j"$(nproc)" dist-xz
           xz -dkf c-arbint-*.tar.xz
-          bzip3 -vfbe c-arbint-*.tar
+          bzip3 -vfe c-arbint-*.tar
 
           tarball_xz="$(ls -t c-arbint-*.tar.xz | head -n1)"
           tarball_bz3="$(ls -t c-arbint-*.tar.bz3 | head -n1)"

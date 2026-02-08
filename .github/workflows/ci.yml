@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -1158,9 +1159,3 @@ jobs:
           name: c-arbint-binaries-repacked
           path: c-arbint-binaries.tar.xz
           if-no-files-found: error
-
-      - name: Delete intermediate artifacts
-        uses: geekyeggo/delete-artifact@v5
-        with:
-          name: build-*
-          failOnError: false

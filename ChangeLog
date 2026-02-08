@@ -1,3 +1,21 @@
+2026-02-08  Kamila Szewczyk  <k@iczelia.net>
+
+	* Version 0.0.1 released.
+
+	* src/arbint_addsub_avx2.c: AVX2-optimized doubling operation with
+	runtime dispatch and threshold-based selection (16+ limbs).
+	* src/arbint_mul.c: Add arbint_mul_i32 and arbint_mul_u32 for efficient
+	scalar multiplication with sign handling and early-exit optimizations.
+	* src/arbint_tdiv.c: Barrett-style reciprocal division optimization for
+	single-limb divisors (Granlund-Montgomery algorithm).
+	* configure.ac: AVX2 feature detection, MSVC compatibility improvements.
+	* tests/: Add compute_pi example (Chudnovsky algorithm), AVX2 unit tests,
+	stochastic testing improvements.
+	* .github/workflows/: Expand CI matrix to include ppc64le, riscv64, s390x,
+	MSVC x86/x64, and additional optimization configurations.
+	* man/c-arbint.3.in: Document all implemented APIs including new scalar
+	multiplication variants.
+
 2026-02-07  Kamila Szewczyk  <k@iczelia.net>
 
 	* configure.ac: Add --enable-lto=auto|yes|no and LTO capability check.

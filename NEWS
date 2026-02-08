@@ -1,11 +1,56 @@
-c-arbint 0.1 (2026-02-07)
-=========================
+c-arbint 0.0.1 (2026-02-08)
+===========================
 
-- Initial public release.
-- Core signed arbitrary-precision integer operations:
-  assignment, comparison, add/sub, multiply, square, and truncated division.
-- Binary import/export API and fit-check helpers.
-- Runtime/compile-time BMI2 path selection for multiplication on x86 targets.
-- Autotools build with shared/static library support, pkg-config metadata,
-  manual page, and unit/stochastic tests.
-- Optional LTO support via `--enable-lto=auto|yes|no`.
+Initial public release of c-arbint, a portable arbitrary-precision integer
+library for C with a focus on performance optimization and clean API design.
+
+Core Features
+-------------
+- Signed arbitrary-precision integer arithmetic:
+  * Assignment and type conversions (i32, u32)
+  * Full comparison suite (cmp, cmpabs, predicates)
+  * Addition and subtraction (including scalar variants)
+  * Multiplication (generic + BMI2 optimized)
+  * Squaring with dedicated implementation
+  * Truncated division (reciprocal-based for single-limb divisors)
+
+- Binary import/export API with little-endian magnitude buffers
+- Fit-check predicates for u8/u16/u32/u64 and i8/i16/i32/i64
+
+Performance Optimizations
+-------------------------
+- Runtime CPU feature detection with algorithm dispatch
+- BMI2-optimized multiplication on x86 (Karatsuba threshold: 32 limbs)
+- AVX2-optimized doubling operation (threshold: 16 limbs)
+- Reciprocal-based single-limb division (Granlund-Montgomery algorithm)
+- Scalar multiplication fast paths (arbint_mul_i32, arbint_mul_u32)
+- Early-exit optimizations for special values (0, ±1)
+
+Platform Support
+----------------
+Verified on:
+- Linux: x86-64, arm64, i386, riscv64, s390x, ppc64le
+- macOS: x86-64, arm64
+- Windows: x86-64, i686 (MinGW-GCC, TCC, MSVC)
+
+Compilers: GCC, Clang, TCC, MSVC
+
+Build System
+------------
+- Autotools with shared/static library support
+- pkg-config integration for easy linking
+- Optional LTO support via `--enable-lto=auto|yes|no`
+- Tunable optimization levels (`--with-base-optimization=default|tuned`)
+- Comprehensive unit and stochastic tests via `make check`
+
+Documentation
+-------------
+- Complete man page (c-arbint.3) documenting all exported APIs
+- Example code demonstrating library usage
+- Inline documentation for public API in arbint.h
+
+Known Limitations
+-----------------
+- String conversion (arbint_set_str, arbint_get_str) not yet implemented
+- Floor/ceiling division variants planned for future releases
+- Some CI configurations disabled due to compiler issues (noted in README)

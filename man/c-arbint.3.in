@@ -1,6 +1,6 @@
 .TH C-ARBINT 3 "@MAN_DATE@" "c-arbint @PACKAGE_VERSION@" "Library Functions Manual"
 .SH NAME
-c-arbint \- arbitrary-precision integer library for C
+c-arbint \- portable arbitrary-precision integer library for C
 .SH SYNOPSIS
 .nf
 .B #include <arbint.h>
@@ -14,13 +14,18 @@ Link with:
 .SH DESCRIPTION
 .B c-arbint
 provides signed arbitrary-precision integer arithmetic with explicit
-allocator-aware object management.
+allocator-aware object management and runtime performance optimization.
 .PP
 This page documents the functions currently exported by
-.BR libarbint .
+.BR libarbint
+(version 0.0.1).
 Additional declarations may exist in
 .BR arbint.h
 for future releases.
+.PP
+The library includes optimized code paths for x86 processors supporting
+BMI2 (multiplication) and AVX2 (doubling) instructions, with automatic
+runtime dispatch based on CPU feature detection.
 .SH TYPES
 .TP
 .B arbint_t
@@ -165,9 +170,15 @@ Three-way and predicate comparisons against big integers and 32-bit scalars.
 .BR arbint_add_i32 (),
 .BR arbint_add_u32 (),
 .BR arbint_sub_i32 (),
-.BR arbint_sub_u32 ()
+.BR arbint_sub_u32 (),
+.BR arbint_mul_i32 (),
+.BR arbint_mul_u32 ()
 .PP
 Core signed arithmetic on arbitrary-size integers.
+Scalar multiplication variants
+.RB ( arbint_mul_i32 ", " arbint_mul_u32 )
+provide optimized fast paths for multiplication by 32-bit values with
+early-exit for special cases (0, ±1).
 .SS Truncated Division and Remainder
 .BR arbint_tdiv_qr (),
 .BR arbint_tdiv_q (),
@@ -211,13 +222,27 @@ allocates the output buffer using the allocator in the source object's context.
 The caller owns that buffer and must free it with the same allocator contract.
 .SH ALGORITHMIC NOTES
 .PP
-Multiplication dispatches between a generic implementation and an optimized
-BMI2 path on supported x86 targets, switching between the naive
-schoolbook - O(n^2) - and Karatsuba - O(n^log2(3))-  algorithms based
-on operand size.
+.B Multiplication
+dispatches between a generic implementation and an optimized
+BMI2 path on supported x86 targets (using runtime CPU detection).
+The implementation switches between schoolbook (O(n²)) and Karatsuba
+(O(n^log₂3)) algorithms based on operand size (threshold: 32 limbs).
 .PP
-Division uses magnitude long division and then applies sign rules for
-truncation semantics.
+.B Division
+by multi-limb divisors uses binary long division with magnitude comparison.
+Division by single-limb divisors (u32/i32 variants) uses a reciprocal-based
+algorithm (Granlund-Montgomery technique) that replaces expensive hardware
+DIV instructions with two multiplications per limb plus minimal ALU operations.
+This provides significant speedup for the common case of dividing large
+integers by small constants.
+.PP
+.B Doubling
+operations automatically select an AVX2-optimized SIMD implementation when
+available and operand size exceeds the threshold (16 limbs), providing
+1.5-2.5x speedup on modern x86-64 processors.
+.PP
+All division variants apply appropriate sign rules for truncation semantics
+after magnitude computation.
 .SH EXAMPLE
 .nf
 #include <arbint.h>

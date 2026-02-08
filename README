@@ -1,6 +1,12 @@
 # c-arbint
 
-`c-arbint` is an arbitrary-precision integer library in C.
+`c-arbint` is a portable arbitrary-precision integer library for C, providing
+signed multi-precision arithmetic with runtime optimization selection and
+explicit memory management.
+
+**Version:** 0.0.1
+**License:** GNU AGPL v3+
+**Author:** Kamila Szewczyk <k@iczelia.net>
 
 ## Requirements
 

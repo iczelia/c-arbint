@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OWNER_REPO="iczelia/c-arbint"
+API_URL="https://api.github.com/repos/${OWNER_REPO}/releases/latest"
+
+need() { command -v "$1" >/dev/null 2>&1 || { echo "error: missing dependency: $1" >&2; exit 1; }; }
+need curl
+need jq
+need gpg
+need sha512sum
+
+workdir="${1:-release-assets}"
+mkdir -p "$workdir"
+cd "$workdir"
+
+echo "Fetching latest release metadata for ${OWNER_REPO}..."
+json="$(curl -fsSL "$API_URL")"
+
+tag="$(jq -r '.tag_name // empty' <<<"$json")"
+name="$(jq -r '.name // empty' <<<"$json")"
+assets_count="$(jq -r '.assets | length' <<<"$json")"
+
+if [[ -z "${tag}" ]]; then
+  echo "error: could not determine latest release tag (API rate limit? repo missing?)" >&2
+  exit 1
+fi
+if [[ "$assets_count" -eq 0 ]]; then
+  echo "error: latest release (${tag}) has no assets to download" >&2
+  exit 1
+fi
+
+echo "Latest release: tag=${tag} name=${name:-"(no name)"} assets=${assets_count}"
+echo
+
+# Download all assets into workdir/
+echo "Downloading assets..."
+jq -r '.assets[] | [.name, .browser_download_url] | @tsv' <<<"$json" |
+while IFS=$'\t' read -r asset_name asset_url; do
+  echo "  - $asset_name"
+  curl -fL --retry 5 --retry-delay 2 -o "$asset_name" "$asset_url"
+done
+echo
+
+# Create a sha512 manifest (useful for later verification)
+echo "Writing SHA-512 manifest..."
+sha512sum -- * > SHA512SUMS.txt
+echo "  -> SHA512SUMS.txt"
+echo
+
+# Sign each downloaded file with a detached signature (SHA-512 digest)
+# NOTE: This produces binary .sig files. If you prefer ASCII-armored signatures for concatenation,
+# add: --armor
+echo "Signing assets (detached signatures)..."
+sig_list=()
+for f in *; do
+  [[ -f "$f" ]] || continue
+  [[ "$f" == *.sig ]] && continue
+  [[ "$f" == "SHA512SUMS.txt" ]] && continue
+
+  out="${f}.sig"
+  echo "  - gpg signing: $f -> $out"
+  gpg --sign --detach-sign --interactive --verbose --digest-algo sha512 -o "$out" "$f"
+  sig_list+=("$out")
+done
+echo
+
+# Concatenate signatures into signatures.sig (in a deterministic order)
+# Since detached signatures are binary by default, this is a raw concatenation.
+# The accompanying signatures.order.txt records the concatenation order.
+printf "%s\n" "${sig_list[@]}" | LC_ALL=C sort > signatures.order.txt
+
+echo "Concatenating signatures into signatures.sig..."
+: > signatures.sig
+while IFS= read -r s; do
+  cat "$s" >> signatures.sig
+done < signatures.order.txt
+
+echo "Done."
+echo "  - signatures.sig"
+echo "  - signatures.order.txt"
+echo "  - SHA512SUMS.txt"
