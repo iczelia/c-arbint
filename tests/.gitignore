@@ -5,4 +5,5 @@ test_stochastic
 test_tdiv
 test_large
 test_addsub_avx2
+test_random
 compute_pi

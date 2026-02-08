@@ -435,21 +435,53 @@ ARBINT_API arbint_err_t arbint_export(const arbint_t op, void ** out_buf,
 ARBINT_API arbint_err_t arbint_hash(const arbint_t op, uint8_t * out_hash,
                                     size_t hash_len);
 
-/* ---------------- Random ---------------- */
+/* ---------------- Random Number Generation ---------------- */
+
+/*  Mersenne Twister MT19937 PRNG state.
+    Users should generally treat this as an opaque type and only manipulate
+    via arbint_rng_init, arbint_rng_clear, arbint_urandomb, arbint_urandomm.
+    State size: 2504 bytes (624 x 32-bit state + 1 x 32-bit index).  */
 typedef struct arbint_rng {
-  void * ud;
-  /*  Fill dst with len random bytes. Return 0 on success, nonzero on
-      failure.  */
-  int (*read)(void * ud, uint8_t * dst, size_t len);
+  uint32_t mt[624]; /* MT19937 state array */
+  unsigned int mti; /* Current index in state array */
 } arbint_rng_t;
 
-/* Uniform distribution over integers in [0, bound). */
-ARBINT_API arbint_err_t arbint_urandomm(arbint_t rop, const arbint_rng_t * rng,
-                                        const arbint_t bound);
+/*  Initialize RNG state.
+    If seed is NULL, attempts to seed from platform entropy source:
+      - Windows: BCryptGenRandom or CryptGenRandom
+      - macOS/BSD: arc4random_buf
+      - Linux/POSIX: /dev/urandom
+    If seed is non-NULL, uses provided bytes as seed. seed_len must be
+    a positive multiple of 4 (sizeof(uint32_t)).
+    Returns:
+      ARBINT_OK on success
+      ARBINT_EINVAL if rng is NULL, or if seed is NULL and no platform
+                    entropy source is available, or if seed_len is invalid  */
+ARBINT_API arbint_err_t arbint_rng_init(arbint_rng_t * rng, const void * seed,
+                                        size_t seed_len);
 
-/* Faster uniform distribution for bound = 2^k, i.e. range [0, 2^k). */
-ARBINT_API arbint_err_t arbint_urandomb(arbint_t rop, const arbint_rng_t * rng,
+/*  Clear RNG state (zeros memory for security).  */
+ARBINT_API void arbint_rng_clear(arbint_rng_t * rng);
+
+/*  Generate uniform random integer in [0, 2^k).
+    Fills rop with k random bits from MT19937 PRNG.
+    Returns:
+      ARBINT_OK on success
+      ARBINT_EINVAL if rop or rng is NULL
+      ARBINT_ENOMEM if allocation fails  */
+ARBINT_API arbint_err_t arbint_urandomb(arbint_t rop, arbint_rng_t * rng,
                                         size_t k);
+
+/*  Generate uniform random integer in [0, bound).
+    Uses rejection sampling to ensure true uniform distribution with no
+    modulo bias. Expected iterations: ~1.5 (worst case ~2).
+    Returns:
+      ARBINT_OK on success
+      ARBINT_EINVAL if rop, rng, or bound is NULL
+      ARBINT_EDOM if bound <= 0, or if rejection sampling fails after 256 tries
+      ARBINT_ENOMEM if allocation fails  */
+ARBINT_API arbint_err_t arbint_urandomm(arbint_t rop, arbint_rng_t * rng,
+                                        const arbint_t bound);
 
 #ifdef __cplusplus
 }

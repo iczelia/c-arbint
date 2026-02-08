@@ -24,7 +24,7 @@ Performance Optimizations
 - AVX2-optimized doubling operation (threshold: 16 limbs)
 - Reciprocal-based single-limb division (Granlund-Montgomery algorithm)
 - Scalar multiplication fast paths (arbint_mul_i32, arbint_mul_u32)
-- Early-exit optimizations for special values (0, ±1)
+- Early-exit optimizations for special values (-1, 0, 1)
 
 Platform Support
 ----------------

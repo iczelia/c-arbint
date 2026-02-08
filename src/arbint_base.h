@@ -23,6 +23,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #if ARBINT_LIMB_BITS == 64
 typedef uint64_t arbint_limb_t;
@@ -104,6 +105,23 @@ static inline unsigned arbint_clz_limb(arbint_limb_t x) {
     }
     return n;
   }
+#endif
+}
+
+/*  Securely zero memory so the compiler cannot optimise the store away.
+    Prefers explicit_bzero (glibc 2.25+, most BSDs) or memset_s (C11 Annex K),
+    falling back to a volatile-function-pointer indirection that defeats
+    dead-store elimination on all known compilers.  */
+static inline void arbint_secure_zero(void * ptr, size_t len) {
+#if HAVE_EXPLICIT_BZERO
+  explicit_bzero(ptr, len);
+#elif HAVE_MEMSET_S
+  (void) memset_s(ptr, len, 0, len);
+#elif ARBINT_COMPILER_MSVC
+  SecureZeroMemory(ptr, len);
+#else
+  static void * (*const volatile memset_v)(void *, int, size_t) = &memset;
+  (void) memset_v(ptr, 0, len);
 #endif
 }
 

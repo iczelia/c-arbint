@@ -18,12 +18,12 @@
 AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libarbint.la
-libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c
-EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c
+libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c arbint_bitops.c arbint_random.c
+EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c
 libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
-noinst_HEADERS = arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h
+noinst_HEADERS = arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h arbint_bitops.h arbint_random.h
 libarbint_la_LDFLAGS = -version-info 0:0:0 -no-undefined $(ARBINT_LTO_LDFLAGS)
 
 if ARBINT_BUILD_BMI2
@@ -35,6 +35,18 @@ if ARBINT_BUILD_AVX2
 libarbint_la_LIBADD += libarbint_la-arbint_addsub_avx2.lo
 endif
 
+if ARBINT_HAS_URANDOM
+libarbint_la_LIBADD += libarbint_la-arbint_random_urandom.lo
+endif
+
+if ARBINT_HAS_WINAPI_ENTROPY
+libarbint_la_LIBADD += libarbint_la-arbint_random_winapi.lo
+endif
+
+if ARBINT_HAS_ARC4RANDOM
+libarbint_la_LIBADD += libarbint_la-arbint_random_arc4.lo
+endif
+
 libarbint_la-arbint_mul_bmi2.lo: arbint_mul_bmi2.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f 'arbint_mul_bmi2.c' || echo '$(srcdir)/'`arbint_mul_bmi2.c
 
@@ -43,3 +55,12 @@ libarbint_la-arbint_tdiv_bmi2.lo: arbint_tdiv_bmi2.c
 
 libarbint_la-arbint_addsub_avx2.lo: arbint_addsub_avx2.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_AVX2_CFLAGS) -c -o $@ `test -f 'arbint_addsub_avx2.c' || echo '$(srcdir)/'`arbint_addsub_avx2.c
+
+libarbint_la-arbint_random_urandom.lo: arbint_random_urandom.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) -c -o $@ `test -f 'arbint_random_urandom.c' || echo '$(srcdir)/'`arbint_random_urandom.c
+
+libarbint_la-arbint_random_winapi.lo: arbint_random_winapi.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) -c -o $@ `test -f 'arbint_random_winapi.c' || echo '$(srcdir)/'`arbint_random_winapi.c
+
+libarbint_la-arbint_random_arc4.lo: arbint_random_arc4.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) -c -o $@ `test -f 'arbint_random_arc4.c' || echo '$(srcdir)/'`arbint_random_arc4.c
