@@ -99,6 +99,9 @@ arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
     return ARBINT_OK;
   }
 
+  if (b == 1u)
+    return arbint_set(rop, a);
+
   an = arbint_abs_sz(a[0]._sz);
   cap = an + 1u;
   if (cap < an)
@@ -133,6 +136,12 @@ arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {
     arbint_zero(rop);
     return ARBINT_OK;
   }
+
+  if (b == 1)
+    return arbint_set(rop, a);
+
+  if (b == -1)
+    return arbint_neg(rop, a);
 
   if (b > 0) {
     return arbint_mul_u32(rop, a, (uint32_t) b);
