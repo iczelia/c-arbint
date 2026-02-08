@@ -283,6 +283,15 @@ arbint_err_t arbint_urandomb(arbint_t rop, arbint_rng_t * rng, size_t k) {
   return ARBINT_OK;
 }
 
+/*  Generate a single random limb from MT19937.  */
+static arbint_limb_t arbint_random_limb(arbint_rng_t * rng) {
+  arbint_limb_t limb = 0;
+  size_t w;
+  for (w = 0; w < ARBINT_LIMB_BITS / 32u; w++)
+    limb |= (arbint_limb_t) arbint_mt19937_u32(rng) << (w * 32u);
+  return limb;
+}
+
 /*  Generate uniform random integer in [0, bound) via rejection sampling.
     Uses rejection sampling to ensure perfectly uniform distribution with
     no modulo bias.
@@ -296,16 +305,22 @@ arbint_err_t arbint_urandomb(arbint_t rop, arbint_rng_t * rng, size_t k) {
       ARBINT_EDOM if bound <= 0, or if rejection sampling fails after 256 tries
       ARBINT_ENOMEM if allocation fails
     Algorithm:
-      1. Get bit count of bound
-      2. Loop (max 256 times):
-         a. Generate random value with bound_bits random bits
-         b. If value < bound, accept and return
-      3. If exceeded retry limit, return ARBINT_EDOM
+      1. Generate all limbs with arbint_urandomb
+      2. Compare top limb against bound's top limb for early accept/reject
+      3. On rejection, re-roll only the top limb (bottom limbs stay uniform)
+      4. Full arbint_cmp only when top limbs are equal
+    Optimization:
+      Retries cost O(1) instead of O(n) because only the top limb is
+      regenerated.  The early top-limb check avoids the full multi-limb
+      comparison in the common case.
     Expected iterations: ~1.5 (worst case ~2 for bound just above power of 2)
-    Complexity: O(k) expected, where k = ceil(log2(bound))  */
+    Complexity: O(n) for initial fill, O(1) per retry  */
 arbint_err_t arbint_urandomm(arbint_t rop, arbint_rng_t * rng,
                              const arbint_t bound) {
-  size_t bound_bits;
+  size_t bound_bits, bound_nlimbs, top_bits;
+  arbint_limb_t top_mask, bound_top;
+  const arbint_limb_t * bp;
+  arbint_limb_t * rp;
   int retry;
   arbint_err_t rc;
   arbint_t bound_copy;
@@ -317,7 +332,7 @@ arbint_err_t arbint_urandomm(arbint_t rop, arbint_rng_t * rng,
   if (arbint_signum(bound) <= 0)
     return ARBINT_EDOM;
 
-  /* bound == 1 → always return 0 */
+  /* bound == 1 -> always return 0 */
   if (arbint_cmp_u32(bound, 1u) == 0) {
     arbint_zero(rop);
     return ARBINT_OK;
@@ -336,22 +351,58 @@ arbint_err_t arbint_urandomm(arbint_t rop, arbint_rng_t * rng,
     }
   }
 
-  /* Get bit count of bound */
+  bp = ARBINT_CLIMBS(need_copy ? bound_copy : bound);
   bound_bits = arbint_nbits(need_copy ? bound_copy : bound);
+  bound_nlimbs = (bound_bits + ARBINT_LIMB_BITS - 1u) / ARBINT_LIMB_BITS;
+  bound_top = bp[bound_nlimbs - 1u];
 
-  /* Rejection sampling loop (typically 1-2 iterations) */
+  /* Precompute mask for unused high bits in the top limb */
+  top_bits = bound_bits % ARBINT_LIMB_BITS;
+  top_mask = (top_bits != 0u)
+                 ? (((arbint_limb_t) 1u << top_bits) - 1u)
+                 : (arbint_limb_t) ~(arbint_limb_t) 0u;
+
+  /* Initial full fill of all limbs */
+  rc = arbint_urandomb(rop, rng, bound_bits);
+  if (rc != ARBINT_OK) {
+    if (need_copy)
+      arbint_clear(bound_copy);
+    return rc;
+  }
+
+  rp = ARBINT_LIMBS(rop);
+
   for (retry = 0; retry < 256; ++retry) {
-    rc = arbint_urandomb(rop, rng, bound_bits);
-    if (rc != ARBINT_OK) {
+    arbint_limb_t cand_top;
+    size_t used;
+
+    /* On retries (not the first iteration), re-roll only the top limb */
+    if (retry > 0)
+      rp[bound_nlimbs - 1u] = arbint_random_limb(rng) & top_mask;
+
+    cand_top = rp[bound_nlimbs - 1u];
+
+    /* Early accept: candidate top limb < bound top limb.
+       All lower limbs are irrelevant since the MSL is already smaller. */
+    if (cand_top < bound_top) {
+      used = arbint_norm_used(rp, bound_nlimbs);
+      rop[0]._sz = (ptrdiff_t) used;
       if (need_copy)
         arbint_clear(bound_copy);
-      return rc;
+      return ARBINT_OK;
     }
 
+    /* Early reject: candidate top limb > bound top limb */
+    if (cand_top > bound_top)
+      continue;
+
+    /* Top limbs equal: need full comparison */
+    used = arbint_norm_used(rp, bound_nlimbs);
+    rop[0]._sz = (ptrdiff_t) used;
     if (arbint_cmp(rop, need_copy ? bound_copy : bound) < 0) {
       if (need_copy)
         arbint_clear(bound_copy);
-      return ARBINT_OK; /* Success: rop < bound */
+      return ARBINT_OK;
     }
   }
 
