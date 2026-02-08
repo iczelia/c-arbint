@@ -1,18 +1,16 @@
 # c-arbint
 
-`c-arbint` is a portable arbitrary-precision integer library for C, providing
-signed multi-precision arithmetic with runtime optimization selection and
-explicit memory management.
+c-arbint - portable arbitrary-precision integer library for C, providing signed multi-precision arithmetic with runtime optimization selection and explicit memory management.
+Licensed under the terms of GNU Affero GPL version 3 or later - see COPYING.
+Report issues to Kamila Szewczyk k@iczelia.net.
+Project homepage: https://github.com/iczelia/c-arbint
 
-**Version:** 0.0.1
-**License:** GNU AGPL v3+
-**Author:** Kamila Szewczyk <k@iczelia.net>
+[![CI](https://github.com/iczelia/c-arbint/actions/workflows/ci.yml/badge.svg?branch=trunk)](https://github.com/iczelia/c-arbint/actions/workflows/ci.yml)
 
 ## Requirements
 
 - C compiler with C99 support
-- autotools + libtool (`autoconf`, `automake`, `libtool`)
-- `make`
+- autotools + libtool (`autoconf`, `automake`, `libtool`), `make` (for building)
 - `nroff` (for man page generation, optional)
 - `pkg-config` (for consumer integration)
 
