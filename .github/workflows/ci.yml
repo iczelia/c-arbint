@@ -689,13 +689,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        arch: [x64, x86]
         lto: ['auto', 'off']
-        warnings: ['on', 'off']
-    name: build-windows-msvc (x64, lto-${{ matrix.lto }}, warnings-${{ matrix.warnings }})
+    name: build-windows-msvc (${{ matrix.arch }}, lto-${{ matrix.lto }}, warnings-on)
 
     steps:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
 
       - name: Setup MSYS2 tools
         uses: msys2/setup-msys2@v2
@@ -732,11 +734,7 @@ jobs:
           else
             configure_args="$configure_args --enable-lto=auto"
           fi
-          if [ "${{ matrix.warnings }}" = "off" ]; then
-            configure_args="$configure_args --disable-warnings"
-          else
-            configure_args="$configure_args --enable-warnings"
-          fi
+          configure_args="$configure_args --enable-warnings"
 
           tarball="$(ls dist/*.tar.xz | sed -n '1p')"
           srcdir="$(tar -tf "$tarball" 2>/dev/null | sed -n '1p' | cut -d/ -f1)"
