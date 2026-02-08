@@ -49,8 +49,8 @@ static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
 #endif
 }
 
-/*  Compute x*y + acc + carry, returning high limb in result and low limb in
-    *out. Essential primitive for schoolbook multiplication inner loop.  */
+/*  Compute x*y + acc + carry, returning high limb in result and low limb
+    in *out. Essential primitive for schoolbook multiplication inner loop.  */
 static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
                                         arbint_limb_t acc, arbint_limb_t carry,
                                         arbint_limb_t * out) {

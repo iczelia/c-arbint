@@ -315,10 +315,10 @@ ARBINT_API arbint_err_t arbint_shr(arbint_t rop, const arbint_t a,
                                    uint32_t k); /* trunc toward 0 */
 
 /* ---------------- Bit operations / queries ---------------- */
-ARBINT_API size_t arbint_sizeinbase(
-    const arbint_t x, int base); /* digits in base; for x=0 returns 1 */
-ARBINT_API size_t
-arbint_nbits(const arbint_t x); /* number of significant bits; 0 for x=0 */
+/*  Digits in base; for x=0 returns 1.  */
+ARBINT_API size_t arbint_sizeinbase(const arbint_t x, int base);
+/*  Number of significant bits; 0 for x=0.  */
+ARBINT_API size_t arbint_nbits(const arbint_t x);
 
 /*  Bit semantics use two's-complement integers.
     - testbit/or/and/xor/not/setbit/clrbit behave as if over infinite
@@ -331,16 +331,15 @@ ARBINT_API arbint_err_t arbint_testbit(const arbint_t x, size_t bit_index,
                                        int * out); /* out = 0/1 */
 ARBINT_API arbint_err_t arbint_setbit(arbint_t x, size_t bit_index);
 ARBINT_API arbint_err_t arbint_clrbit(arbint_t x, size_t bit_index);
-
-ARBINT_API arbint_err_t arbint_ctz(
-    const arbint_t x, size_t * out); /* count trailing zeros; EDOM if x=0 */
+/*  Count trailing zeros; EDOM if x=0.  */
+ARBINT_API arbint_err_t arbint_ctz(const arbint_t x, size_t * out);
 /*  Count leading zero bits within canonical width W(x); for x<0 this is 0.
     Returns EDOM if x=0.  */
 ARBINT_API arbint_err_t arbint_clz(const arbint_t x, size_t * out);
-/* Count set bits in the low W(x) bits of x. */
+/*  Count set bits in the low W(x) bits of x.  */
 ARBINT_API arbint_err_t arbint_popcount(const arbint_t x, size_t * out);
 
-/* Hamming distance between low max(W(a), W(b)) bits of a and b. */
+/*  Hamming distance between low max(W(a), W(b)) bits of a and b.  */
 ARBINT_API arbint_err_t arbint_hammingdist(const arbint_t a, const arbint_t b,
                                            size_t * out);
 
@@ -350,8 +349,8 @@ ARBINT_API arbint_err_t arbint_and(arbint_t rop, const arbint_t a,
                                    const arbint_t b);
 ARBINT_API arbint_err_t arbint_xor(arbint_t rop, const arbint_t a,
                                    const arbint_t b);
-ARBINT_API arbint_err_t
-arbint_not(arbint_t rop, const arbint_t a); /* two's-complement bitwise not */
+/*  Two's-complement bitwise not.  */
+ARBINT_API arbint_err_t arbint_not(arbint_t rop, const arbint_t a);
 
 /* ---------------- Number theory ---------------- */
 ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
@@ -362,19 +361,15 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
                                        uint32_t b);
 ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
                                        uint32_t b);
-ARBINT_API arbint_err_t arbint_moebius(
-    int * out,
-    const arbint_t n); /* out=0 if n has squared prime factor; else
-                          out=(-1)^(number of distinct prime factors) */
-ARBINT_API arbint_err_t arbint_totient(
-    arbint_t rop,
-    const arbint_t
-        n); /* count of positive integers <= n that are coprime to n */
-ARBINT_API arbint_err_t arbint_carmichael(
-    arbint_t rop,
-    const arbint_t n); /* lcm of lambda(p_i^{k_i}) for prime factorization n =
-                          prod p_i^{k_i}; lambda(p^k) = p^{k-1}*(p-1) for odd p
-                          or k<=2; else lambda(2^k) = 2^{k-2} */
+/*  out=0 if n has squared prime factor; else out=(-1)^(number of distinct
+ * prime factors).  */
+ARBINT_API arbint_err_t arbint_moebius(int * out, const arbint_t n);
+/*  Count of positive integers <= n that are coprime to n.  */
+ARBINT_API arbint_err_t arbint_totient(arbint_t rop, const arbint_t n);
+/*  lcm of lambda(p_i^{k_i}) for prime factorization n = prod p_i^{k_i};
+ * lambda(p^k) = p^{k-1}*(p-1) for odd p or k<=2; else lambda(2^k) = 2^{k-2}.
+ */
+ARBINT_API arbint_err_t arbint_carmichael(arbint_t rop, const arbint_t n);
 
 /* extended gcd: g = ax + by */
 ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
@@ -401,31 +396,29 @@ ARBINT_API arbint_err_t arbint_fib_u32(arbint_t rop, uint32_t n);
 ARBINT_API arbint_err_t arbint_lucas_u32(arbint_t rop, uint32_t n);
 
 /* ---------------- Roots / perfect powers ---------------- */
-ARBINT_API arbint_err_t
-arbint_isqrt(arbint_t rop, const arbint_t a); /* floor(sqrt(a)) for a>=0 */
-ARBINT_API arbint_err_t
-arbint_is_square(const arbint_t a, int * out); /* out=1 if perfect square */
-ARBINT_API arbint_err_t arbint_is_power(
-    const arbint_t a,
-    int * out); /* out=1 iff exists integers b, k>=2 such that a = b^k */
-ARBINT_API arbint_err_t
-arbint_root(arbint_t rop, const arbint_t a,
-            uint32_t k); /* floor(a^(1/k)) for a>=0; EDOM if k=0 */
+/*  floor(sqrt(a)) for a>=0.  */
+ARBINT_API arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a);
+/*  out=1 if perfect square.  */
+ARBINT_API arbint_err_t arbint_is_square(const arbint_t a, int * out);
+/*  out=1 iff exists integers b, k>=2 such that a = b^k.  */
+ARBINT_API arbint_err_t arbint_is_power(const arbint_t a, int * out);
+/*  floor(a^(1/k)) for a>=0; EDOM if k=0.  */
+ARBINT_API arbint_err_t arbint_root(arbint_t rop, const arbint_t a,
+                                    uint32_t k);
 
 /* ---------------- Primality and neighboring primes ---------------- */
-ARBINT_API arbint_err_t
-arbint_isprime(const arbint_t n, int reps,
-               int * out); /* out=0/1; reps controls accuracy */
+/*  out=0/1; reps controls accuracy.  */
+ARBINT_API arbint_err_t arbint_isprime(const arbint_t n, int reps, int * out);
 ARBINT_API arbint_err_t arbint_nextprime(arbint_t rop, const arbint_t n);
 ARBINT_API arbint_err_t arbint_prevprime(arbint_t rop, const arbint_t n);
 
 /* ---------------- Modular inverses ---------------- */
-ARBINT_API arbint_err_t arbint_inv_mod(
-    arbint_t rop, const arbint_t a,
-    const arbint_t mod); /* rop = a^{-1} mod mod; EDOM if gcd(a,mod)!=1 */
-ARBINT_API arbint_err_t arbint_inv_mod_u32(
-    arbint_t rop, const arbint_t a,
-    uint32_t mod); /* rop = a^{-1} mod mod; EDOM if gcd(a,mod)!=1 */
+/*  rop = a^{-1} mod mod; EDOM if gcd(a,mod)!=1.  */
+ARBINT_API arbint_err_t arbint_inv_mod(arbint_t rop, const arbint_t a,
+                                       const arbint_t mod);
+/*  rop = a^{-1} mod mod; EDOM if gcd(a,mod)!=1.  */
+ARBINT_API arbint_err_t arbint_inv_mod_u32(arbint_t rop, const arbint_t a,
+                                           uint32_t mod);
 
 /* ---------------- Import + Export ---------------- */
 /* Import magnitude from little-endian byte buffer and apply sign. */
