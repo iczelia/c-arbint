@@ -399,7 +399,8 @@ jobs:
           dump_logs_on_failure() {
             rc="$?"
             if [ "$rc" -ne 0 ]; then
-              for f in configure.log make.log check.log config.log tests/test-suite.log; do
+              set +e
+              for f in configure.log make.log check.log config.log config.status tests/test-suite.log; do
                 if [ -f "$f" ]; then
                   echo "===== $f ====="
                   tail -n 300 "$f" || true
@@ -624,7 +625,8 @@ jobs:
           dump_logs_on_failure() {
             rc="$?"
             if [ "$rc" -ne 0 ]; then
-              for f in configure.log make.log check.log config.log tests/test-suite.log; do
+              set +e
+              for f in configure.log make.log check.log config.log config.status tests/test-suite.log; do
                 if [ -f "$f" ]; then
                   echo "===== $f ====="
                   tail -n 300 "$f" || true
@@ -729,7 +731,8 @@ jobs:
           dump_logs_on_failure() {
             rc="$?"
             if [ "$rc" -ne 0 ]; then
-              for f in configure.log make.log check.log config.log tests/test-suite.log; do
+              set +e
+              for f in configure.log make.log check.log config.log config.status tests/test-suite.log; do
                 if [ -f "$f" ]; then
                   echo "===== $f ====="
                   tail -n 300 "$f" || true
@@ -745,7 +748,13 @@ jobs:
           }
 
           "$CC" /Bv || true
-          ./configure $configure_args 2>&1 | tee configure.log
+          if ! ./configure $configure_args 2>&1 | tee configure.log; then
+            if [ -f config.log ]; then
+              echo "===== config.log ====="
+              tail -n 500 config.log || true
+            fi
+            exit 1
+          fi
           make -j"$jobs" 2>&1 | tee make.log
           make check 2>&1 | tee check.log
 
