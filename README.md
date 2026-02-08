@@ -38,6 +38,8 @@ sudo make install
   - `auto` (default): enables `-flto` if supported by the compiler/linker
   - `yes`: requires `-flto` support and fails otherwise
   - `no`: disables LTO
+- `--disable-entropy` - do not compile platform entropy sources; `arbint_rng_init`
+  with a NULL seed will always fail and callers must supply their own seed buffer
 
 ## Link in your project
 

@@ -40,6 +40,12 @@ storage and for exported buffers.
 .TP
 .B arbint_err_t
 Error code enum used by mutating/extracting APIs.
+.TP
+.B arbint_rng_t
+Mersenne Twister (MT19937) PRNG state. Initialize with
+.BR arbint_rng_init ()
+and release with
+.BR arbint_rng_clear ().
 .SH RETURN VALUES
 .PP
 Functions returning
@@ -64,6 +70,11 @@ Value/capacity overflow for the requested conversion or operation.
 .TP
 .B ARBINT_ESIGN
 Unsigned extraction requested from a negative value.
+.TP
+.B ARBINT_EDOM
+Domain error (e.g.\& platform entropy source failed, or
+.BR arbint_urandomm ()
+bound is not positive).
 .TP
 .B ARBINT_EZERO
 Division by zero.
@@ -209,6 +220,64 @@ Convert between
 and a little-endian magnitude byte buffer.
 .B arbint_export ()
 exports magnitude only (no sign encoding).
+.SS Random Number Generation
+.BR arbint_rng_init (),
+.BR arbint_rng_clear (),
+.BR arbint_urandomb (),
+.BR arbint_urandomm ()
+.PP
+.BI "arbint_err_t arbint_rng_init(arbint_rng_t *" rng ", const void *" seed ", size_t " seed_len ")"
+.RS
+Initialize an MT19937 PRNG state. If
+.I seed
+is NULL, the state is seeded from a platform entropy source (see
+.B ENTROPY SOURCES
+below). If
+.I seed
+is non-NULL, it must point to a buffer of
+.I seed_len
+bytes, where
+.I seed_len
+is a positive multiple of 4.
+Returns
+.B ARBINT_EINVAL
+if no platform entropy source is available (when
+.I seed
+is NULL) or if
+.I seed_len
+is invalid.
+Returns
+.B ARBINT_EDOM
+if the platform entropy source fails at runtime.
+.RE
+.PP
+.BI "void arbint_rng_clear(arbint_rng_t *" rng ")"
+.RS
+Securely zero the PRNG state to prevent leaking generated sequences.
+.RE
+.PP
+.BI "arbint_err_t arbint_urandomb(arbint_t " rop ", arbint_rng_t *" rng ", size_t " k ")"
+.RS
+Set
+.I rop
+to a uniformly random non-negative integer in [0,\ 2^\fIk\fP).
+.RE
+.PP
+.BI "arbint_err_t arbint_urandomm(arbint_t " rop ", arbint_rng_t *" rng ", const arbint_t " bound ")"
+.RS
+Set
+.I rop
+to a uniformly random non-negative integer in [0,\ \fIbound\fP).
+Uses rejection sampling to eliminate modulo bias.
+.I rop
+may alias
+.IR bound .
+Returns
+.B ARBINT_EDOM
+if
+.I bound
+\(<= 0 or if rejection sampling exhausts 256 attempts.
+.RE
 .SH ALIASING RULES
 .PP
 For single-output operations, destination may alias an input.
@@ -243,6 +312,55 @@ available and operand size exceeds the threshold (16 limbs), providing
 .PP
 All division variants apply appropriate sign rules for truncation semantics
 after magnitude computation.
+.SH ENTROPY SOURCES
+.PP
+When
+.BR arbint_rng_init ()
+is called with a NULL seed, it reads entropy from the best available
+platform source. Sources are selected at compile time in the following
+priority order:
+.PP
+.TP
+.B Windows
+.BR BCryptGenRandom ()
+(requires
+.IR bcrypt.h ,
+Vista+), then
+.BR CryptGenRandom ()
+(requires
+.IR wincrypt.h ,
+XP+), then
+.B RtlGenRandom
+(loaded dynamically from
+.IR advapi32.dll ,
+XP+; needs only
+.IR windows.h ).
+.TP
+.B macOS/BSD
+.BR arc4random_buf ()
+(kernel-seeded, cannot fail).
+.TP
+.B Linux/POSIX
+.I /dev/urandom
+(opened, read, and closed on each call).
+.PP
+If no platform entropy source was detected at configure time, or if entropy
+support was disabled with
+.BR \-\-disable-entropy ,
+then NULL-seed initialization returns
+.BR ARBINT_EINVAL .
+Callers must then supply their own seed buffer.
+.SH CONFIGURE OPTIONS
+.TP
+.B \-\-disable\-entropy
+Do not compile any platform entropy source.
+.BR arbint_rng_init ()
+with a NULL seed will always return
+.BR ARBINT_EINVAL ;
+callers must provide their own seed.
+The PRNG itself
+.RB ( arbint_urandomb ", " arbint_urandomm )
+is unaffected.
 .SH EXAMPLE
 .nf
 #include <arbint.h>
