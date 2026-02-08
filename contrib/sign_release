@@ -9,6 +9,8 @@ need curl
 need jq
 need gpg
 need sha512sum
+need tar
+need zip
 
 workdir="${1:-release-assets}"
 mkdir -p "$workdir"
@@ -38,7 +40,8 @@ echo "Downloading assets..."
 jq -r '.assets[] | [.name, .browser_download_url] | @tsv' <<<"$json" |
 while IFS=$'\t' read -r asset_name asset_url; do
   echo "  - $asset_name"
-  curl -fL --retry 5 --retry-delay 2 -o "$asset_name" "$asset_url"
+  curl -fL --retry 5 --retry-delay 2 -o "$asset_name" "$asset_url" \
+    -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0'
 done
 echo
 
@@ -60,23 +63,46 @@ for f in *; do
 
   out="${f}.sig"
   echo "  - gpg signing: $f -> $out"
-  gpg --sign --detach-sign --interactive --verbose --digest-algo sha512 -o "$out" "$f"
+  gpg --sign --detach-sign --armor --interactive --verbose --digest-algo sha512 -o "$out" "$f"
   sig_list+=("$out")
 done
 echo
 
-# Concatenate signatures into signatures.sig (in a deterministic order)
-# Since detached signatures are binary by default, this is a raw concatenation.
-# The accompanying signatures.order.txt records the concatenation order.
-printf "%s\n" "${sig_list[@]}" | LC_ALL=C sort > signatures.order.txt
+# Package signatures and SHA sums into archives
+# Create a temporary directory for the signature bundle
+bundle_dir="${tag}-signatures"
+mkdir -p "$bundle_dir"
 
-echo "Concatenating signatures into signatures.sig..."
-: > signatures.sig
-while IFS= read -r s; do
-  cat "$s" >> signatures.sig
-done < signatures.order.txt
+# Copy all .sig files and SHA512SUMS.txt into the bundle directory
+for sig in "${sig_list[@]}"; do
+  cp "$sig" "$bundle_dir/"
+done
+cp SHA512SUMS.txt "$bundle_dir/"
 
+echo "Creating signature archives..."
+
+# Create tar.xz archive
+tar_xz="${bundle_dir}.tar.xz"
+tar -cJf "$tar_xz" "$bundle_dir"
+echo "  - $tar_xz"
+
+# Create tar.gz archive
+tar_bz3="${bundle_dir}.tar.bz3"
+tar -c "$bundle_dir" | bzip3 -vfe > "$tar_bz3"
+echo "  - $tar_bz3"
+
+# Create zip archive
+zip_file="${bundle_dir}.zip"
+zip -rq "$zip_file" "$bundle_dir"
+echo "  - $zip_file"
+
+# Clean up the temporary bundle directory
+rm -rf "$bundle_dir"
+
+echo
 echo "Done."
-echo "  - signatures.sig"
-echo "  - signatures.order.txt"
-echo "  - SHA512SUMS.txt"
+echo "Signature archives created:"
+echo "  - $tar_xz"
+echo "  - $tar_gz"
+echo "  - $zip_file"
+echo "Individual .sig files and SHA512SUMS.txt remain in $workdir/"

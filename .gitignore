@@ -60,3 +60,6 @@ config.h.in~
 /tests/*.trs
 /tests/__pycache__/
 perf.*
+
+# Miscellany
+release-assets/

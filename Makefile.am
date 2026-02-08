@@ -22,7 +22,7 @@ SUBDIRS = include src man tests
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = c-arbint.pc
 
-dist_doc_DATA = README
+dist_doc_DATA = README.md
 
 EXTRA_DIST = bootstrap
 
