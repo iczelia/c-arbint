@@ -686,7 +686,12 @@ jobs:
   build-windows-msvc:
     runs-on: windows-latest
     needs: package
-    name: build-windows-msvc (x64, lto-off, tune-off)
+    strategy:
+      fail-fast: false
+      matrix:
+        lto: ['auto', 'off']
+        warnings: ['on', 'off']
+    name: build-windows-msvc (x64, lto-${{ matrix.lto }}, warnings-${{ matrix.warnings }})
 
     steps:
       - name: Setup MSVC
@@ -721,7 +726,17 @@ jobs:
           export CC=cl
           export CL="${CL:-} -nologo"
 
-          configure_args="--disable-dependency-tracking --enable-lto=no --with-base-optimization=default --disable-shared --enable-static"
+          configure_args="--disable-dependency-tracking --with-base-optimization=default --enable-shared --disable-static"
+          if [ "${{ matrix.lto }}" = "off" ]; then
+            configure_args="$configure_args --enable-lto=no"
+          else
+            configure_args="$configure_args --enable-lto=auto"
+          fi
+          if [ "${{ matrix.warnings }}" = "off" ]; then
+            configure_args="$configure_args --disable-warnings"
+          else
+            configure_args="$configure_args --enable-warnings"
+          fi
 
           tarball="$(ls dist/*.tar.xz | sed -n '1p')"
           srcdir="$(tar -tf "$tarball" 2>/dev/null | sed -n '1p' | cut -d/ -f1)"
