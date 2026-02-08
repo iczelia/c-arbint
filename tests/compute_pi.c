@@ -122,14 +122,11 @@ cleanup:
 static double sqrt(double x) {
   if (x < 0) return -1;
   if (x == 0) return 0;
-
   double guess = x;
   double epsilon = 1e-9;
-
   while ((guess * guess - x) > epsilon || (x - guess * guess) > epsilon) {
     guess = 0.5 * (guess + x / guess);
   }
-
   return guess;
 }
 #endif
@@ -156,8 +153,7 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
   arbint_set_u32(two, 2);
 
   /* n_one = n_val * one * one  (the value whose isqrt we want) */
-  arbint_set_u32(s, n_val);
-  rc = arbint_mul(n_one, s, one);
+  rc = arbint_mul_u32(n_one, one, n_val);
   if (rc != ARBINT_OK)
     goto cleanup;
   rc = arbint_mul(n_one, n_one, one);
@@ -183,8 +179,7 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
     uint32_t hi = (uint32_t)(scaled / 1000000000ULL);
     uint32_t lo = (uint32_t)(scaled % 1000000000ULL);
     arbint_set_u32(x, hi);
-    arbint_set_u32(s, 1000000000u);
-    arbint_mul(x, x, s);
+    arbint_mul_u32(x, x, 1000000000u);
     arbint_set_u32(s, lo);
     arbint_add(x, x, s);
 
@@ -192,8 +187,7 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
 
     /* x = x / fp_prec.  Build fp_prec as arbint. */
     arbint_set_u32(s, (uint32_t) fp_prec_hi);
-    arbint_set_u32(x_old, (uint32_t) fp_prec_lo);
-    arbint_mul(s, s, x_old);
+    arbint_mul_u32(s, s, (uint32_t) fp_prec_lo);
     rc = arbint_tdiv_q(x, x, s);
     if (rc != ARBINT_OK)
       goto cleanup;
@@ -252,20 +246,11 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
 
   /* one = 10^(digits+10) -- extra guard digits */
   uint32_t scale = digits + 10;
-  arbint_set_u32(one, 10);
-  {
-    arbint_t base;
-    if ((rc = arbint_init(base, ctx)) != ARBINT_OK)
+  arbint_set_u32(one, 1);
+  for (uint32_t i = 0; i < scale; i++) {
+    rc = arbint_mul_u32(one, one, 10u);
+    if (rc != ARBINT_OK)
       goto cleanup;
-    arbint_set(base, one);
-    for (uint32_t i = 1; i < scale; i++) {
-      rc = arbint_mul(one, one, base);
-      if (rc != ARBINT_OK) {
-        arbint_clear(base);
-        goto cleanup;
-      }
-    }
-    arbint_clear(base);
   }
 
   /* C3_OVER_24 = 640320^3 / 24 = 10939058860032000 */
@@ -276,11 +261,9 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
   /* Build 10939058860032000 from two 32-bit halves:
    * 10939058860032000 = 2546948 * 2^32 + 1502527488
    * Or more simply: 10939058860032000 = 10939058 * 10^9 + 860032000 */
-  arbint_set_u32(c3_24, 10939058);
-  arbint_set_u32(tmp, 1000000000u);
-  arbint_mul(c3_24, c3_24, tmp);
-  arbint_set_u32(tmp, 860032000u);
-  arbint_add(c3_24, c3_24, tmp);
+  arbint_set_u32(c3_24, 10939058u);
+  arbint_mul_u32(c3_24, c3_24, 1000000000u);
+  arbint_add_u32(c3_24, c3_24, 860032000u);
 
   /* a_k = one (= 10^scale), a_sum = one, b_sum = 0 */
   arbint_set(a_k, one);
@@ -294,20 +277,17 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
       fprintf(stderr, "\r  series: term %u", k);
 
     /* a_k *= -(6k-5) * (2k-1) * (6k-1) */
-    arbint_set_i32(s, -(int32_t)(6 * k - 5));
-    rc = arbint_mul(tmp, a_k, s);
+    rc = arbint_mul_i32(tmp, a_k, -(int32_t)(6 * k - 5));
     if (rc != ARBINT_OK) {
       arbint_clear(c3_24);
       goto cleanup;
     }
-    arbint_set_u32(s, 2 * k - 1);
-    rc = arbint_mul(tmp, tmp, s);
+    rc = arbint_mul_u32(tmp, tmp, 2 * k - 1);
     if (rc != ARBINT_OK) {
       arbint_clear(c3_24);
       goto cleanup;
     }
-    arbint_set_u32(s, 6 * k - 1);
-    rc = arbint_mul(tmp, tmp, s);
+    rc = arbint_mul_u32(tmp, tmp, 6 * k - 1);
     if (rc != ARBINT_OK) {
       arbint_clear(c3_24);
       goto cleanup;
@@ -315,9 +295,8 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
 
     /* a_k /= k^3 * C3_OVER_24 */
     arbint_set_u32(tmp2, k);
-    arbint_set_u32(s, k);
-    arbint_mul(tmp2, tmp2, s);
-    arbint_mul(tmp2, tmp2, s);
+    arbint_mul_u32(tmp2, tmp2, k);
+    arbint_mul_u32(tmp2, tmp2, k);
     arbint_mul(tmp2, tmp2, c3_24);
 
     rc = arbint_tdiv_q(a_k, tmp, tmp2);
@@ -334,8 +313,7 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
     }
 
     /* b_sum += k * a_k */
-    arbint_set_u32(s, k);
-    arbint_mul(tmp, a_k, s);
+    arbint_mul_u32(tmp, a_k, k);
     rc = arbint_add(b_sum, b_sum, tmp);
     if (rc != ARBINT_OK) {
       arbint_clear(c3_24);
@@ -355,10 +333,8 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
 
   /* total = 13591409 * a_sum + 545140134 * b_sum */
   fprintf(stderr, "  computing total...\n");
-  arbint_set_u32(s, 13591409u);
-  arbint_mul(total, a_sum, s);
-  arbint_set_u32(s, 545140134u);
-  arbint_mul(tmp, b_sum, s);
+  arbint_mul_u32(total, a_sum, 13591409u);
+  arbint_mul_u32(tmp, b_sum, 545140134u);
   arbint_add(total, total, tmp);
 
   /* sqrt_val = floor(sqrt(10005) * one) via fixed-point Newton */
@@ -369,8 +345,7 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
 
   /* pi = 426880 * sqrt_val * one / total */
   fprintf(stderr, "  final division...\n");
-  arbint_set_u32(tmp, 426880);
-  arbint_mul(tmp, tmp, sqrt_val);
+  arbint_mul_u32(tmp, sqrt_val, 426880u);
   arbint_mul(tmp, tmp, one);
 
   rc = arbint_tdiv_q(result, tmp, total);
