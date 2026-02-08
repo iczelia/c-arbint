@@ -53,6 +53,8 @@ arbint_err_t arbint_import(arbint_t rop, const void * buf, size_t nbytes) {
     return ARBINT_OK;
   }
 
+  if (used_bytes > SIZE_MAX - (ARBINT_LIMB_BYTES - 1u))
+    return ARBINT_EOVERFLOW;
   limbs_needed = (used_bytes + ARBINT_LIMB_BYTES - 1u) / ARBINT_LIMB_BYTES;
   if (limbs_needed > PTRDIFF_MAX)
     return ARBINT_EOVERFLOW;

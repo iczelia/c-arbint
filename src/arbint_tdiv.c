@@ -111,9 +111,12 @@ static size_t arbint_nbits_mag(const arbint_limb_t * x, size_t xn) {
   return nbits;
 }
 
-static int arbint_mag_get_bit(const arbint_limb_t * x, size_t bit_index) {
+static int arbint_mag_get_bit(const arbint_limb_t * x, size_t n_limbs,
+                              size_t bit_index) {
   size_t li = bit_index / ARBINT_LIMB_BITS;
   size_t bi = bit_index % ARBINT_LIMB_BITS;
+  if (li >= n_limbs)
+    return 0;
   return (int) ((x[li] >> bi) & (arbint_limb_t) 1u);
 }
 
@@ -177,7 +180,7 @@ static arbint_err_t arbint_div_mag_binary(const arbint_limb_t * n, size_t nn,
     if (!arbint_mag_shl1_inplace(r, r_used, rcap))
       return ARBINT_EOVERFLOW;
 
-    if (arbint_mag_get_bit(n, b - 1u)) {
+    if (arbint_mag_get_bit(n, nn, b - 1u)) {
       if (*r_used == 0u) {
         r[0] = (arbint_limb_t) 1u;
         *r_used = 1u;
@@ -241,6 +244,8 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
   }
 
   qcap = nn;
+  if (dn > SIZE_MAX - 1u)
+    return ARBINT_EOVERFLOW;
   rcap = dn + 1u;
 
   qmag = NULL;

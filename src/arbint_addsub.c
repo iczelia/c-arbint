@@ -18,6 +18,7 @@
 
 #include "arbint_addsub.h"
 
+#include <assert.h>
 #include <limits.h>
 #include <string.h>
 
@@ -120,6 +121,7 @@ size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
 
 size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
                        const arbint_limb_t * y, size_t ny) {
+  assert(nx >= ny);
 #if ARBINT_HAVE_X86_CARRY_KERNEL
   size_t i;
   unsigned char borrow = 0u;

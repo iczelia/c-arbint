@@ -40,6 +40,8 @@ static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
 int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
   if (out == NULL)
     return 0;
+  if (bn > SIZE_MAX - 1u)
+    return 0;
   if (an > SIZE_MAX - bn - 1u)
     return 0;
   *out = an + bn + 1u;
