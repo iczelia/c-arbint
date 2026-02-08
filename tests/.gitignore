@@ -4,3 +4,4 @@ test_mul
 test_stochastic
 test_tdiv
 test_large
+compute_pi
