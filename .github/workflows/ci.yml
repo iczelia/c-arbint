@@ -759,7 +759,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, x86]
-        lto: ['on', 'off']
+        lto: ['on']
     name: build-windows-msvc (${{ matrix.arch }}, lto-${{ matrix.lto }})
 
     steps:
@@ -811,25 +811,6 @@ jobs:
           cd "dist/$srcdir"
           jobs="$(nproc 2>/dev/null || echo 2)"
 
-          # Generate .def file for MSVC non-LTO builds to control exports
-          if [ "${{ matrix.lto }}" = "off" ]; then
-            echo "Generating libarbint.def to control symbol exports..."
-            {
-              echo "LIBRARY libarbint"
-              echo "EXPORTS"
-            } > src/libarbint.def
-
-            grep '^ARBINT_API' include/arbint.h | \
-              sed 's/.*arbint_/    arbint_/' | \
-              sed 's/(.*//' | \
-              sort -u >> src/libarbint.def
-
-            echo "=== Generated libarbint.def ==="
-            head -n 20 src/libarbint.def
-            echo "..."
-            echo "Total exports: $(grep -c '^    arbint_' src/libarbint.def || echo 0)"
-          fi
-
           dump_logs_on_failure() {
             rc="$?"
             if [ "$rc" -ne 0 ]; then
@@ -861,28 +842,6 @@ jobs:
           make check 2>&1 | tee check.log
           echo "=== Contents of src/.libs ==="
           ls -la src/.libs/ || true
-
-          # Verify symbol exports for non-LTO builds
-          if [ "${{ matrix.lto }}" = "off" ]; then
-            dll_file="$(find src/.libs -name 'libarbint-*.dll' -type f | head -n1)"
-            if [ -n "$dll_file" ]; then
-              echo "=== Verifying DLL exports for non-LTO build ==="
-              echo "DLL: $dll_file"
-
-              # Count arbint_ exports using dumpbin if available
-              if command -v dumpbin >/dev/null 2>&1; then
-                export_count=$(dumpbin //EXPORTS "$dll_file" 2>/dev/null | grep -c 'arbint_' || echo "unknown")
-                echo "Total arbint_ exports: $export_count"
-                echo "Expected: ~137 public API functions"
-
-                # Show first few exports
-                echo "First 10 exports:"
-                dumpbin //EXPORTS "$dll_file" 2>/dev/null | grep 'arbint_' | head -n 10 || true
-              else
-                echo "dumpbin not available, skipping export verification"
-              fi
-            fi
-          fi
 
       - name: Copy artifacts to upload directory
         shell: msys2 {0}

@@ -175,9 +175,8 @@ jobs:
             - `i386-windows` - Windows x86 (32-bit)
 
             **Compiler suffixes:**
-            - `-c` = Clang
-            - `-g` = GCC
-            - `-m` = MSVC (Windows only)
+            - `-c` = Clang (no LTO)
+            - `-g` = GCC (no LTO)
             - `-lc` = Clang with LTO
             - `-lg` = GCC with LTO
             - `-lm` = MSVC with LTO
@@ -185,9 +184,9 @@ jobs:
             **Examples:**
             - `libarbint-amd64-linux-lg.so` - Linux x86-64, GCC with LTO
             - `libarbint-arm64-darwin-c.dylib` - macOS ARM64, Clang without LTO
-            - `libarbint-i386-windows-m.dll` - Windows x86, MSVC without LTO
+            - `libarbint-i386-windows-lm.dll` - Windows x86, MSVC with LTO
 
-            **Note:** macOS builds use Clang only. Windows MSVC builds use `auto` LTO detection.
+            **Note:** macOS builds use Clang only. Windows MSVC builds always use LTO.
 
             ### Building from Source
 
