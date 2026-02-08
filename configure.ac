@@ -313,7 +313,8 @@ AC_CHECK_HEADERS([unistd.h fcntl.h sys/stat.h])  # Linux /dev/urandom
 
 AS_IF([test "x$arbint_host_windows" = "xyes"], [
   AC_CHECK_HEADERS([windows.h bcrypt.h wincrypt.h])
-  # Prefer BCryptGenRandom (Vista+), fall back to CryptGenRandom (XP+)
+  # Prefer BCryptGenRandom (Vista+), fall back to CryptGenRandom (XP+),
+  # then RtlGenRandom (XP+, only needs windows.h)
 ])
 
 AC_CHECK_HEADERS([sys/random.h])  # macOS/BSD arc4random_buf
@@ -323,25 +324,44 @@ AC_CHECK_FUNCS([arc4random_buf])
 AC_CHECK_FUNCS([explicit_bzero])
 AC_CHECK_FUNCS([memset_s])
 
-# Define config.h macros
-# ARBINT_HAS_URANDOM: only on non-Windows POSIX with unistd.h
-AS_IF([test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes"],
-      [AC_DEFINE([ARBINT_HAS_URANDOM], [1],
-                 [Define if /dev/urandom is likely available (non-Windows POSIX).])])
-AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$ac_cv_header_windows_h" = "xyes"],
-      [AC_DEFINE([ARBINT_HAS_WINAPI_ENTROPY], [1],
-                 [Define if Windows entropy APIs are available])])
-AS_IF([test "x$ac_cv_func_arc4random_buf" = "xyes"],
-      [AC_DEFINE([ARBINT_HAS_ARC4RANDOM], [1],
-                 [Define if arc4random_buf is available])])
+AC_ARG_ENABLE([entropy],
+  [AS_HELP_STRING([--disable-entropy],
+                  [Do not compile platform entropy sources.
+                   arbint_rng_init with a NULL seed will always fail;
+                   callers must supply their own seed buffer.])],
+  [],
+  [enable_entropy=yes])
+
+# Define config.h macros (only when entropy is enabled)
+arbint_has_urandom=no
+arbint_has_winapi_entropy=no
+arbint_has_arc4random=no
+AS_IF([test "x$enable_entropy" = "xyes"], [
+  # ARBINT_HAS_URANDOM: only on non-Windows POSIX with unistd.h
+  AS_IF([test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes"], [
+    AC_DEFINE([ARBINT_HAS_URANDOM], [1],
+              [Define if /dev/urandom is likely available (non-Windows POSIX).])
+    arbint_has_urandom=yes
+  ])
+  AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$ac_cv_header_windows_h" = "xyes"], [
+    AC_DEFINE([ARBINT_HAS_WINAPI_ENTROPY], [1],
+              [Define if Windows entropy APIs are available])
+    arbint_has_winapi_entropy=yes
+  ])
+  AS_IF([test "x$ac_cv_func_arc4random_buf" = "xyes"], [
+    AC_DEFINE([ARBINT_HAS_ARC4RANDOM], [1],
+              [Define if arc4random_buf is available])
+    arbint_has_arc4random=yes
+  ])
+])
 
 # Define conditionals for Makefile.am
 AM_CONDITIONAL([ARBINT_HAS_URANDOM],
-               [test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes"])
+               [test "x$arbint_has_urandom" = "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_WINAPI_ENTROPY],
-               [test "x$arbint_host_windows" = "xyes" && test "x$ac_cv_header_windows_h" = "xyes"])
+               [test "x$arbint_has_winapi_entropy" = "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_ARC4RANDOM],
-               [test "x$ac_cv_func_arc4random_buf" = "xyes"])
+               [test "x$arbint_has_arc4random" = "xyes"])
 
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
