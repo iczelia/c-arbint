@@ -25,13 +25,17 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(_MSC_VER) && defined(HAVE_WINDOWS_H)
+  #include <windows.h>
+#endif /* defined(_MSC_VER) && defined(HAVE_WINDOWS_H) */
+
 #if ARBINT_LIMB_BITS == 64
 typedef uint64_t arbint_limb_t;
 #elif ARBINT_LIMB_BITS == 32
 typedef uint32_t arbint_limb_t;
 #else
   #error "Unsupported ARBINT_LIMB_BITS"
-#endif
+#endif /* ARBINT_LIMB_BITS */
 
 #define ARBINT_HALF_BITS (ARBINT_LIMB_BITS / 2u)
 #define ARBINT_HALF_MASK ((((arbint_limb_t) 1u) << ARBINT_HALF_BITS) - 1u)
@@ -41,19 +45,19 @@ typedef uint32_t arbint_limb_t;
   #define ARBINT_TARGET_X86_FAMILY 1
 #else
   #define ARBINT_TARGET_X86_FAMILY 0
-#endif
+#endif /* x86 family detection */
 
 #if defined(__GNUC__) || defined(__clang__)
   #define ARBINT_COMPILER_GNU_CLANG 1
 #else
   #define ARBINT_COMPILER_GNU_CLANG 0
-#endif
+#endif /* defined(__GNUC__) || defined(__clang__) */
 
 #if defined(_MSC_VER)
   #define ARBINT_COMPILER_MSVC 1
 #else
   #define ARBINT_COMPILER_MSVC 0
-#endif
+#endif /* defined(_MSC_VER) */
 
 #define ARBINT_LIMBS(x) ((arbint_limb_t *) ((x)[0]._ptr))
 #define ARBINT_CLIMBS(x) ((const arbint_limb_t *) ((x)[0]._ptr))
@@ -86,14 +90,14 @@ static inline unsigned arbint_clz_limb(arbint_limb_t x) {
   return (unsigned) __builtin_clzll((unsigned long long) x);
   #else
   return (unsigned) __builtin_clz((unsigned) x);
-  #endif
+  #endif /* ARBINT_LIMB_BITS */
 #elif ARBINT_COMPILER_MSVC
   unsigned long idx;
   #if ARBINT_LIMB_BITS == 64
   _BitScanReverse64(&idx, x);
   #else
   _BitScanReverse(&idx, x);
-  #endif
+  #endif /* ARBINT_LIMB_BITS */
   return (unsigned) (ARBINT_LIMB_BITS - 1u - idx);
 #else
   {
@@ -105,7 +109,7 @@ static inline unsigned arbint_clz_limb(arbint_limb_t x) {
     }
     return n;
   }
-#endif
+#endif /* ARBINT_COMPILER_GNU_CLANG */
 }
 
 /*  Securely zero memory so the compiler cannot optimise the store away.
@@ -117,12 +121,12 @@ static inline void arbint_secure_zero(void * ptr, size_t len) {
   explicit_bzero(ptr, len);
 #elif HAVE_MEMSET_S
   (void) memset_s(ptr, len, 0, len);
-#elif ARBINT_COMPILER_MSVC
+#elif ARBINT_COMPILER_MSVC && defined(HAVE_WINDOWS_H)
   SecureZeroMemory(ptr, len);
 #else
   static void * (*const volatile memset_v)(void *, int, size_t) = &memset;
   (void) memset_v(ptr, 0, len);
-#endif
+#endif /* HAVE_EXPLICIT_BZERO */
 }
 
-#endif
+#endif /* ARBINT_BASE_H */

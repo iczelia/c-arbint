@@ -150,7 +150,7 @@ arbint_entropy_fn_t arbint_select_entropy_source(void) {
   return arbint_entropy_urandom;
 #else
   return NULL;
-#endif
+#endif /* ARBINT_HAS_WINAPI_ENTROPY */
 }
 
 /* ========== Public API ========== */

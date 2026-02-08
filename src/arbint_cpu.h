@@ -41,4 +41,4 @@ typedef enum arbint_cpu_feature {
 
 int arbint_cpu_has_feature(arbint_cpu_feature_t feature);
 
-#endif
+#endif /* ARBINT_CPU_H */

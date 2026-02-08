@@ -35,8 +35,8 @@ arbint_err_t arbint_mul_impl_bmi2(arbint_t rop, const arbint_t a,
 
 size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
                               size_t an, arbint_limb_t b);
-#endif
+#endif /* HAS_BMI2 */
 
 #define ARBINT_KARATSUBA_THRESHOLD 32u
 
-#endif
+#endif /* ARBINT_MUL_H */

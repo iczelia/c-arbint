@@ -328,7 +328,7 @@ AC_CHECK_FUNCS([memset_s])
 AS_IF([test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes"],
       [AC_DEFINE([ARBINT_HAS_URANDOM], [1],
                  [Define if /dev/urandom is likely available (non-Windows POSIX).])])
-AS_IF([test "x$arbint_host_windows" = "xyes"],
+AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$ac_cv_header_windows_h" = "xyes"],
       [AC_DEFINE([ARBINT_HAS_WINAPI_ENTROPY], [1],
                  [Define if Windows entropy APIs are available])])
 AS_IF([test "x$ac_cv_func_arc4random_buf" = "xyes"],
@@ -339,7 +339,7 @@ AS_IF([test "x$ac_cv_func_arc4random_buf" = "xyes"],
 AM_CONDITIONAL([ARBINT_HAS_URANDOM],
                [test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_WINAPI_ENTROPY],
-               [test "x$arbint_host_windows" = "xyes"])
+               [test "x$arbint_host_windows" = "xyes" && test "x$ac_cv_header_windows_h" = "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_ARC4RANDOM],
                [test "x$ac_cv_func_arc4random_buf" = "xyes"])
 

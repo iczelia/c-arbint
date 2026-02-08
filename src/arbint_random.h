@@ -37,14 +37,14 @@ arbint_entropy_fn_t arbint_select_entropy_source(void);
 /*  Platform-specific entropy implementations  */
 #if defined(ARBINT_HAS_URANDOM)
 int arbint_entropy_urandom(uint8_t * dst, size_t len);
-#endif
+#endif /* defined(ARBINT_HAS_URANDOM) */
 
 #if defined(ARBINT_HAS_WINAPI_ENTROPY)
 int arbint_entropy_winapi(uint8_t * dst, size_t len);
-#endif
+#endif /* defined(ARBINT_HAS_WINAPI_ENTROPY) */
 
 #if defined(ARBINT_HAS_ARC4RANDOM)
 int arbint_entropy_arc4(uint8_t * dst, size_t len);
-#endif
+#endif /* defined(ARBINT_HAS_ARC4RANDOM) */
 
-#endif
+#endif /* ARBINT_RANDOM_H */

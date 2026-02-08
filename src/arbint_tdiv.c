@@ -39,7 +39,7 @@ static arbint_tdiv_qr_u32_impl_fn_t arbint_select_tdiv_qr_u32_impl(void) {
              : arbint_tdiv_qr_u32_generic_impl;
 #else
   return arbint_tdiv_qr_u32_generic_impl;
-#endif
+#endif /* HAS_BMI2_ALWAYS */
 }
 
 static const arbint_alloc_t * arbint_get_alloc_from(const arbint_t x) {

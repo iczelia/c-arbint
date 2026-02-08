@@ -36,7 +36,7 @@ size_t arbint__add_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
   arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
 #else
   arbint_limb_t carry = 0u;
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 
   if (nx < ny) {
     const arbint_limb_t * tp = x;
@@ -87,7 +87,7 @@ size_t arbint__add_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
     return nx + 1u;
   }
   return nx;
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 }
 
 /*  Forward declaration of scalar implementation.  */
@@ -108,7 +108,7 @@ static arbint_dbl_mag_fn_t arbint_select_dbl_mag(void) {
              : arbint__dbl_mag_scalar;
 #else
   return arbint__dbl_mag_scalar;
-#endif
+#endif /* HAS_AVX2_ALWAYS */
 }
 
 /*  Scalar implementation of magnitude doubling (original implementation).  */
@@ -144,7 +144,7 @@ static size_t arbint__dbl_mag_scalar(arbint_limb_t * dst,
     return nx + 1u;
   }
   return nx;
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 }
 
 /*  Public doubling function with runtime dispatch and threshold check.  */
@@ -160,7 +160,7 @@ size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
   /*  Threshold check: avoid SIMD overhead for small operands.  */
   if (impl == arbint__dbl_mag_avx2 && nx < ARBINT_DBL_AVX2_THRESHOLD)
     return arbint__dbl_mag_scalar(dst, x, nx);
-#endif
+#endif /* HAS_AVX2 */
 
   return impl(dst, x, nx);
 }
@@ -212,7 +212,7 @@ size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
   }
 
   return arbint_norm_used(dst, nx);
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 }
 
 /*  Compare magnitude of multi-limb integer with uint32_t.

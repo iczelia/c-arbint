@@ -120,4 +120,4 @@ static inline int arbint_test_finish_impl(const char * test_name,
 #define ARBINT_TEST_FINISH(test_name)                                         \
   return arbint_test_finish_impl((test_name), g_failures)
 
-#endif
+#endif /* ARBINT_TEST_FRAMEWORK_H */

@@ -52,7 +52,7 @@ static int arbint_get_abs_u64(const arbint_t x, uint64_t * out) {
     *out |= (uint64_t) xp[1] << 32;
 #else
   #error "Unsupported ARBINT_LIMB_BITS"
-#endif
+#endif /* ARBINT_LIMB_BITS */
   return 1;
 }
 

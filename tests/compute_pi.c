@@ -129,7 +129,7 @@ static double sqrt(double x) {
   }
   return guess;
 }
-#endif
+#endif /* __TINYC__ */
 
 /*  Fixed-point square root: result = floor(sqrt(n_val) * one).
 

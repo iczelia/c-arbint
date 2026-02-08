@@ -113,5 +113,5 @@ size_t arbint__dbl_mag_avx2(arbint_limb_t * dst, const arbint_limb_t * x,
   return nx;
 #else
   #error "AVX2 enabled but 64-bit mode not supported?"
-#endif
+#endif /* ARBINT_LIMB_BITS == 64 */
 }

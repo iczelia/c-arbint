@@ -31,6 +31,6 @@ arbint_err_t arbint_tdiv_qr_u32_generic_impl(arbint_t q, arbint_t r,
 arbint_err_t arbint_tdiv_qr_u32_bmi2_impl(arbint_t q, arbint_t r,
                                           const arbint_t n, uint32_t dmag,
                                           int dsign);
-#endif
+#endif /* HAS_BMI2 */
 
-#endif
+#endif /* ARBINT_TDIV_H */

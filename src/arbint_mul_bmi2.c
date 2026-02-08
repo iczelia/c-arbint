@@ -52,7 +52,7 @@ static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
 
   *hi = x1 * y1 + w2 + (w1 >> ARBINT_HALF_BITS);
   *lo = (w1 << ARBINT_HALF_BITS) | (w0 & mask);
-#endif
+#endif /* ARBINT_LIMB_BITS */
 }
 
 static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
@@ -92,7 +92,7 @@ static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
     *out = s2;
     return ph + c1 + c2;
   }
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 }
 
 static size_t arbint_mul_schoolbook(arbint_limb_t * dst,
@@ -143,7 +143,7 @@ static size_t arbint_mul_schoolbook(arbint_limb_t * dst,
         carry = (t < carry) ? 1u : 0u;
         ++k;
       }
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
     }
   }
 
@@ -212,7 +212,7 @@ static int arbint_add_shifted(arbint_limb_t * dst, size_t dst_n,
       ++i;
     }
   }
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 
   return 1;
 }

@@ -40,7 +40,7 @@ static inline void arbint_umul(arbint_limb_t * hi, arbint_limb_t * lo,
 }
 #else
   #error "Unsupported limb size"
-#endif
+#endif /* ARBINT_LIMB_BITS */
 
 /*  Reciprocal of a normalized limb d (MSB set).
     Returns v = floor((beta^2 - 1) / d) - beta.  */

@@ -28,7 +28,7 @@
   #define ARBINT_HAVE_X86_INTRIN 1
 #else
   #define ARBINT_HAVE_X86_INTRIN 0
-#endif
+#endif /* ARBINT_HAVE_X86_INTRIN */
 
 #if ARBINT_HAVE_X86_INTRIN && ARBINT_LIMB_BITS == 64
   #define ARBINT_HAVE_X86_CARRY_KERNEL 1
@@ -42,7 +42,7 @@ typedef unsigned int arbint_x86_carry_word_t;
   #define ARBINT_X86_SUBBORROW _subborrow_u32
 #else
   #define ARBINT_HAVE_X86_CARRY_KERNEL 0
-#endif
+#endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 
 /*  Magnitude arithmetic; callers ensure valid non-overflowing dimensions.
     - arbint__add_mag handles either operand order.
@@ -63,6 +63,6 @@ size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
 /*  AVX2-optimized magnitude doubling implementation.  */
 size_t arbint__dbl_mag_avx2(arbint_limb_t * dst, const arbint_limb_t * x,
                             size_t nx);
-#endif
+#endif /* HAS_AVX2 */
 
-#endif
+#endif /* ARBINT_ADDSUB_H */

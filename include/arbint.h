@@ -30,27 +30,27 @@
       #define ARBINT_API __attribute__((dllexport))
     #else
       #define ARBINT_API __declspec(dllexport)
-    #endif
+    #endif /* defined(__GNUC__) */
   #elif defined(ARBINT_USE_DLL)
     #if defined(__GNUC__)
       #define ARBINT_API __attribute__((dllimport))
     #else
       #define ARBINT_API __declspec(dllimport)
-    #endif
+    #endif /* defined(__GNUC__) */
   #else
     #define ARBINT_API
-  #endif
+  #endif /* defined(ARBINT_BUILD_DLL) */
 #else
   #if defined(__GNUC__) || defined(__clang__)
     #define ARBINT_API __attribute__((visibility("default")))
   #else
     #define ARBINT_API
-  #endif
-#endif
+  #endif /* defined(__GNUC__) || defined(__clang__) */
+#endif   /* defined(ARBINT_STATIC) */
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif /* __cplusplus */
 
 /* ---------------- Errors ---------------- */
 typedef enum arbint_err {
@@ -485,5 +485,5 @@ ARBINT_API arbint_err_t arbint_urandomm(arbint_t rop, arbint_rng_t * rng,
 
 #ifdef __cplusplus
 }
-#endif
-#endif
+#endif /* __cplusplus */
+#endif /* ARBINT_H */

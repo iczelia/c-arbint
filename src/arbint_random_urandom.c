@@ -50,4 +50,4 @@ int arbint_entropy_urandom(uint8_t * dst, size_t len) {
   return 0;
 }
 
-#endif
+#endif /* defined(ARBINT_HAS_URANDOM) */

@@ -27,12 +27,12 @@
   #define ARBINT_CPU_CAN_QUERY_X86_CPUID 1
 #else
   #define ARBINT_CPU_CAN_QUERY_X86_CPUID 0
-#endif
+#endif /* ARBINT_CPU_CAN_QUERY_X86_CPUID */
 
 #if ARBINT_COMPILER_MSVC
   #include <immintrin.h>
   #include <intrin.h>
-#endif
+#endif /* ARBINT_COMPILER_MSVC */
 
 #define ARBINT_CPUID1_ECX_SSE3 (1u << 0)
 #define ARBINT_CPUID1_ECX_PCLMULQDQ (1u << 1)
@@ -91,11 +91,11 @@ static void arbint_cpu_cpuid_count(unsigned int leaf, unsigned int subleaf,
                    : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
                    : "a"(leaf), "c"(subleaf)
                    : "cc");
-  #endif
+  #endif /* defined(__i386__) && defined(__PIC__) */
 #else
   (void) leaf;
   (void) subleaf;
-#endif
+#endif /* ARBINT_CPU_CAN_QUERY_X86_CPUID */
 
   if (out_eax != NULL)
     *out_eax = eax;
@@ -173,7 +173,7 @@ static int arbint_cpu_can_call_cpuid(void) {
   return ((eflags_before ^ eflags_after) & 0x200000u) != 0u;
 #else
   return 0;
-#endif
+#endif /* ARBINT_TARGET_X86_FAMILY cpuid detection */
 }
 
 static int arbint_cpu_read_xcr0(uint64_t * out_xcr0) {
@@ -196,7 +196,7 @@ static int arbint_cpu_read_xcr0(uint64_t * out_xcr0) {
 #else
   (void) out_xcr0;
   return 0;
-#endif
+#endif /* ARBINT_TARGET_X86_FAMILY xcr0 */
 }
 
 static arbint_cpu_caps_t arbint_cpu_probe_caps(void) {
@@ -267,7 +267,7 @@ static arbint_cpu_caps_t arbint_cpu_probe_caps(void) {
       caps.sha = (ebx & ARBINT_CPUID7_EBX_SHA) != 0u;
     }
   }
-#endif
+#endif /* ARBINT_CPU_CAN_QUERY_X86_CPUID */
 
   return caps;
 }

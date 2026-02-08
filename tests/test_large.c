@@ -59,7 +59,7 @@ static arbint_limb_t large_limb(large_rng_t * rng) {
   return (arbint_limb_t) large_u64(rng);
 #else
   return (arbint_limb_t) (large_u64(rng) & 0xffffffffu);
-#endif
+#endif /* ARBINT_LIMB_BITS */
 }
 
 static size_t large_min_size(size_t a, size_t b) { return (a < b) ? a : b; }

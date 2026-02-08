@@ -22,4 +22,4 @@
 
 /*  No internal helpers needed yet  */
 
-#endif
+#endif /* ARBINT_BITOPS_H */

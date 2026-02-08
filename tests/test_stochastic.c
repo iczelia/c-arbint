@@ -61,7 +61,7 @@ static arbint_limb_t stoch_limb(stoch_rng_t * rng) {
   return (arbint_limb_t) stoch_u64(rng);
 #else
   return (arbint_limb_t) (stoch_u64(rng) & 0xffffffffu);
-#endif
+#endif /* ARBINT_LIMB_BITS */
 }
 
 static void ref_zero(refint_t * x) {
@@ -225,7 +225,7 @@ static int ref_mul_add_limb(arbint_limb_t a, arbint_limb_t b, arbint_limb_t in,
   *carry_io = (arbint_limb_t) (acc >> 32u);
   return 1;
 }
-#endif
+#endif /* ARBINT_LIMB_BITS */
 
 static int ref_add(refint_t * out, const refint_t * a, const refint_t * b) {
   int cmp;
@@ -524,7 +524,7 @@ static void ref_dump(const char * label, const refint_t * x) {
       fprintf(stderr, "%016llx", (unsigned long long) x->limbs[i - 1u]);
 #else
       fprintf(stderr, "%08x", (unsigned int) x->limbs[i - 1u]);
-#endif
+#endif /* ARBINT_LIMB_BITS */
       if (i > 1u)
         fputc('_', stderr);
     }

@@ -39,7 +39,7 @@ static arbint_mul_limb_1_fn_t arbint_select_mul_limb_1(void) {
              : arbint_mul_limb_1_generic;
 #else
   return arbint_mul_limb_1_generic;
-#endif
+#endif /* HAS_BMI2_ALWAYS */
 }
 
 /*  Select optimal multi-limb multiplication implementation.
@@ -53,7 +53,7 @@ static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
              : arbint_mul_impl_generic;
 #else
   return arbint_mul_impl_generic;
-#endif
+#endif /* HAS_BMI2_ALWAYS */
 }
 
 /*  Compute required capacity for multiplication result with overflow check.
