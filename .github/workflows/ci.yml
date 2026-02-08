@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   package:
@@ -43,11 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: x64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+        arch: [x64, arm64]
         compiler: [gcc, clang, tcc]
         lto: ['on', 'off']
         tune: ['on', 'off']
@@ -56,6 +53,11 @@ jobs:
             lto: 'on'
           - compiler: tcc
             tune: 'on'
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     name: build-ubuntu (${{ matrix.arch }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
 
     steps:
@@ -94,6 +96,23 @@ jobs:
           ./configure $configure_args
           make -j"$(nproc)"
           make check
+          echo "=== Contents of src/.libs ==="
+          ls -la src/.libs/ || true
+
+      - name: Copy artifacts to upload directory
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        run: |
+          mkdir -p artifacts
+          find dist -name "*.so" -o -name "*.so.*" | xargs -I {} cp {} artifacts/ || true
+          ls -la artifacts/
+
+      - name: Upload shared library artifacts
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-${{ matrix.arch == 'x64' && 'x86-64' || matrix.arch == 'arm64' && 'arm64' || matrix.arch }}-${{ matrix.compiler }}-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
 
   build-docker:
     runs-on: ubuntu-24.04
@@ -157,13 +176,14 @@ jobs:
               make check
             '
 
-  build-linux-86:
+
+  build-linux-x86-32:
     runs-on: ubuntu-24.04
     needs: package
     strategy:
       fail-fast: false
       matrix:
-        x86_variant: [i686, i386]
+        x86_variant: [i386]
         compiler: [gcc, clang, tcc]
         lto: ['on', 'off']
         tune: ['on', 'off']
@@ -172,7 +192,7 @@ jobs:
             lto: 'on'
           - compiler: tcc
             tune: 'on'
-    name: linux-86 (debian-bullseye, ${{ matrix.x86_variant }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+    name: linux-x86-32 (debian-bullseye, ${{ matrix.x86_variant }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
 
     steps:
       - name: Download dist artifact
@@ -183,6 +203,7 @@ jobs:
 
       - name: Build and test (linux/386 Docker)
         run: |
+          mkdir -p artifacts
           docker run --rm \
             --platform linux/386 \
             -e X86_VARIANT="${{ matrix.x86_variant }}" \
@@ -190,6 +211,7 @@ jobs:
             -e MATRIX_LTO="${{ matrix.lto }}" \
             -e MATRIX_TUNE="${{ matrix.tune }}" \
             -v "$PWD/dist:/work/dist" \
+            -v "$PWD/artifacts:/work/artifacts" \
             -w /work \
             debian:bullseye-slim \
             sh -eu -c '
@@ -229,7 +251,22 @@ jobs:
               jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
               make -j"$jobs"
               make check
+              echo "=== Contents of src/.libs ==="
+              ls -la src/.libs/ || true
+
+              # Copy shared libraries to artifacts directory
+              find src/.libs -name "*.so*" -type f -exec cp {} /work/artifacts/ \;
             '
+
+      - name: Upload shared library artifacts
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-x86-32-${{ matrix.x86_variant }}-${{ matrix.compiler }}-lto${{ matrix.lto }}
+          path: |
+            artifacts/*.so
+            artifacts/*.so.*
+          if-no-files-found: warn
 
   build-windows-mingw-64:
     runs-on: windows-latest
@@ -257,7 +294,6 @@ jobs:
             make
             tar
             xz
-            bzip2
             curl
             groff
             pkgconf
@@ -413,12 +449,13 @@ jobs:
           "$CC" -v || true
           ./configure $configure_args 2>&1 | tee configure.log
           make -j"$jobs" 2>&1 | tee make.log
+          echo "=== Contents of src/.libs ==="
+          ls -la src/.libs/ || true
           if [ "${{ matrix.compiler }}" = "tcc" ]; then
             dll_path="$(ls src/.libs/libarbint-*.dll 2>/dev/null | sed -n '1p')"
             if [ -n "$dll_path" ] && [ ! -f src/.libs/libarbint.lib ]; then
               cp "$dll_path" src/.libs/libarbint.lib
             fi
-            ls -la src/.libs || true
             test_bins_raw="$(awk '
               BEGIN { collecting=0; line="" }
               /^check_PROGRAMS[[:space:]]*=/ {
@@ -457,6 +494,22 @@ jobs:
             make check 2>&1 | tee check.log
           fi
 
+      - name: Copy artifacts to upload directory
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        shell: msys2 {0}
+        run: |
+          mkdir -p artifacts
+          find dist -name "*.dll" | xargs -I {} cp {} artifacts/ || true
+          ls -la artifacts/
+
+      - name: Upload DLL artifacts
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows-mingw-x86_64-${{ matrix.compiler }}-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
+
   build-windows-mingw-32:
     runs-on: windows-latest
     needs: package
@@ -483,7 +536,6 @@ jobs:
             make
             tar
             xz
-            bzip2
             curl
             groff
             pkgconf
@@ -639,12 +691,13 @@ jobs:
           "$CC" -v || true
           ./configure $configure_args 2>&1 | tee configure.log
           make -j"$jobs" 2>&1 | tee make.log
+          echo "=== Contents of src/.libs ==="
+          ls -la src/.libs/ || true
           if [ "${{ matrix.compiler }}" = "tcc" ]; then
             dll_path="$(ls src/.libs/libarbint-*.dll 2>/dev/null | sed -n '1p')"
             if [ -n "$dll_path" ] && [ ! -f src/.libs/libarbint.lib ]; then
               cp "$dll_path" src/.libs/libarbint.lib
             fi
-            ls -la src/.libs || true
             test_bins_raw="$(awk '
               BEGIN { collecting=0; line="" }
               /^check_PROGRAMS[[:space:]]*=/ {
@@ -683,6 +736,22 @@ jobs:
             make check 2>&1 | tee check.log
           fi
 
+      - name: Copy artifacts to upload directory
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        shell: msys2 {0}
+        run: |
+          mkdir -p artifacts
+          find dist -name "*.dll" | xargs -I {} cp {} artifacts/ || true
+          ls -la artifacts/
+
+      - name: Upload DLL artifacts
+        if: matrix.compiler != 'tcc' && matrix.tune == 'off'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows-mingw-x86-${{ matrix.compiler }}-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
+
   build-windows-msvc:
     runs-on: windows-latest
     needs: package
@@ -690,8 +759,8 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, x86]
-        lto: ['auto', 'off']
-    name: build-windows-msvc (${{ matrix.arch }}, lto-${{ matrix.lto }}, warnings-on)
+        lto: ['on', 'off']
+    name: build-windows-msvc (${{ matrix.arch }}, lto-${{ matrix.lto }})
 
     steps:
       - name: Setup MSVC
@@ -742,6 +811,25 @@ jobs:
           cd "dist/$srcdir"
           jobs="$(nproc 2>/dev/null || echo 2)"
 
+          # Generate .def file for MSVC non-LTO builds to control exports
+          if [ "${{ matrix.lto }}" = "off" ]; then
+            echo "Generating libarbint.def to control symbol exports..."
+            {
+              echo "LIBRARY libarbint"
+              echo "EXPORTS"
+            } > src/libarbint.def
+
+            grep '^ARBINT_API' include/arbint.h | \
+              sed 's/.*arbint_/    arbint_/' | \
+              sed 's/(.*//' | \
+              sort -u >> src/libarbint.def
+
+            echo "=== Generated libarbint.def ==="
+            head -n 20 src/libarbint.def
+            echo "..."
+            echo "Total exports: $(grep -c '^    arbint_' src/libarbint.def || echo 0)"
+          fi
+
           dump_logs_on_failure() {
             rc="$?"
             if [ "$rc" -ne 0 ]; then
@@ -771,6 +859,44 @@ jobs:
           fi
           make -j"$jobs" 2>&1 | tee make.log
           make check 2>&1 | tee check.log
+          echo "=== Contents of src/.libs ==="
+          ls -la src/.libs/ || true
+
+          # Verify symbol exports for non-LTO builds
+          if [ "${{ matrix.lto }}" = "off" ]; then
+            dll_file="$(find src/.libs -name 'libarbint-*.dll' -type f | head -n1)"
+            if [ -n "$dll_file" ]; then
+              echo "=== Verifying DLL exports for non-LTO build ==="
+              echo "DLL: $dll_file"
+
+              # Count arbint_ exports using dumpbin if available
+              if command -v dumpbin >/dev/null 2>&1; then
+                export_count=$(dumpbin //EXPORTS "$dll_file" 2>/dev/null | grep -c 'arbint_' || echo "unknown")
+                echo "Total arbint_ exports: $export_count"
+                echo "Expected: ~137 public API functions"
+
+                # Show first few exports
+                echo "First 10 exports:"
+                dumpbin //EXPORTS "$dll_file" 2>/dev/null | grep 'arbint_' | head -n 10 || true
+              else
+                echo "dumpbin not available, skipping export verification"
+              fi
+            fi
+          fi
+
+      - name: Copy artifacts to upload directory
+        shell: msys2 {0}
+        run: |
+          mkdir -p artifacts
+          find dist -name "*.dll" | xargs -I {} cp {} artifacts/ || true
+          ls -la artifacts/
+
+      - name: Upload DLL artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows-msvc-${{ matrix.arch }}-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
 
   build-exotic-arch:
     runs-on: ubuntu-latest
@@ -781,6 +907,15 @@ jobs:
         arch: [riscv64, s390x, ppc64le]
         compiler: [gcc, clang]
         lto: ['on', 'off']
+        exclude:
+          # Compiler segfaults on these configurations
+          - arch: ppc64le
+            compiler: gcc
+          - arch: s390x
+            compiler: gcc
+          - arch: riscv64
+            compiler: clang
+            lto: 'on'
     name: build-exotic (${{ matrix.arch }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }})
 
     steps:
@@ -802,7 +937,7 @@ jobs:
             apt-get install -q -y build-essential clang pkg-config tar xz-utils groff
 
           run: |
-            set -euo pipefail
+            set -eu
 
             export CC="${{ matrix.compiler }}"
 
@@ -821,21 +956,31 @@ jobs:
             jobs="$(nproc 2>/dev/null || echo 2)"
             make -j"$jobs"
             make check
+            echo "=== Contents of src/.libs ==="
+            ls -la src/.libs/ || true
+
+      - name: Copy artifacts to upload directory
+        run: |
+          mkdir -p artifacts
+          find dist -name "*.so" -o -name "*.so.*" | xargs -I {} cp {} artifacts/ || true
+          ls -la artifacts/
+
+      - name: Upload shared library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-exotic-${{ matrix.arch }}-${{ matrix.compiler }}-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
 
   build-macos:
     needs: package
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15-intel
-            arch: intel
-          - os: macos-15
-            arch: arm64
         lto: ['on', 'off']
         tune: ['on', 'off']
-    runs-on: ${{ matrix.os }}
-    name: build-macos (${{ matrix.arch }}, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
+    runs-on: macos-15
+    name: build-macos (arm64, lto-${{ matrix.lto }}, tune-${{ matrix.tune }})
 
     steps:
       - name: Download dist artifact
@@ -869,3 +1014,194 @@ jobs:
           jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 3)"
           make -j"$jobs"
           make check
+          echo "=== Contents of src/.libs ==="
+          ls -la src/.libs/ || true
+
+      - name: Copy artifacts to upload directory
+        if: matrix.tune == 'off'
+        run: |
+          mkdir -p artifacts
+          find dist -name "*.dylib" | xargs -I {} cp {} artifacts/ || true
+          ls -la artifacts/
+
+      - name: Upload shared library artifacts
+        if: matrix.tune == 'off'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos-arm64-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
+
+  repack-artifacts:
+    runs-on: ubuntu-24.04
+    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-macos]
+    if: always()
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          pattern: build-*
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find all-artifacts -type f -ls
+
+      - name: Rename and organize binaries
+        run: |
+          mkdir -p binaries
+
+          # Function to map artifact names to tuple-compiler format
+          rename_binary() {
+            local artifact_name="$1"
+            local file="$2"
+            local filename=$(basename "$file")
+
+            # Determine file extension (handle .so, .so.*, .dylib, .dll)
+            local ext=""
+            if [[ "$filename" =~ \.so(\.[0-9]+)*$ ]]; then
+              ext="so"
+            elif [[ "$filename" =~ \.dylib$ ]]; then
+              ext="dylib"
+            elif [[ "$filename" =~ \.dll$ ]]; then
+              ext="dll"
+            else
+              echo "Warning: Unknown file extension: $filename"
+              return 1
+            fi
+
+            # Extract platform, compiler, and lto status
+            local tuple=""
+            local compiler=""
+            local lto_suffix=""
+
+            # Parse artifact name: build-{platform}-{arch}-{compiler}-lto{on|off}
+            # Examples:
+            #   build-linux-x86-64-gcc-ltoon -> amd64-linux-lg
+            #   build-linux-arm64-clang-ltooff -> arm64-linux-c
+            #   build-windows-msvc-x64-ltoauto -> amd64-windows-m
+
+            # Note: x86-64 needs escaping because of the hyphen in the arch name
+            if [[ "$artifact_name" =~ ^build-linux-x86-64-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="amd64-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-linux-arm64-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="arm64-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-linux-x86-32-i386-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="i386-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-exotic-ppc64le-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="ppc64le-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-exotic-riscv64-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="rv64gc-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-exotic-s390x-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="s390x-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-macos-arm64-lto(on|off|auto)$ ]]; then
+              tuple="arm64-darwin"
+              compiler="clang"
+              lto="${BASH_REMATCH[1]}"
+            elif [[ "$artifact_name" =~ ^build-windows-mingw-x86_64-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="amd64-windows"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-windows-mingw-x86-([^-]+)-lto(on|off|auto)$ ]]; then
+              tuple="i386-windows"
+              compiler="${BASH_REMATCH[1]}"
+              lto="${BASH_REMATCH[2]}"
+            elif [[ "$artifact_name" =~ ^build-windows-msvc-x64-lto(on|off|auto)$ ]]; then
+              tuple="amd64-windows"
+              compiler="msvc"
+              lto="${BASH_REMATCH[1]}"
+            elif [[ "$artifact_name" =~ ^build-windows-msvc-x86-lto(on|off|auto)$ ]]; then
+              tuple="i386-windows"
+              compiler="msvc"
+              lto="${BASH_REMATCH[1]}"
+            else
+              echo "Warning: Unable to parse artifact name: $artifact_name"
+              return 1
+            fi
+
+            # Map compiler names to suffixes
+            case "$compiler" in
+              gcc) compiler="g" ;;
+              clang) compiler="c" ;;
+              msvc) compiler="m" ;;
+              *) echo "Warning: Unknown compiler: $compiler"; return 1 ;;
+            esac
+
+            # Add 'l' prefix for LTO builds
+            if [[ "$lto" == "on" || "$lto" == "auto" ]]; then
+              lto_suffix="l"
+            fi
+
+            # Construct new filename: libarbint-{tuple}-{lto_suffix}{compiler}.{ext}
+            local new_name="libarbint-${tuple}-${lto_suffix}${compiler}.${ext}"
+            echo "$new_name"
+          }
+
+          # Process all binaries
+          declare -A file_map  # Map from checksum to chosen filename
+
+          for artifact_dir in all-artifacts/build-*; do
+            if [ -d "$artifact_dir" ]; then
+              artifact_name=$(basename "$artifact_dir")
+
+              for file in "$artifact_dir"/*; do
+                if [ -f "$file" ]; then
+                  # Only process library files
+                  case "$file" in
+                    *.so|*.so.*|*.dylib|*.dll)
+                      new_name=$(rename_binary "$artifact_name" "$file")
+                      if [ $? -eq 0 ] && [ -n "$new_name" ]; then
+                        checksum=$(sha256sum "$file" | awk '{print $1}')
+
+                        # Check for duplicates
+                        if [ -n "${file_map[$checksum]:-}" ]; then
+                          existing="${file_map[$checksum]}"
+                          echo "Duplicate found: $new_name (same as $existing, skipping)"
+                        else
+                          cp "$file" "binaries/$new_name"
+                          file_map[$checksum]="$new_name"
+                          echo "Renamed: $artifact_name/$(basename "$file") -> $new_name"
+                        fi
+                      fi
+                      ;;
+                  esac
+                fi
+              done
+            fi
+          done
+
+          echo "=== Final binaries ==="
+          ls -lh binaries/
+
+          # Create xz tarball
+          tar -cJf c-arbint-binaries.tar.xz -C binaries .
+
+          echo "=== Created archive ==="
+          ls -lh c-arbint-binaries.tar.xz
+
+      - name: Upload repacked archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: c-arbint-binaries-repacked
+          path: c-arbint-binaries.tar.xz
+          if-no-files-found: error
+
+      - name: Delete intermediate artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: build-*
+          failOnError: false

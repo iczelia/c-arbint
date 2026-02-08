@@ -1,0 +1,202 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  create-release-artifacts:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      tarball_xz: ${{ steps.build-dist.outputs.tarball_xz }}
+      tarball_bz3: ${{ steps.build-dist.outputs.tarball_bz3 }}
+      tarball_zip: ${{ steps.build-dist.outputs.tarball_zip }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get-version
+        run: |
+          version="${GITHUB_REF#refs/tags/v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Release version: $version"
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt -o Acquire::Retries=5 update
+          sudo apt -o Acquire::Retries=5 install -y autoconf automake libtool pkg-config xz-utils bzip3 zip
+
+      - name: Bootstrap, configure, and build dist tarballs
+        id: build-dist
+        run: |
+          ./bootstrap
+          ./configure --enable-lto=auto
+          make -j"$(nproc)" dist-xz
+          xz -dkf c-arbint-*.tar.xz
+          bzip3 -vfbe c-arbint-*.tar
+
+          tarball_xz="$(ls -t c-arbint-*.tar.xz | head -n1)"
+          tarball_bz3="$(ls -t c-arbint-*.tar.bz3 | head -n1)"
+
+          # Create zip archive
+          tarball_base="$(basename "$tarball_xz" .tar.xz)"
+          mkdir -p "$tarball_base"
+          tar -xf "$tarball_xz" --strip-components=1 -C "$tarball_base"
+          tarball_zip="${tarball_base}.zip"
+          zip -r "$tarball_zip" "$tarball_base"
+
+          echo "tarball_xz=$tarball_xz" >> "$GITHUB_OUTPUT"
+          echo "tarball_bz3=$tarball_bz3" >> "$GITHUB_OUTPUT"
+          echo "tarball_zip=$tarball_zip" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tarballs
+          path: |
+            ${{ steps.build-dist.outputs.tarball_xz }}
+            ${{ steps.build-dist.outputs.tarball_bz3 }}
+            ${{ steps.build-dist.outputs.tarball_zip }}
+          if-no-files-found: error
+
+  trigger-ci:
+    uses: ./.github/workflows/ci.yml
+    needs: create-release-artifacts
+
+  create-release:
+    runs-on: ubuntu-24.04
+    needs: [create-release-artifacts, trigger-ci]
+
+    steps:
+      - name: Checkout for changelog
+        uses: actions/checkout@v4
+
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          version="${{ needs.create-release-artifacts.outputs.version }}"
+
+          # Extract the changelog entry for this version from NEWS file
+          changelog_entry=$(awk -v ver="$version" '
+            BEGIN { found=0; entry="" }
+            /^c-arbint [0-9]/ {
+              if (found) exit
+              if ($2 == ver) found=1
+              next
+            }
+            found && /^=+$/ { next }
+            found && /^$/ { if (entry != "") entry = entry "\n"; next }
+            found { entry = entry $0 "\n" }
+          ' NEWS)
+
+          if [ -z "$changelog_entry" ]; then
+            changelog_entry="No changelog entry found for version $version."
+          fi
+
+          # Save to output using delimiter
+          {
+            echo "content<<CHANGELOG_EOF"
+            echo "$changelog_entry"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download release tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: release-tarballs
+          path: release-artifacts
+
+      - name: Download repacked binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-binaries-repacked
+          path: binaries-archive
+
+      - name: Organize artifacts
+        run: |
+          mkdir -p final-artifacts
+
+          # Copy release tarballs
+          cp release-artifacts/* final-artifacts/
+
+          # Extract binaries from the repacked archive
+          cd binaries-archive
+          tar -xJf c-arbint-binaries.tar.xz
+          cp libarbint-* ../final-artifacts/ 2>/dev/null || true
+          cd ..
+
+          echo "=== Final artifacts ==="
+          ls -lh final-artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ needs.create-release-artifacts.outputs.version }}
+          draft: false
+          prerelease: false
+          files: final-artifacts/*
+          body: |
+            ## c-arbint ${{ needs.create-release-artifacts.outputs.version }}
+
+            Arbitrary-precision integer library for C.
+
+            ### What's New
+
+            ${{ steps.changelog.outputs.content }}
+
+            ### Release Artifacts
+
+            #### Source Tarballs
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}.tar.bz3` (recommended)
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}.tar.xz` (legacy compression)
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}.zip`
+
+            #### Pre-built Shared Libraries
+
+            Binary naming convention: `libarbint-{tuple}-{compiler}.{ext}`
+
+            **Tuples:**
+            - `amd64-linux` - Linux x86-64
+            - `arm64-linux` - Linux ARM64
+            - `i386-linux` - Linux x86 (32-bit)
+            - `rv64gc-linux` - Linux RISC-V 64-bit
+            - `s390x-linux` - Linux IBM Z (s390x)
+            - `ppc64le-linux` - Linux PowerPC64 LE
+            - `arm64-darwin` - macOS ARM64
+            - `amd64-windows` - Windows x86-64
+            - `i386-windows` - Windows x86 (32-bit)
+
+            **Compiler suffixes:**
+            - `-c` = Clang
+            - `-g` = GCC
+            - `-m` = MSVC (Windows only)
+            - `-lc` = Clang with LTO
+            - `-lg` = GCC with LTO
+            - `-lm` = MSVC with LTO
+
+            **Examples:**
+            - `libarbint-amd64-linux-lg.so` - Linux x86-64, GCC with LTO
+            - `libarbint-arm64-darwin-c.dylib` - macOS ARM64, Clang without LTO
+            - `libarbint-i386-windows-m.dll` - Windows x86, MSVC without LTO
+
+            **Note:** macOS builds use Clang only. Windows MSVC builds use `auto` LTO detection.
+
+            ### Building from Source
+
+            See the [README](https://github.com/${{ github.repository }}/blob/trunk/README) for detailed build instructions.
+
+            ```bash
+            tar -xf c-arbint-${{ needs.create-release-artifacts.outputs.version }}.tar.xz
+            cd c-arbint-${{ needs.create-release-artifacts.outputs.version }}
+            ./configure --enable-lto=auto
+            make
+            sudo make install
+            ```
