@@ -27,6 +27,9 @@ typedef arbint_err_t (*arbint_tdiv_qr_u32_impl_fn_t)(arbint_t q, arbint_t r,
                                                      const arbint_t n,
                                                      uint32_t dmag, int dsign);
 
+/*  Select optimal implementation for division by uint32_t.
+    Uses BMI2 reciprocal-based algorithm when available,
+    falls back to generic.  */
 static arbint_tdiv_qr_u32_impl_fn_t arbint_select_tdiv_qr_u32_impl(void) {
 #if HAS_BMI2_ALWAYS
   return arbint_tdiv_qr_u32_bmi2_impl;
@@ -45,6 +48,8 @@ static const arbint_alloc_t * arbint_get_alloc_from(const arbint_t x) {
   return &x[0]._ctx->a;
 }
 
+/*  Choose first non-NULL allocator from up to 4 arbint arguments.
+    Used for temporary allocations in multi-input operations.  */
 static const arbint_alloc_t * arbint_pick_alloc(const arbint_t a,
                                                 const arbint_t b,
                                                 const arbint_t c,
@@ -63,6 +68,9 @@ static const arbint_alloc_t * arbint_pick_alloc(const arbint_t a,
   return arbint_get_alloc_from(d);
 }
 
+/*  Get read-only view of arbint magnitude, normalized limb count, and sign.
+    Returns pointer to limb array, actual used limbs (after normalization), and
+    sign (-1/0/+1).  */
 arbint_err_t arbint_get_mag_view(const arbint_t x, const arbint_limb_t ** xp,
                                  size_t * xn, int * sign) {
   size_t used;
@@ -89,6 +97,8 @@ arbint_err_t arbint_get_mag_view(const arbint_t x, const arbint_limb_t ** xp,
   return ARBINT_OK;
 }
 
+/*  Set arbint from magnitude array and sign.
+    Copies limbs into x and applies sign. Resizes if needed.  */
 static arbint_err_t arbint_set_mag_signed(arbint_t x,
                                           const arbint_limb_t * mag,
                                           size_t used, int sign) {
@@ -113,6 +123,8 @@ static arbint_err_t arbint_set_mag_signed(arbint_t x,
   return ARBINT_OK;
 }
 
+/*  Count significant bits in magnitude (total bit length).
+    Returns number of bits needed to represent x.  */
 static size_t arbint_nbits_mag(const arbint_limb_t * x, size_t xn) {
   size_t nbits;
   arbint_limb_t w;
@@ -129,6 +141,8 @@ static size_t arbint_nbits_mag(const arbint_limb_t * x, size_t xn) {
   return nbits;
 }
 
+/*  Get bit at given index in magnitude (0 = LSB).
+    Returns 0 or 1, or 0 if bit_index is out of range.  */
 static int arbint_mag_get_bit(const arbint_limb_t * x, size_t n_limbs,
                               size_t bit_index) {
   size_t li = bit_index / ARBINT_LIMB_BITS;
@@ -138,6 +152,8 @@ static int arbint_mag_get_bit(const arbint_limb_t * x, size_t n_limbs,
   return (int) ((x[li] >> bi) & (arbint_limb_t) 1u);
 }
 
+/*  Shift magnitude left by 1 bit in-place, updating limb count.
+    Returns 1 on success, 0 on overflow (would exceed capacity).  */
 static int arbint_mag_shl1_inplace(arbint_limb_t * x, size_t * xn,
                                    size_t cap) {
   size_t i;
@@ -163,6 +179,10 @@ static int arbint_mag_shl1_inplace(arbint_limb_t * x, size_t * xn,
   return 1;
 }
 
+/*  Binary long division algorithm for multi-limb division (q = n / d, r = n %
+    d). Processes one bit at a time from MSB to LSB. Simple but O(n^2)
+    complexity. Used as fallback when reciprocal-based algorithms
+    don't apply.  */
 static arbint_err_t arbint_div_mag_binary(const arbint_limb_t * n, size_t nn,
                                           const arbint_limb_t * d, size_t dn,
                                           arbint_limb_t * q, size_t qcap,

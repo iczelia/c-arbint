@@ -28,6 +28,8 @@ typedef size_t (*arbint_mul_limb_1_fn_t)(arbint_limb_t * dst,
                                          const arbint_limb_t * a, size_t an,
                                          arbint_limb_t b);
 
+/*  Select optimal single-limb multiplication implementation.
+    Prefers BMI2 when available for faster wide multiply.  */
 static arbint_mul_limb_1_fn_t arbint_select_mul_limb_1(void) {
 #if HAS_BMI2_ALWAYS
   return arbint_mul_limb_1_bmi2;
@@ -40,6 +42,8 @@ static arbint_mul_limb_1_fn_t arbint_select_mul_limb_1(void) {
 #endif
 }
 
+/*  Select optimal multi-limb multiplication implementation.
+    Prefers BMI2 when available (uses _mulx_u64 for faster multiply).  */
 static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
 #if HAS_BMI2_ALWAYS
   return arbint_mul_impl_bmi2;
@@ -52,6 +56,8 @@ static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
 #endif
 }
 
+/*  Compute required capacity for multiplication result with overflow check.
+    Returns 1 on success (*out = an + bn + 1), 0 on overflow.  */
 int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
   if (out == NULL)
     return 0;
@@ -78,6 +84,8 @@ arbint_err_t arbint_sqr(arbint_t rop, const arbint_t a) {
   return arbint_mul(rop, a, a);
 }
 
+/*  Multiply arbint by uint32_t (rop = a * b).
+    Optimized path for single-limb multiplier with early exit for 0 and 1.  */
 arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
   static arbint_mul_limb_1_fn_t impl = NULL;
   int as;
@@ -125,6 +133,8 @@ arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
   return ARBINT_OK;
 }
 
+/*  Multiply arbint by int32_t (rop = a * b).
+    Handles sign extraction and delegates to mul_u32 for magnitude.  */
 arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {
   uint32_t mag;
   arbint_err_t rc;

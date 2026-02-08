@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*  Default allocator using libc malloc/realloc/free.
+    Follows realloc semantics: NULL ptr = alloc, new_size = 0 = free.  */
 void * arbint_alloc(void * ud, void * ptr, size_t new_size) {
   (void) ud;
   if (new_size == 0) {
@@ -30,6 +32,7 @@ void * arbint_alloc(void * ud, void * ptr, size_t new_size) {
   return realloc(ptr, new_size);
 }
 
+/*  Initialize context with default allocator (libc malloc/realloc/free).  */
 arbint_err_t arbint_ctx_init_default(arbint_ctx_t * ctx) {
   arbint_alloc_t a;
   if (ctx == NULL)
@@ -40,6 +43,7 @@ arbint_err_t arbint_ctx_init_default(arbint_ctx_t * ctx) {
   return arbint_ctx_init(ctx, &a, 0u);
 }
 
+/*  Initialize context with custom allocator and flags.  */
 arbint_err_t arbint_ctx_init(arbint_ctx_t * ctx, const arbint_alloc_t * a,
                              uint32_t flags) {
   if (ctx == NULL || a == NULL || a->realloc == NULL)
@@ -51,8 +55,11 @@ arbint_err_t arbint_ctx_init(arbint_ctx_t * ctx, const arbint_alloc_t * a,
   return ARBINT_OK;
 }
 
+/*  Clear context (currently a no-op, reserved for future cleanup).  */
 void arbint_ctx_clear(arbint_ctx_t * ctx) { (void) ctx; }
 
+/*  Initialize arbint to zero with given context.
+    No memory allocated until first operation requiring capacity.  */
 arbint_err_t arbint_init(arbint_t x, arbint_ctx_t * ctx) {
   if (x == NULL)
     return ARBINT_EINVAL;
@@ -64,6 +71,9 @@ arbint_err_t arbint_init(arbint_t x, arbint_ctx_t * ctx) {
   return ARBINT_OK;
 }
 
+/*  Initialize multiple arbints with given context (variadic, NULL-terminated).
+    On error, clears all successfully initialized arbints and returns error
+    code.  */
 arbint_err_t arbint_init_all(arbint_ctx_t * ctx, arbint_t a, ...) {
   va_list ap, ap_saved;
   arbint_t *p, *failed;
@@ -93,6 +103,8 @@ arbint_err_t arbint_init_all(arbint_ctx_t * ctx, arbint_t a, ...) {
   return ARBINT_OK;
 }
 
+/*  Free arbint memory and reset to uninitialized state.
+    Safe to call multiple times or on NULL.  */
 void arbint_clear(arbint_t x) {
   if (x == NULL)
     return;
@@ -106,6 +118,7 @@ void arbint_clear(arbint_t x) {
   x[0]._ctx = NULL;
 }
 
+/*  Clear multiple arbints (variadic, NULL-terminated).  */
 void arbint_clear_all(arbint_t a, ...) {
   va_list ap;
   arbint_t * p;
@@ -171,12 +184,15 @@ arbint_err_t arbint_set_ctx(arbint_t x, arbint_ctx_t * ctx) {
   return ARBINT_OK;
 }
 
+/*  Set arbint to zero without freeing memory.  */
 void arbint_zero(arbint_t x) {
   if (x == NULL)
     return;
   x[0]._sz = 0;
 }
 
+/*  Grow arbint capacity to at least new_cap limbs.
+    No-op if new_cap <= current capacity. Does not shrink.  */
 arbint_err_t arbint_resize(arbint_t x, size_t new_cap) {
   void * new_ptr;
   size_t used;
@@ -207,6 +223,7 @@ arbint_err_t arbint_resize(arbint_t x, size_t new_cap) {
   return ARBINT_OK;
 }
 
+/*  Swap two arbints by exchanging their internal structures.  */
 void arbint_swap(arbint_t a, arbint_t b) {
   _arbint_struct tmp;
 
@@ -218,6 +235,8 @@ void arbint_swap(arbint_t a, arbint_t b) {
   b[0] = tmp;
 }
 
+/*  Set _sz with given magnitude and sign.
+    Returns 1 on success, 0 on overflow (used > PTRDIFF_MAX).  */
 int arbint_set_signed_sz(arbint_t x, size_t used, int sign) {
   if (x == NULL)
     return 0;
@@ -231,9 +250,9 @@ int arbint_set_signed_sz(arbint_t x, size_t used, int sign) {
   return 1;
 }
 
-/*  Benchmarks show that this is far from being a hot spot.
-    However, this can still be optimised using similar techniques to
-    memcmp in the future.  */
+/*  Compare magnitudes of two limb arrays.
+    Returns -1 if |a| < |b|, 0 if equal, +1 if |a| > |b|.
+    Compares from most significant limb downward for early exit.  */
 int arbint_cmp_mag_limbs(const arbint_limb_t * a, size_t an,
                          const arbint_limb_t * b, size_t bn) {
   size_t i;
@@ -253,12 +272,16 @@ int arbint_cmp_mag_limbs(const arbint_limb_t * a, size_t an,
   return 0;
 }
 
+/*  Trim leading zero limbs and return actual used count.
+    Essential for maintaining normalization invariant (no leading zeros).  */
 size_t arbint_norm_used(const arbint_limb_t * x, size_t n) {
   while (n != 0u && x[n - 1u] == 0u)
     --n;
   return n;
 }
 
+/*  Allocate temporary limb array using given allocator.
+    Treats n=0 as n=1 to avoid zero-size allocations.  */
 arbint_limb_t * arbint_alloc_limbs(const arbint_alloc_t * alloc, size_t n) {
   if (alloc == NULL || alloc->realloc == NULL)
     return NULL;
@@ -270,6 +293,7 @@ arbint_limb_t * arbint_alloc_limbs(const arbint_alloc_t * alloc, size_t n) {
                                           n * sizeof(arbint_limb_t));
 }
 
+/*  Free temporary limb array allocated by arbint_alloc_limbs.  */
 void arbint_free_limbs(const arbint_alloc_t * alloc, arbint_limb_t * p) {
   if (p == NULL || alloc == NULL || alloc->realloc == NULL)
     return;

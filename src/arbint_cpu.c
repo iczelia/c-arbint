@@ -56,6 +56,9 @@
 #define ARBINT_CPUID7_EBX_AVX512BW (1u << 30)
 #define ARBINT_CPUID7_EBX_AVX512VL (1u << 31)
 
+/*  Execute x86 CPUID instruction with given leaf and subleaf.
+    Returns CPU feature information in output registers
+    (eax, ebx, ecx, edx).  */
 static void arbint_cpu_cpuid_count(unsigned int leaf, unsigned int subleaf,
                                    unsigned int * out_eax,
                                    unsigned int * out_ebx,
@@ -104,6 +107,7 @@ static void arbint_cpu_cpuid_count(unsigned int leaf, unsigned int subleaf,
     *out_edx = edx;
 }
 
+/*  Query maximum CPUID leaf supported by CPU.  */
 static unsigned int arbint_cpu_cpuid_max_leaf(void) {
   unsigned int eax = 0u;
   arbint_cpu_cpuid_count(0u, 0u, &eax, NULL, NULL, NULL);
@@ -137,6 +141,8 @@ typedef struct {
   uint64_t xcr0;
 } arbint_cpu_caps_t;
 
+/*  Detect if CPU supports CPUID instruction.
+    On i386, tests by toggling EFLAGS.ID bit; x86-64 always has CPUID.  */
 static int arbint_cpu_can_call_cpuid(void) {
 #if !ARBINT_TARGET_X86_FAMILY ||                                              \
     !(ARBINT_COMPILER_GNU_CLANG || ARBINT_COMPILER_MSVC)

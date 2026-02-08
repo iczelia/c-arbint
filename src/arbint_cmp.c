@@ -19,6 +19,8 @@
 
 #include <string.h>
 
+/*  Compare absolute value of arbint with uint32_t.
+    Returns -1 if |a| < b, 0 if |a| == b, +1 if |a| > b.  */
 static int arbint_cmp_abs_u32(const arbint_t a, uint32_t b) {
   size_t asz;
 
@@ -37,12 +39,14 @@ static int arbint_cmp_abs_u32(const arbint_t a, uint32_t b) {
   return 0;
 }
 
+/*  Get sign of arbint: -1 if negative, 0 if zero, +1 if positive.  */
 int arbint_signum(const arbint_t x) {
   if (x == NULL || x[0]._sz == 0)
     return 0;
   return (x[0]._sz > 0) ? 1 : -1;
 }
 
+/*  Check if arbint is zero.  */
 int arbint_is_zero(const arbint_t x) { return arbint_signum(x) == 0; }
 
 int arbint_is_one(const arbint_t x) {
@@ -65,6 +69,8 @@ int arbint_is_even(const arbint_t x) {
   return !arbint_is_odd(x);
 }
 
+/*  Set rop to absolute value of op (rop = |op|).
+    Handles aliasing (rop == op) correctly.  */
 arbint_err_t arbint_abs(arbint_t rop, const arbint_t op) {
   arbint_err_t rc;
 
@@ -82,6 +88,8 @@ arbint_err_t arbint_abs(arbint_t rop, const arbint_t op) {
   return ARBINT_OK;
 }
 
+/*  Negate arbint value (rop = -op).
+    Handles aliasing (rop == op) correctly.  */
 arbint_err_t arbint_neg(arbint_t rop, const arbint_t op) {
   arbint_err_t rc;
 
@@ -99,6 +107,8 @@ arbint_err_t arbint_neg(arbint_t rop, const arbint_t op) {
   return ARBINT_OK;
 }
 
+/*  Compare absolute values of two arbints.
+    Returns -1 if |a| < |b|, 0 if |a| == |b|, +1 if |a| > |b|.  */
 int arbint_cmpabs(const arbint_t a, const arbint_t b) {
   size_t asz, bsz, i;
 
@@ -130,6 +140,8 @@ int arbint_cmpabs(const arbint_t a, const arbint_t b) {
   return 0;
 }
 
+/*  Compare two arbints with sign consideration.
+    Returns -1 if a < b, 0 if a == b, +1 if a > b.  */
 int arbint_cmp(const arbint_t a, const arbint_t b) {
   int as, bs, c;
 

@@ -20,6 +20,9 @@
 #include <limits.h>
 #include <string.h>
 
+/*  Extract absolute value as uint64_t if it fits.
+    Returns 1 on success (value fits in uint64_t), 0 on failure (too large or
+    error).  */
 static int arbint_get_abs_u64(const arbint_t x, uint64_t * out) {
   size_t used;
   const arbint_limb_t * xp;
@@ -53,6 +56,8 @@ static int arbint_get_abs_u64(const arbint_t x, uint64_t * out) {
   return 1;
 }
 
+/*  Copy arbint value (rop = op).
+    Handles self-assignment safely. Resizes rop if needed.  */
 arbint_err_t arbint_set(arbint_t rop, const arbint_t op) {
   size_t used;
 
@@ -82,6 +87,8 @@ arbint_err_t arbint_set(arbint_t rop, const arbint_t op) {
   return ARBINT_OK;
 }
 
+/*  Set arbint from int32_t value (rop = v).
+    Handles sign extraction and magnitude conversion.  */
 arbint_err_t arbint_set_i32(arbint_t rop, int32_t v) {
   uint32_t mag;
 
@@ -105,6 +112,7 @@ arbint_err_t arbint_set_i32(arbint_t rop, int32_t v) {
   return ARBINT_OK;
 }
 
+/*  Set arbint from uint32_t value (rop = v).  */
 arbint_err_t arbint_set_u32(arbint_t rop, uint32_t v) {
   if (rop == NULL)
     return ARBINT_EINVAL;
@@ -125,6 +133,8 @@ arbint_err_t arbint_set_u32(arbint_t rop, uint32_t v) {
   return ARBINT_OK;
 }
 
+/*  Extract int32_t value from arbint (*out = op).
+    Returns ARBINT_EOVERFLOW if value doesn't fit in int32_t.  */
 arbint_err_t arbint_get_i32(const arbint_t op, int32_t * out) {
   size_t used;
   uint64_t mag;
@@ -160,6 +170,8 @@ arbint_err_t arbint_get_i32(const arbint_t op, int32_t * out) {
   return ARBINT_OK;
 }
 
+/*  Extract uint32_t value from arbint (*out = op).
+    Returns ARBINT_ESIGN if negative, ARBINT_EOVERFLOW if too large.  */
 arbint_err_t arbint_get_u32(const arbint_t op, uint32_t * out) {
   uint64_t mag;
 
@@ -179,6 +191,8 @@ arbint_err_t arbint_get_u32(const arbint_t op, uint32_t * out) {
   return ARBINT_OK;
 }
 
+/*  Check if arbint fits in unsigned type with given maximum value.
+    Returns 1 if x >= 0 and x <= maxv, 0 otherwise.  */
 static int arbint_fits_u_impl(const arbint_t x, uint64_t maxv) {
   uint64_t mag;
 

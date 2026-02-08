@@ -25,6 +25,9 @@
 #include <limits.h>
 #include <string.h>
 
+/*  Add magnitudes of two multi-limb integers.
+    Handles operands in any order (swaps if nx < ny for efficiency).
+    Returns result limb count (max(nx,ny) or max(nx,ny)+1 if final carry).  */
 size_t arbint__add_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
                        const arbint_limb_t * y, size_t ny) {
   size_t i;
@@ -153,13 +156,19 @@ size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
   if (impl == NULL)
     impl = arbint_select_dbl_mag();
 
+#if HAS_AVX2
   /*  Threshold check: avoid SIMD overhead for small operands.  */
   if (impl == arbint__dbl_mag_avx2 && nx < ARBINT_DBL_AVX2_THRESHOLD)
     return arbint__dbl_mag_scalar(dst, x, nx);
+#endif
 
   return impl(dst, x, nx);
 }
 
+/*  Subtract magnitudes of two multi-limb integers.
+    Requires |x| >= |y| and nx >= ny (caller ensures this).
+    Returns normalized result limb count (may be less than nx if leading zeros
+    created).  */
 size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
                        const arbint_limb_t * y, size_t ny) {
   assert(nx >= ny);
@@ -206,6 +215,8 @@ size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
 #endif
 }
 
+/*  Compare magnitude of multi-limb integer with uint32_t.
+    Returns -1 if |x| < y, 0 if |x| == y, +1 if |x| > y.  */
 static int arbint_cmp_mag_u32(const arbint_limb_t * x, size_t nx, uint32_t y) {
   if (nx == 0u)
     return (y == 0u) ? 0 : -1;
@@ -218,6 +229,9 @@ static int arbint_cmp_mag_u32(const arbint_limb_t * x, size_t nx, uint32_t y) {
   return 0;
 }
 
+/*  Add uint32_t to magnitude of multi-limb integer.
+    Propagates carry and terminates early when carry becomes zero.
+    Returns result limb count (nx or nx+1 if final carry).  */
 static size_t arbint_add_mag_u32(arbint_limb_t * dst, const arbint_limb_t * x,
                                  size_t nx, uint32_t y) {
   size_t i;
@@ -248,6 +262,10 @@ static size_t arbint_add_mag_u32(arbint_limb_t * dst, const arbint_limb_t * x,
   return nx;
 }
 
+/*  Subtract uint32_t from magnitude of multi-limb integer.
+    Assumes |x| >= y. Propagates borrow and terminates early when borrow
+    becomes zero. Returns normalized result limb count (may be less than nx if
+    leading zeros created).  */
 static size_t arbint_sub_mag_u32(arbint_limb_t * dst, const arbint_limb_t * x,
                                  size_t nx, uint32_t y) {
   size_t i;

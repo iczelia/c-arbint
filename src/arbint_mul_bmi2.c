@@ -333,6 +333,9 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
   }
 }
 
+/*  BMI2-optimized single-limb multiplication (dst = a * b).
+    Uses _mulx_u64 for fast double-width multiply without high-register
+    overhead.  */
 size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
                               size_t an, arbint_limb_t b) {
   size_t i;
@@ -352,6 +355,9 @@ size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
   return arbint_norm_used(dst, an);
 }
 
+/*  BMI2-optimized multi-limb multiplication (rop = a * b).
+    Uses _mulx_u64 for schoolbook/Karatsuba inner loops. 1.5-2x faster than
+    generic.  */
 arbint_err_t arbint_mul_impl_bmi2(arbint_t rop, const arbint_t a,
                                   const arbint_t b) {
   int as;

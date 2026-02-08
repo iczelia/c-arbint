@@ -22,6 +22,8 @@
 
 #define ARBINT_LIMB_BYTES (ARBINT_LIMB_BITS / 8u)
 
+/*  Count number of bytes used by a single limb (1 to 8 bytes for
+    64-bit limbs).  */
 static size_t arbint_limb_used_bytes(arbint_limb_t x) {
   size_t n = 0u;
   while (x != (arbint_limb_t) 0u) {
@@ -31,6 +33,8 @@ static size_t arbint_limb_used_bytes(arbint_limb_t x) {
   return n;
 }
 
+/*  Import arbint from raw byte buffer (little-endian).
+    Trims leading zero bytes and converts to internal limb representation.  */
 arbint_err_t arbint_import(arbint_t rop, const void * buf, size_t nbytes) {
   const uint8_t * bp;
   size_t used_bytes;
@@ -80,6 +84,8 @@ arbint_err_t arbint_import(arbint_t rop, const void * buf, size_t nbytes) {
   return ARBINT_OK;
 }
 
+/*  Export arbint to raw byte buffer (little-endian). Allocates buffer
+    using default allocator and writes minimal representation.  */
 arbint_err_t arbint_export(const arbint_t op, void ** out_buf,
                            size_t * out_nbytes) {
   size_t used;

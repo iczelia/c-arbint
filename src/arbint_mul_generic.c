@@ -21,8 +21,9 @@
 
 #include <string.h>
 
-/*  Multiply two limbs without relying on 2x-width integer types.
-    Split each limb into half-limbs and combine partial products.  */
+/*  Multiply two limbs producing full double-width result (hi:lo = x * y).
+    Uses half-limb multiplication and combining when 2x-width types
+    unavailable.  */
 static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
                                  arbint_limb_t * hi, arbint_limb_t * lo) {
 #if ARBINT_LIMB_BITS == 32
@@ -48,6 +49,8 @@ static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
 #endif
 }
 
+/*  Compute x*y + acc + carry, returning high limb in result and low limb in
+    *out. Essential primitive for schoolbook multiplication inner loop.  */
 static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
                                         arbint_limb_t acc, arbint_limb_t carry,
                                         arbint_limb_t * out) {
@@ -88,6 +91,10 @@ static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
 #endif
 }
 
+/*  Classical O(n^2) schoolbook multiplication algorithm.
+    Multiplies each limb of a by each limb of b, accumulating into result.
+    Returns normalized result limb count (usually an+bn, may be an+bn-1 if no
+    high carry).  */
 static size_t arbint_mul_schoolbook(arbint_limb_t * dst,
                                     const arbint_limb_t * a, size_t an,
                                     const arbint_limb_t * b, size_t bn) {
@@ -143,6 +150,9 @@ static size_t arbint_mul_schoolbook(arbint_limb_t * dst,
   return arbint_norm_used(dst, n);
 }
 
+/*  Add src array to dst starting at position 'shift' (dst[shift:] += src).
+    Used by Karatsuba to accumulate sub-products at different offsets.
+    Returns 1 on success, 0 on overflow (carry extends beyond dst_n).  */
 static int arbint_add_shifted(arbint_limb_t * dst, size_t dst_n,
                               const arbint_limb_t * src, size_t src_n,
                               size_t shift) {
@@ -210,6 +220,10 @@ static int arbint_add_shifted(arbint_limb_t * dst, size_t dst_n,
   return 1;
 }
 
+/*  Recursive multiplication using Karatsuba algorithm for large operands.
+    Falls back to schoolbook multiplication below ARBINT_KARATSUBA_THRESHOLD.
+    Splits operands in half and uses identity: (a1*B + a0) * (b1*B + b0) =
+    a1*b1*B² + ((a1+a0)*(b1+b0) - a1*b1 - a0*b0)*B + a0*b0.  */
 static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
                                        const arbint_limb_t * a, size_t an,
                                        const arbint_limb_t * b, size_t bn,
@@ -326,6 +340,9 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
   }
 }
 
+/*  Multiply multi-limb integer by single limb (dst = a * b).
+    Specialized version of multiplication for single-limb multiplier.
+    Returns normalized result limb count.  */
 size_t arbint_mul_limb_1_generic(arbint_limb_t * dst, const arbint_limb_t * a,
                                  size_t an, arbint_limb_t b) {
   size_t i;
@@ -345,6 +362,9 @@ size_t arbint_mul_limb_1_generic(arbint_limb_t * dst, const arbint_limb_t * a,
   return arbint_norm_used(dst, an);
 }
 
+/*  Generic portable multiplication implementation (rop = a * b).
+    Handles aliasing by copying inputs if needed. Uses Karatsuba algorithm
+    for large operands (>= ARBINT_KARATSUBA_THRESHOLD limbs).  */
 arbint_err_t arbint_mul_impl_generic(arbint_t rop, const arbint_t a,
                                      const arbint_t b) {
   int as;
