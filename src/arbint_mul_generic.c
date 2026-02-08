@@ -327,9 +327,8 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
   }
 }
 
-size_t arbint_mul_limb_1_generic(arbint_limb_t * dst,
-                                 const arbint_limb_t * a, size_t an,
-                                 arbint_limb_t b) {
+size_t arbint_mul_limb_1_generic(arbint_limb_t * dst, const arbint_limb_t * a,
+                                 size_t an, arbint_limb_t b) {
   size_t i;
   arbint_limb_t carry = 0u;
 

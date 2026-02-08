@@ -120,8 +120,10 @@ cleanup:
 /*  Make TinyCC happy: define a simple sqrt via Newton-Raphson on doubles.  */
 #ifdef __TINYC__
 static double sqrt(double x) {
-  if (x < 0) return -1;
-  if (x == 0) return 0;
+  if (x < 0)
+    return -1;
+  if (x == 0)
+    return 0;
   double guess = x;
   double epsilon = 1e-9;
   while ((guess * guess - x) > epsilon || (x - guess * guess) > epsilon) {
@@ -169,15 +171,15 @@ static arbint_err_t fixed_sqrt(arbint_t result, uint32_t n_val,
     double sqrt_approx = sqrt((double) n_val);
     /* fp_prec = 10^16 -- fits in a uint64, and 16 significant digits
      * is about the limit of double precision. */
-    uint64_t fp_prec_hi = 10000000u;          /* 10^7  */
-    uint64_t fp_prec_lo = 1000000000u;        /* 10^9  */
+    uint64_t fp_prec_hi = 10000000u;            /* 10^7  */
+    uint64_t fp_prec_lo = 1000000000u;          /* 10^9  */
     uint64_t fp_prec = fp_prec_hi * fp_prec_lo; /* 10^16 */
-    uint64_t scaled = (uint64_t)(sqrt_approx * (double) fp_prec);
+    uint64_t scaled = (uint64_t) (sqrt_approx * (double) fp_prec);
 
     /* x = scaled * one */
     /* Build scaled as arbint from two 32-bit halves */
-    uint32_t hi = (uint32_t)(scaled / 1000000000ULL);
-    uint32_t lo = (uint32_t)(scaled % 1000000000ULL);
+    uint32_t hi = (uint32_t) (scaled / 1000000000ULL);
+    uint32_t lo = (uint32_t) (scaled % 1000000000ULL);
     arbint_set_u32(x, hi);
     arbint_mul_u32(x, x, 1000000000u);
     arbint_set_u32(s, lo);
@@ -277,7 +279,7 @@ static arbint_err_t compute_pi_chudnovsky(arbint_t result, uint32_t digits,
       fprintf(stderr, "\r  series: term %u", k);
 
     /* a_k *= -(6k-5) * (2k-1) * (6k-1) */
-    rc = arbint_mul_i32(tmp, a_k, -(int32_t)(6 * k - 5));
+    rc = arbint_mul_i32(tmp, a_k, -(int32_t) (6 * k - 5));
     if (rc != ARBINT_OK) {
       arbint_clear(c3_24);
       goto cleanup;
@@ -387,7 +389,7 @@ static char * load_reference_digits(const char * path) {
 
   /* Strip trailing whitespace/newline */
   while (nread > 0 && (buf[nread - 1] == '\n' || buf[nread - 1] == '\r' ||
-                        buf[nread - 1] == ' ')) {
+                       buf[nread - 1] == ' ')) {
     buf[--nread] = '\0';
   }
 

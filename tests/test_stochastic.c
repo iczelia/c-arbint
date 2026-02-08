@@ -220,8 +220,8 @@ static int ref_mul_add_limb(arbint_limb_t a, arbint_limb_t b, arbint_limb_t in,
 #elif ARBINT_LIMB_BITS == 32
 static int ref_mul_add_limb(arbint_limb_t a, arbint_limb_t b, arbint_limb_t in,
                             arbint_limb_t * carry_io, arbint_limb_t * out) {
-  uint64_t acc = (uint64_t) a * (uint64_t) b + (uint64_t) in +
-                 (uint64_t) *carry_io;
+  uint64_t acc =
+      (uint64_t) a * (uint64_t) b + (uint64_t) in + (uint64_t) *carry_io;
   *out = (arbint_limb_t) acc;
   *carry_io = (arbint_limb_t) (acc >> 32u);
   return 1;
@@ -303,8 +303,8 @@ static int ref_mul(refint_t * out, const refint_t * a, const refint_t * b) {
         {
           arbint_limb_t prev = out->limbs[k];
           out->limbs[k] = (arbint_limb_t) (out->limbs[k] + carry);
-          carry = (out->limbs[k] < prev) ? (arbint_limb_t) 1u
-                                         : (arbint_limb_t) 0u;
+          carry =
+              (out->limbs[k] < prev) ? (arbint_limb_t) 1u : (arbint_limb_t) 0u;
         }
         ++k;
       }

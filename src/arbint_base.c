@@ -67,7 +67,7 @@ arbint_err_t arbint_init(arbint_t x, arbint_ctx_t * ctx) {
 
 arbint_err_t arbint_init_all(arbint_ctx_t * ctx, arbint_t a, ...) {
   va_list ap, ap_saved;
-  arbint_t * p, * failed;
+  arbint_t *p, *failed;
   arbint_err_t rc;
 
   rc = arbint_init(a, ctx);

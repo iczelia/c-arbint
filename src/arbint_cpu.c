@@ -31,8 +31,8 @@
 #endif
 
 #if ARBINT_COMPILER_MSVC
-  #include <intrin.h>
   #include <immintrin.h>
+  #include <intrin.h>
 #endif
 
 #define ARBINT_CPUID1_ECX_SSE3 (1u << 0)
@@ -139,7 +139,7 @@ typedef struct {
 } arbint_cpu_caps_t;
 
 static int arbint_cpu_can_call_cpuid(void) {
-#if !ARBINT_TARGET_X86_FAMILY ||                                               \
+#if !ARBINT_TARGET_X86_FAMILY ||                                              \
     !(ARBINT_COMPILER_GNU_CLANG || ARBINT_COMPILER_MSVC)
   return 0;
 #elif ARBINT_COMPILER_MSVC
