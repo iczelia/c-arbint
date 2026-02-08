@@ -145,8 +145,8 @@ static void large_random_big(arbint_t x, large_rng_t * rng, size_t max_limbs,
   } else if (bucket < 80u) {
     n = 1u + large_range(rng, large_min_size(max_limbs, 1024u));
   } else {
-    size_t near = large_min_size(max_limbs, 64u);
-    n = max_limbs - large_range(rng, near);
+    size_t nearest = large_min_size(max_limbs, 64u);
+    n = max_limbs - large_range(rng, nearest);
     if (n == 0u)
       n = 1u;
   }
