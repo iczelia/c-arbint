@@ -802,7 +802,11 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
   }
 
   if (a[0]._sz > 0 && b[0]._sz < 0) {
-    /*  (+a) & (-b): result = a & ~(b-1), positive, bounded by an limbs.  */
+    /*  (+a) & (-b): result = a & ~(b-1), positive, bounded by an limbs.
+        Phase 1 (i < min(an,bn)): borrow-subtract b, mask with a.
+        Phase 2 (bn <= i < an): (b-1) zero-extends to 0, ~0 = all-ones,
+        a[i] & all-ones = a[i], so tail is a copy.  */
+    size_t phase1 = (an < bn) ? an : bn;
     size_t used;
     arbint_limb_t borrow = 1u;
 
@@ -815,13 +819,16 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
     ap = ARBINT_CLIMBS(a);
     bp = ARBINT_CLIMBS(b);
 
-    for (i = 0u; i < an; ++i) {
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      arbint_limb_t bd = bi - borrow;
-      borrow = (bi < borrow) ? 1u : 0u;
-      /*  Beyond bn limbs, (b-1) is 0, ~0 = all-ones, a[i] & ~0 = a[i].  */
+    for (i = 0u; i < phase1; ++i) {
+      arbint_limb_t bd = bp[i] - borrow;
+      borrow = (bp[i] < borrow) ? 1u : 0u;
       rp[i] = ap[i] & ~bd;
     }
+
+    /*  Beyond bn: ~(b-1) = all-ones, so result = a[i].  */
+    if (rp != ap && phase1 < an)
+      memcpy(rp + phase1, ap + phase1,
+             (an - phase1) * sizeof(arbint_limb_t));
 
     used = arbint_norm_used(rp, an);
     if (used == 0u)
@@ -837,12 +844,20 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
   }
 
   /*  (-a) & (-b): result = -(((a-1) | (b-1)) + 1), negative.
+      Phase 1 (i < min_n): both borrows active.
+      Phase 2 (min_n <= i < max_n): shorter operand zero-extends,
+      (shorter-1) = 0, so result = (longer-1)[i] | 0 = (longer-1)[i].
+      Continue the borrow of the longer operand only.
       Intermediate needs max(an,bn) limbs, +1 for possible carry.  */
+  size_t min_n = (an < bn) ? an : bn;
   size_t max_n = (an > bn) ? an : bn;
+  const arbint_limb_t * longer = (an > bn) ? ARBINT_CLIMBS(a)
+                                           : ARBINT_CLIMBS(b);
   size_t need = max_n + 1u;
   size_t used;
   arbint_limb_t ba = 1u;
   arbint_limb_t bb = 1u;
+  arbint_limb_t * longer_borrow;
 
   if (rop[0]._cap < need) {
     rc = arbint_resize(rop, need);
@@ -852,17 +867,22 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
   rp = ARBINT_LIMBS(rop);
   ap = ARBINT_CLIMBS(a);
   bp = ARBINT_CLIMBS(b);
+  longer = (an > bn) ? ap : bp;
 
-  for (i = 0u; i < max_n; ++i) {
-    arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-    arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-    arbint_limb_t ad = ai - ba;
-    ba = (ai < ba) ? 1u : 0u;
-    {
-      arbint_limb_t bd = bi - bb;
-      bb = (bi < bb) ? 1u : 0u;
-      rp[i] = ad | bd;
-    }
+  for (i = 0u; i < min_n; ++i) {
+    arbint_limb_t ad = ap[i] - ba;
+    ba = (ap[i] < ba) ? 1u : 0u;
+    arbint_limb_t bd = bp[i] - bb;
+    bb = (bp[i] < bb) ? 1u : 0u;
+    rp[i] = ad | bd;
+  }
+
+  /*  Tail: only the longer operand contributes.  */
+  longer_borrow = (an > bn) ? &ba : &bb;
+  for (i = min_n; i < max_n; ++i) {
+    arbint_limb_t ld = longer[i] - *longer_borrow;
+    *longer_borrow = (longer[i] < *longer_borrow) ? 1u : 0u;
+    rp[i] = ld;
   }
 
   used = arbint_mag_inc(rp, rp, max_n);
@@ -906,8 +926,12 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
   bn = arbint_abs_sz(b[0]._sz);
 
   if (a[0]._sz > 0 && b[0]._sz > 0) {
-    /*  (+,+): result = a | b, max(an,bn) limbs.  */
+    /*  (+,+): result = a | b, max(an,bn) limbs.
+        Beyond the shorter operand, x | 0 = x, so the tail is a copy.  */
+    size_t min_n = (an < bn) ? an : bn;
     size_t max_n = (an > bn) ? an : bn;
+    const arbint_limb_t * longer = (an > bn) ? ARBINT_CLIMBS(a)
+                                              : ARBINT_CLIMBS(b);
     size_t used;
 
     if (rop[0]._cap < max_n) {
@@ -918,12 +942,14 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
     rp = ARBINT_LIMBS(rop);
     ap = ARBINT_CLIMBS(a);
     bp = ARBINT_CLIMBS(b);
+    longer = (an > bn) ? ap : bp;
 
-    for (i = 0u; i < max_n; ++i) {
-      arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      rp[i] = ai | bi;
-    }
+    for (i = 0u; i < min_n; ++i)
+      rp[i] = ap[i] | bp[i];
+
+    if (rp != longer && min_n < max_n)
+      memcpy(rp + min_n, longer + min_n,
+             (max_n - min_n) * sizeof(arbint_limb_t));
 
     used = arbint_norm_used(rp, max_n);
     if (used == 0u)
@@ -935,9 +961,11 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
 
   if (a[0]._sz > 0 && b[0]._sz < 0) {
     /*  (+a) | (-b): result = -(((b-1) & ~a) + 1), negative.
-        (b-1) & ~a: beyond an, ~a = all-ones, so result is (b-1)[i].
-        Beyond bn, (b-1) = 0 (zero-extended), so (b-1)[i] & ~a[i] = 0.
-        Result bounded by max(an, bn) limbs + 1 for carry.  */
+        Phase 1 (i < min(an,bn)): both operands present, borrow-subtract b.
+        Phase 2 (bn <= i < an): (b-1) is zero-extended, bd = 0, result = 0.
+        Phase 2 (an <= i < bn): ~a is all-ones, result = (b-1)[i].
+        Bounded by max(an,bn) limbs + 1 for carry.  */
+    size_t min_n = (an < bn) ? an : bn;
     size_t max_n = (an > bn) ? an : bn;
     size_t need = max_n + 1u;
     size_t used;
@@ -952,12 +980,23 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
     ap = ARBINT_CLIMBS(a);
     bp = ARBINT_CLIMBS(b);
 
-    for (i = 0u; i < max_n; ++i) {
-      arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      arbint_limb_t bd = bi - borrow;
-      borrow = (bi < borrow) ? 1u : 0u;
-      rp[i] = bd & ~ai;
+    for (i = 0u; i < min_n; ++i) {
+      arbint_limb_t bd = bp[i] - borrow;
+      borrow = (bp[i] < borrow) ? 1u : 0u;
+      rp[i] = bd & ~ap[i];
+    }
+
+    if (an >= bn) {
+      /*  Beyond bn: (b-1) zero-extends to 0, so bd & ~a[i] = 0.  */
+      memset(rp + min_n, 0, (max_n - min_n) * sizeof(arbint_limb_t));
+    } else {
+      /*  Beyond an: ~a is all-ones, result = (b-1)[i].
+          Continue borrow propagation through remaining b limbs.  */
+      for (i = min_n; i < max_n; ++i) {
+        arbint_limb_t bd = bp[i] - borrow;
+        borrow = (bp[i] < borrow) ? 1u : 0u;
+        rp[i] = bd;
+      }
     }
 
     used = arbint_mag_inc(rp, rp, max_n);
@@ -996,11 +1035,9 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
     arbint_limb_t bi = bp[i];
     arbint_limb_t ad = ai - ba;
     ba = (ai < ba) ? 1u : 0u;
-    {
-      arbint_limb_t bd = bi - bb;
-      bb = (bi < bb) ? 1u : 0u;
-      rp[i] = ad & bd;
-    }
+    arbint_limb_t bd = bi - bb;
+    bb = (bi < bb) ? 1u : 0u;
+    rp[i] = ad & bd;
   }
 
   used = arbint_mag_inc(rp, rp, min_n);
@@ -1046,8 +1083,11 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
   bn = arbint_abs_sz(b[0]._sz);
 
   if (a[0]._sz > 0 && b[0]._sz > 0) {
-    /*  (+,+): result = a ^ b, max(an,bn) limbs.  */
+    /*  (+,+): result = a ^ b, max(an,bn) limbs.
+        Beyond the shorter operand, x ^ 0 = x, so the tail is a copy.  */
+    size_t min_n = (an < bn) ? an : bn;
     size_t max_n = (an > bn) ? an : bn;
+    const arbint_limb_t * longer;
     size_t used;
 
     if (rop[0]._cap < max_n) {
@@ -1058,12 +1098,14 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
     rp = ARBINT_LIMBS(rop);
     ap = ARBINT_CLIMBS(a);
     bp = ARBINT_CLIMBS(b);
+    longer = (an > bn) ? ap : bp;
 
-    for (i = 0u; i < max_n; ++i) {
-      arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      rp[i] = ai ^ bi;
-    }
+    for (i = 0u; i < min_n; ++i)
+      rp[i] = ap[i] ^ bp[i];
+
+    if (rp != longer && min_n < max_n)
+      memcpy(rp + min_n, longer + min_n,
+             (max_n - min_n) * sizeof(arbint_limb_t));
 
     used = arbint_norm_used(rp, max_n);
     if (used == 0u)
@@ -1075,7 +1117,12 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
 
   if (a[0]._sz > 0 && b[0]._sz < 0) {
     /*  (+a) ^ (-b): result = -((a ^ (b-1)) + 1), negative.
-        Max(an, bn) limbs + 1 for carry.  */
+        Phase 1 (i < min(an,bn)): both operands present.
+        Phase 2 (bn <= i < an): (b-1) zero-extends, a[i] ^ 0 = a[i], copy.
+        Phase 2 (an <= i < bn): a zero-extends, 0 ^ (b-1)[i] = (b-1)[i],
+        continue borrow.
+        Max(an,bn) limbs + 1 for carry.  */
+    size_t min_n = (an < bn) ? an : bn;
     size_t max_n = (an > bn) ? an : bn;
     size_t need = max_n + 1u;
     size_t used;
@@ -1090,12 +1137,24 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
     ap = ARBINT_CLIMBS(a);
     bp = ARBINT_CLIMBS(b);
 
-    for (i = 0u; i < max_n; ++i) {
-      arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      arbint_limb_t bd = bi - borrow;
-      borrow = (bi < borrow) ? 1u : 0u;
-      rp[i] = ai ^ bd;
+    for (i = 0u; i < min_n; ++i) {
+      arbint_limb_t bd = bp[i] - borrow;
+      borrow = (bp[i] < borrow) ? 1u : 0u;
+      rp[i] = ap[i] ^ bd;
+    }
+
+    if (an >= bn) {
+      /*  Beyond bn: (b-1) zero-extends, a[i] ^ 0 = a[i].  */
+      if (rp != ap && min_n < max_n)
+        memcpy(rp + min_n, ap + min_n,
+               (max_n - min_n) * sizeof(arbint_limb_t));
+    } else {
+      /*  Beyond an: a zero-extends, 0 ^ (b-1)[i] = (b-1)[i].  */
+      for (i = min_n; i < max_n; ++i) {
+        arbint_limb_t bd = bp[i] - borrow;
+        borrow = (bp[i] < borrow) ? 1u : 0u;
+        rp[i] = bd;
+      }
     }
 
     used = arbint_mag_inc(rp, rp, max_n);
@@ -1113,11 +1172,17 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
   }
 
   /*  (-a) ^ (-b): result = (a-1) ^ (b-1), positive.
+      Phase 1 (i < min_n): both borrows active.
+      Phase 2 (min_n <= i < max_n): shorter zero-extends,
+      (longer-1)[i] ^ 0 = (longer-1)[i], continue longer borrow.
       Max(an,bn) limbs.  */
+  size_t min_n = (an < bn) ? an : bn;
   size_t max_n = (an > bn) ? an : bn;
+  const arbint_limb_t * longer;
   size_t used;
   arbint_limb_t ba = 1u;
   arbint_limb_t bb = 1u;
+  arbint_limb_t * longer_borrow;
 
   if (rop[0]._cap < max_n) {
     rc = arbint_resize(rop, max_n);
@@ -1127,15 +1192,24 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
   rp = ARBINT_LIMBS(rop);
   ap = ARBINT_CLIMBS(a);
   bp = ARBINT_CLIMBS(b);
+  longer = (an > bn) ? ap : bp;
 
-  for (i = 0u; i < max_n; ++i) {
-    arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-    arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-    arbint_limb_t ad = ai - ba;
-    ba = (ai < ba) ? 1u : 0u;
-    arbint_limb_t bd = bi - bb;
-    bb = (bi < bb) ? 1u : 0u;
-    rp[i] = ad ^ bd;
+  for (i = 0u; i < min_n; ++i) {
+    arbint_limb_t ad = ap[i] - ba;
+    ba = (ap[i] < ba) ? 1u : 0u;
+    {
+      arbint_limb_t bd = bp[i] - bb;
+      bb = (bp[i] < bb) ? 1u : 0u;
+      rp[i] = ad ^ bd;
+    }
+  }
+
+  /*  Tail: only the longer operand contributes.  */
+  longer_borrow = (an > bn) ? &ba : &bb;
+  for (i = min_n; i < max_n; ++i) {
+    arbint_limb_t ld = longer[i] - *longer_borrow;
+    *longer_borrow = (longer[i] < *longer_borrow) ? 1u : 0u;
+    rp[i] = ld;
   }
 
   used = arbint_norm_used(rp, max_n);
