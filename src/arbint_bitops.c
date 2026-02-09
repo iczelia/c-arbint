@@ -113,16 +113,18 @@ size_t arbint_sizeinbase(const arbint_t x, int base) {
 
 /*  Increment magnitude by 1.  dst may alias src.
     Caller must ensure dst has capacity for n+1 limbs.
-    Returns used limb count (may be n+1).  */
+    Returns used limb count (may be n+1). dst and src
+    may alias, careful!  */
 static size_t arbint_mag_inc(arbint_limb_t * dst, const arbint_limb_t * src,
                              size_t n) {
   size_t i;
   arbint_limb_t carry = 1u;
 
   for (i = 0u; i < n; ++i) {
-    arbint_limb_t s = src[i] + carry;
+    arbint_limb_t xi = src[i];
+    arbint_limb_t s = xi + carry;
     dst[i] = s;
-    if (s >= src[i]) {
+    if (s >= xi) {
       carry = 0u;
       ++i;
       break;
