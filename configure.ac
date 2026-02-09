@@ -93,7 +93,7 @@ AS_IF([test "x$enable_warnings" = "xyes"], [
 AC_ARG_WITH([base-optimization],
   [AS_HELP_STRING([--with-base-optimization=@<:@default|tuned@:>@],
                   [Select base optimization profile:
-                   default => -O2 -g3 (default),
+                   default => -O3 -g3 (default),
                    tuned => -O3 -march=... -mtune=...])],
   [arbint_base_optimization="$withval"],
   [arbint_base_optimization=default])
@@ -116,7 +116,7 @@ AS_IF([test "x$arbint_base_optimization" = "xdefault"], [
   AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
     CFLAGS="$CFLAGS /O2 /Zi"
   ], [
-    CFLAGS="$CFLAGS -O2 -g3"
+    CFLAGS="$CFLAGS -O3 -g3"
   ])
 ], [
   AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
@@ -130,6 +130,21 @@ AS_IF([test "x$arbint_base_optimization" = "xdefault"], [
       arbint_effective_march="native"
     ])
     CFLAGS="$CFLAGS -O3 -march=$arbint_effective_march -mtune=$arbint_effective_march"
+  ])
+])
+
+AS_IF([test "x$arbint_cc_msvc_cl" != "xyes"], [
+  AC_CACHE_CHECK([whether $CC supports -fno-semantic-interposition],
+    [arbint_cv_cc_fno_semantic_interposition], [
+    arbint_saved_cflags="$CFLAGS"
+    CFLAGS="$CFLAGS -fno-semantic-interposition"
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[]])],
+      [arbint_cv_cc_fno_semantic_interposition=yes],
+      [arbint_cv_cc_fno_semantic_interposition=no])
+    CFLAGS="$arbint_saved_cflags"
+  ])
+  AS_IF([test "x$arbint_cv_cc_fno_semantic_interposition" = "xyes"], [
+    CFLAGS="$CFLAGS -fno-semantic-interposition"
   ])
 ])
 
