@@ -24,8 +24,10 @@ Additional declarations may exist in
 for future releases.
 .PP
 The library includes optimized code paths for x86 processors supporting
-BMI2 (multiplication) and AVX2 (doubling) instructions, with automatic
-runtime dispatch based on CPU feature detection.
+BMI2 (multiplication), AVX2 (doubling), SHA-NI (hashing), and SSE4.2
+(CRC32C hashing) instructions, and for AArch64 processors supporting
+CRC32 and PMULL instructions (CRC32C hashing), with automatic runtime
+dispatch based on CPU feature detection.
 .SH TYPES
 .TP
 .B arbint_t
@@ -220,6 +222,85 @@ Convert between
 and a little-endian magnitude byte buffer.
 .B arbint_export ()
 exports magnitude only (no sign encoding).
+.SS Hashing
+.BR arbint_hash_slow (),
+.BR arbint_hash_fast ()
+.PP
+.BI "arbint_err_t arbint_hash_slow(const arbint_t " op ", uint8_t *" out_hash ", size_t " hash_len ")"
+.RS
+Hash the canonical value of
+.I op
+into
+.I hash_len
+bytes at
+.IR out_hash .
+Uses SHA-256 internally; for
+.I hash_len
+\(<= 32 the output is a (possibly truncated) SHA-256 digest.
+For
+.I hash_len
+> 32 a counter-mode construction is used:
+SHA-256(\fIcanonical\fP || LE32(\fIcounter\fP)) for
+.I counter
+= 0, 1, 2, \&... producing 32 bytes each, concatenated and truncated to
+.IR hash_len .
+.PP
+On x86 processors with SHA-NI support, the SHA-256 compression function
+is hardware-accelerated via
+.BR _mm_sha256rnds2_epu32 ()
+and related intrinsics.
+.PP
+Returns
+.B ARBINT_EINVAL
+if
+.I op
+or
+.I out_hash
+is NULL.
+If
+.I hash_len
+is 0, returns
+.B ARBINT_OK
+without writing.
+.RE
+.PP
+.BI "arbint_err_t arbint_hash_fast(const arbint_t " op ", uint32_t *" out_hash ")"
+.RS
+Hash the canonical value of
+.I op
+into a 32-bit CRC32C (Castagnoli) checksum at
+.IR out_hash .
+.PP
+On x86 processors with SSE4.2 support, the CRC32C computation is
+hardware-accelerated via
+.BR _mm_crc32_u8 (),
+.BR _mm_crc32_u32 (),
+and
+.BR _mm_crc32_u64 ()
+intrinsics.
+On AArch64 processors with CRC32 and PMULL support, the computation
+uses
+.BR __crc32cb ()
+and
+.BR __crc32cd ()
+instructions with PMULL-based parallel stream folding.
+A portable table-based fallback is used on other platforms.
+.PP
+Returns
+.B ARBINT_EINVAL
+if
+.I op
+or
+.I out_hash
+is NULL.
+.RE
+.PP
+Both hash functions are intended for hash-table use only.
+The algorithm and output are intentionally unstable across library versions
+and may vary across process runs.
+The canonical input is a sign byte (0x00 for zero, 0x01 for positive,
+0xff for negative) followed by the magnitude in little-endian byte order
+with no leading zero bytes.
 .SS Random Number Generation
 .BR arbint_rng_init (),
 .BR arbint_rng_clear (),
@@ -312,6 +393,15 @@ available and operand size exceeds the threshold (16 limbs), providing
 .PP
 All division variants apply appropriate sign rules for truncation semantics
 after magnitude computation.
+.PP
+.B Hashing
+uses a self-contained SHA-256 implementation (FIPS 180-4) for
+.BR arbint_hash_slow ()
+and CRC32C (Castagnoli polynomial) for
+.BR arbint_hash_fast ().
+Both dispatch to hardware-accelerated implementations when available:
+SHA-NI extensions for SHA-256 compression and SSE4.2 intrinsics for CRC32C.
+Canonical data is fed through a streaming interface with O(1) auxiliary memory.
 .SH ENTROPY SOURCES
 .PP
 When

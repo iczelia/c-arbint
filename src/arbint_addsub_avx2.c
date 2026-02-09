@@ -44,7 +44,7 @@ static inline __m256i arbint_avx2_align_carries(__m256i carries,
 
   /*  Blend: keep shifted_carries[3:1], replace [0] with carry_scalar.
       Blend mask 0x03 = 0b00000011 selects lower 2 32-bit elements
-      (which is the lowest 64-bit element in the 4×64-bit vector).  */
+      (which is the lowest 64-bit element in the 4x64-bit vector).  */
   __m256i aligned =
       _mm256_blend_epi32(shifted_carries, scalar_carry_vec, 0x03);
 

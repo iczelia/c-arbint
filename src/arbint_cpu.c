@@ -34,6 +34,10 @@
   #include <intrin.h>
 #endif /* ARBINT_COMPILER_MSVC */
 
+#if ARBINT_TARGET_AARCH64 && defined(__linux__) && defined(HAVE_SYS_AUXV_H)
+  #include <sys/auxv.h>
+#endif /* ARBINT_TARGET_AARCH64 && __linux__ && HAVE_SYS_AUXV_H */
+
 #define ARBINT_CPUID1_ECX_SSE3 (1u << 0)
 #define ARBINT_CPUID1_ECX_PCLMULQDQ (1u << 1)
 #define ARBINT_CPUID1_ECX_SSSE3 (1u << 9)
@@ -138,6 +142,9 @@ typedef struct {
   unsigned int avx512vl : 1;
   unsigned int fma : 1;
   unsigned int sha : 1;
+  unsigned int arm_crc32 : 1;
+  unsigned int arm_pmull : 1;
+  unsigned int arm_sha2 : 1;
   uint64_t xcr0;
 } arbint_cpu_caps_t;
 
@@ -269,6 +276,43 @@ static arbint_cpu_caps_t arbint_cpu_probe_caps(void) {
   }
 #endif /* ARBINT_CPU_CAN_QUERY_X86_CPUID */
 
+#if ARBINT_TARGET_AARCH64
+  #if defined(__linux__) && defined(HAVE_SYS_AUXV_H)
+  {
+    unsigned long hwcap;
+
+    #ifndef HWCAP_CRC32
+      #define HWCAP_CRC32 (1ul << 7)
+    #endif
+    #ifndef HWCAP_PMULL
+      #define HWCAP_PMULL (1ul << 4)
+    #endif
+    #ifndef HWCAP_SHA2
+      #define HWCAP_SHA2 (1ul << 6)
+    #endif
+
+    hwcap = getauxval(AT_HWCAP);
+    caps.arm_crc32 = (hwcap & HWCAP_CRC32) != 0u;
+    caps.arm_pmull = (hwcap & HWCAP_PMULL) != 0u;
+    caps.arm_sha2 = (hwcap & HWCAP_SHA2) != 0u;
+  }
+  #elif defined(__APPLE__)
+  /*  All Apple Silicon has CRC32, PMULL, and SHA-2.  */
+  caps.arm_crc32 = 1u;
+  caps.arm_pmull = 1u;
+  caps.arm_sha2 = 1u;
+  #else
+    /*  Compile-time detection only.  */
+    #ifdef __ARM_FEATURE_CRC32
+  caps.arm_crc32 = 1u;
+    #endif
+    #ifdef __ARM_FEATURE_CRYPTO
+  caps.arm_pmull = 1u;
+  caps.arm_sha2 = 1u;
+    #endif
+  #endif /* __linux__ && HAVE_SYS_AUXV_H */
+#endif   /* ARBINT_TARGET_AARCH64 */
+
   return caps;
 }
 
@@ -318,6 +362,12 @@ int arbint_cpu_has_feature(arbint_cpu_feature_t feature) {
     return (int) caps.fma;
   case ARBINT_CPU_FEATURE_SHA:
     return (int) caps.sha;
+  case ARBINT_CPU_FEATURE_ARM_CRC32:
+    return (int) caps.arm_crc32;
+  case ARBINT_CPU_FEATURE_ARM_PMULL:
+    return (int) caps.arm_pmull;
+  case ARBINT_CPU_FEATURE_ARM_SHA2:
+    return (int) caps.arm_sha2;
   default:
     return 0;
   }

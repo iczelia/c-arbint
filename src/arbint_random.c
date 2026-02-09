@@ -358,9 +358,8 @@ arbint_err_t arbint_urandomm(arbint_t rop, arbint_rng_t * rng,
 
   /* Precompute mask for unused high bits in the top limb */
   top_bits = bound_bits % ARBINT_LIMB_BITS;
-  top_mask = (top_bits != 0u)
-                 ? (((arbint_limb_t) 1u << top_bits) - 1u)
-                 : (arbint_limb_t) ~(arbint_limb_t) 0u;
+  top_mask = (top_bits != 0u) ? (((arbint_limb_t) 1u << top_bits) - 1u)
+                              : (arbint_limb_t) ~(arbint_limb_t) 0u;
 
   /* Initial full fill of all limbs */
   rc = arbint_urandomb(rop, rng, bound_bits);

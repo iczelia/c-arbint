@@ -4,15 +4,17 @@ AC_CONFIG_SRCDIR([src])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
 m4_include([m4/arbint_x86_feature_check.m4])
+m4_include([m4/arbint_arm_feature_check.m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz no-dist-gzip tar-ustar])
 AM_SILENT_RULES([yes])
 AC_CANONICAL_HOST
 
 AS_CASE([$host_cpu],
-  [x86_64|amd64], [arbint_host_x86=yes; arbint_host_x86_64=yes; arbint_host_has_cpuid=yes],
-  [i[5-9]86|pentium*], [arbint_host_x86=yes; arbint_host_x86_64=no; arbint_host_has_cpuid=yes],
-  [i?86], [arbint_host_x86=yes; arbint_host_x86_64=no; arbint_host_has_cpuid=no],
-  [arbint_host_x86=no; arbint_host_x86_64=no; arbint_host_has_cpuid=no])
+  [x86_64|amd64], [arbint_host_x86=yes; arbint_host_x86_64=yes; arbint_host_has_cpuid=yes; arbint_host_aarch64=no],
+  [i[5-9]86|pentium*], [arbint_host_x86=yes; arbint_host_x86_64=no; arbint_host_has_cpuid=yes; arbint_host_aarch64=no],
+  [i?86], [arbint_host_x86=yes; arbint_host_x86_64=no; arbint_host_has_cpuid=no; arbint_host_aarch64=no],
+  [aarch64*|arm64*], [arbint_host_x86=no; arbint_host_x86_64=no; arbint_host_has_cpuid=no; arbint_host_aarch64=yes],
+  [arbint_host_x86=no; arbint_host_x86_64=no; arbint_host_has_cpuid=no; arbint_host_aarch64=no])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
@@ -264,6 +266,158 @@ __m256i b = _mm256_add_epi64(a, a);
 ])
 AM_CONDITIONAL([ARBINT_BUILD_AVX2], [test "x$arbint_build_avx2" = "xyes"])
 AC_SUBST([ARBINT_AVX2_CFLAGS])
+
+ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+  [SHA-NI intrinsics], [arbint_cv_have_sha_ni_plain], [arbint_cv_have_sha_ni_msha],
+  [-msha -msse4.1],
+  [[
+#include <immintrin.h>
+  ]],
+  [[
+__m128i a = _mm_setzero_si128();
+__m128i b = _mm_sha256rnds2_epu32(a, a, a);
+(void)b;
+  ]],
+  [HAS_SHA_NI], [HAS_SHA_NI_ALWAYS],
+  [Define to 1 if SHA-NI intrinsics are available (with or without -msha).],
+  [Define to 1 if SHA-NI intrinsics are available globally.]
+)
+
+arbint_build_sha_ni=no
+ARBINT_SHA_NI_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_sha_ni_plain" = "xyes"], [
+  arbint_build_sha_ni=yes
+], [test "x$arbint_cv_have_sha_ni_msha" = "xyes"], [
+  arbint_build_sha_ni=yes
+  ARBINT_SHA_NI_CFLAGS="-msha -msse4.1"
+])
+AM_CONDITIONAL([ARBINT_BUILD_SHA_NI], [test "x$arbint_build_sha_ni" = "xyes"])
+AC_SUBST([ARBINT_SHA_NI_CFLAGS])
+
+dnl Use _mm_crc32_u64 in the test body: it is the widest intrinsic actually
+dnl used by our implementation and is only available on x86-64, so the test
+dnl naturally fails on 32-bit x86 without any extra host_cpu guard.
+ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+  [SSE4.2 CRC32C intrinsics (64-bit)], [arbint_cv_have_sse42_crc32_plain], [arbint_cv_have_sse42_crc32_msse42],
+  [-msse4.2],
+  [[
+#include <nmmintrin.h>
+  ]],
+  [[
+unsigned long long x = _mm_crc32_u64(0ULL, 0ULL);
+(void)x;
+  ]],
+  [HAS_SSE42_CRC32], [HAS_SSE42_CRC32_ALWAYS],
+  [Define to 1 if SSE4.2 CRC32C intrinsics are available (with or without -msse4.2).],
+  [Define to 1 if SSE4.2 CRC32C intrinsics are available globally.]
+)
+
+arbint_build_sse42_crc32=no
+ARBINT_SSE42_CRC32_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_sse42_crc32_plain" = "xyes"], [
+  arbint_build_sse42_crc32=yes
+], [test "x$arbint_cv_have_sse42_crc32_msse42" = "xyes"], [
+  arbint_build_sse42_crc32=yes
+  ARBINT_SSE42_CRC32_CFLAGS="-msse4.2"
+])
+AM_CONDITIONAL([ARBINT_BUILD_SSE42_CRC32], [test "x$arbint_build_sse42_crc32" = "xyes"])
+AC_SUBST([ARBINT_SSE42_CRC32_CFLAGS])
+
+ARBINT_CHECK_ARM_FEATURE_WITH_FLAG(
+  [CRC32 intrinsics], [arbint_cv_have_arm_crc32_plain], [arbint_cv_have_arm_crc32_march],
+  [-march=armv8-a+crc],
+  [[
+#include <arm_acle.h>
+  ]],
+  [[
+uint32_t x = __crc32cb(0u, 0u);
+(void)x;
+  ]],
+  [HAS_ARM_CRC32], [HAS_ARM_CRC32_ALWAYS],
+  [Define to 1 if ARM CRC32 intrinsics are available (with or without -march flag).],
+  [Define to 1 if ARM CRC32 intrinsics are available globally.]
+)
+
+ARBINT_CHECK_ARM_FEATURE_WITH_FLAG(
+  [PMULL intrinsics], [arbint_cv_have_arm_pmull_plain], [arbint_cv_have_arm_pmull_march],
+  [-march=armv8-a+crc+crypto],
+  [[
+#include <arm_neon.h>
+  ]],
+  [[
+poly128_t r = vmull_p64(1, 1);
+(void)r;
+  ]],
+  [HAS_ARM_PMULL], [HAS_ARM_PMULL_ALWAYS],
+  [Define to 1 if ARM PMULL intrinsics are available (with or without -march flag).],
+  [Define to 1 if ARM PMULL intrinsics are available globally.]
+)
+
+ARBINT_CHECK_ARM_FEATURE_WITH_FLAG(
+  [SHA-2 crypto intrinsics], [arbint_cv_have_arm_sha2_plain], [arbint_cv_have_arm_sha2_march],
+  [-march=armv8-a+crypto],
+  [[
+#include <arm_neon.h>
+  ]],
+  [[
+uint32x4_t a = vdupq_n_u32(0);
+uint32x4_t b = vsha256hq_u32(a, a, a);
+(void)b;
+  ]],
+  [HAS_ARM_SHA2], [HAS_ARM_SHA2_ALWAYS],
+  [Define to 1 if ARM SHA-2 crypto intrinsics are available (with or without -march flag).],
+  [Define to 1 if ARM SHA-2 crypto intrinsics are available globally.]
+)
+
+arbint_build_arm_sha2=no
+ARBINT_ARM_SHA2_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_arm_sha2_plain" = "xyes"], [
+  arbint_build_arm_sha2=yes
+], [test "x$arbint_cv_have_arm_sha2_march" = "xyes"], [
+  arbint_build_arm_sha2=yes
+  ARBINT_ARM_SHA2_CFLAGS="-march=armv8-a+crypto"
+])
+AM_CONDITIONAL([ARBINT_BUILD_ARM_SHA2], [test "x$arbint_build_arm_sha2" = "xyes"])
+AC_SUBST([ARBINT_ARM_SHA2_CFLAGS])
+
+dnl ARM CRC32C requires both CRC32 and PMULL for the accelerated implementation.
+arbint_build_arm_crc32c=no
+ARBINT_ARM_CRC32C_CFLAGS=""
+arbint_have_arm_crc32=no
+arbint_have_arm_pmull=no
+arbint_arm_crc32_needs_flag=no
+arbint_arm_pmull_needs_flag=no
+
+AS_IF([test "x$arbint_cv_have_arm_crc32_plain" = "xyes"], [
+  arbint_have_arm_crc32=yes
+], [test "x$arbint_cv_have_arm_crc32_march" = "xyes"], [
+  arbint_have_arm_crc32=yes
+  arbint_arm_crc32_needs_flag=yes
+])
+
+AS_IF([test "x$arbint_cv_have_arm_pmull_plain" = "xyes"], [
+  arbint_have_arm_pmull=yes
+], [test "x$arbint_cv_have_arm_pmull_march" = "xyes"], [
+  arbint_have_arm_pmull=yes
+  arbint_arm_pmull_needs_flag=yes
+])
+
+AS_IF([test "x$arbint_have_arm_crc32" = "xyes" && test "x$arbint_have_arm_pmull" = "xyes"], [
+  arbint_build_arm_crc32c=yes
+  dnl Use the most permissive flag needed.
+  AS_IF([test "x$arbint_arm_pmull_needs_flag" = "xyes"], [
+    ARBINT_ARM_CRC32C_CFLAGS="-march=armv8-a+crc+crypto"
+  ], [test "x$arbint_arm_crc32_needs_flag" = "xyes"], [
+    ARBINT_ARM_CRC32C_CFLAGS="-march=armv8-a+crc"
+  ])
+])
+AM_CONDITIONAL([ARBINT_BUILD_ARM_CRC32C], [test "x$arbint_build_arm_crc32c" = "xyes"])
+AC_SUBST([ARBINT_ARM_CRC32C_CFLAGS])
+
+dnl Linux getauxval for ARM runtime feature detection
+AS_IF([test "x$arbint_host_aarch64" = "xyes"], [
+  AC_CHECK_HEADERS([sys/auxv.h])
+])
 
 AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
   arbint_cv_cc_visibility_hidden=no
