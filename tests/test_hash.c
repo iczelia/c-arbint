@@ -242,6 +242,61 @@ int main(void) {
     CHECK(memcmp(h1, h2, 32u) == 0);
   }
 
+  /*  Test 16: Known-answer vectors for hash_slow.
+      Canonical form is sign byte + LE magnitude (no leading zero bytes).
+      Expected digests verified against system sha256sum.  */
+  {
+    /*  SHA-256("\x01\x2a") = SHA-256 of {sign=+1, mag=42}  */
+    static const uint8_t expect_42[32] = {
+        0x12u, 0xa0u, 0xf6u, 0x5cu, 0xb2u, 0x57u, 0x38u, 0xc3u,
+        0x25u, 0x1fu, 0x2du, 0xdfu, 0xabu, 0x71u, 0x29u, 0xfbu,
+        0x80u, 0xdeu, 0x0fu, 0x7fu, 0x05u, 0xe3u, 0xe1u, 0x05u,
+        0xccu, 0xacu, 0x2fu, 0x2bu, 0x71u, 0x07u, 0x6eu, 0x9du};
+    /*  SHA-256("\x00") = SHA-256 of {sign=0}  */
+    static const uint8_t expect_0[32] = {
+        0x6eu, 0x34u, 0x0bu, 0x9cu, 0xffu, 0xb3u, 0x7au, 0x98u,
+        0x9cu, 0xa5u, 0x44u, 0xe6u, 0xbbu, 0x78u, 0x0au, 0x2cu,
+        0x78u, 0x90u, 0x1du, 0x3fu, 0xb3u, 0x37u, 0x38u, 0x76u,
+        0x85u, 0x11u, 0xa3u, 0x06u, 0x17u, 0xafu, 0xa0u, 0x1du};
+    /*  SHA-256("\xff\x01") = SHA-256 of {sign=-1, mag=1}  */
+    static const uint8_t expect_neg1[32] = {
+        0x43u, 0x7cu, 0xb4u, 0x3au, 0x30u, 0x22u, 0x6eu, 0x63u,
+        0x9bu, 0x33u, 0xd8u, 0x45u, 0x33u, 0xcfu, 0xc3u, 0xddu,
+        0xd9u, 0x70u, 0xa4u, 0x00u, 0x55u, 0xb9u, 0xc8u, 0xc0u,
+        0xbfu, 0x7eu, 0x37u, 0x95u, 0xcfu, 0x18u, 0x4eu, 0xb6u};
+    uint8_t h[32];
+
+    CHECK_EQ_I(arbint_set_i32(a, 42), ARBINT_OK);
+    CHECK_EQ_I(arbint_hash_slow(a, h, 32u), ARBINT_OK);
+    CHECK(memcmp(h, expect_42, 32u) == 0);
+
+    CHECK_EQ_I(arbint_set_i32(a, 0), ARBINT_OK);
+    CHECK_EQ_I(arbint_hash_slow(a, h, 32u), ARBINT_OK);
+    CHECK(memcmp(h, expect_0, 32u) == 0);
+
+    CHECK_EQ_I(arbint_set_i32(a, -1), ARBINT_OK);
+    CHECK_EQ_I(arbint_hash_slow(a, h, 32u), ARBINT_OK);
+    CHECK(memcmp(h, expect_neg1, 32u) == 0);
+  }
+
+  /*  Test 17: Known-answer vectors for hash_fast (CRC32C).
+      CRC32C(init=0xFFFFFFFF, data) ^ 0xFFFFFFFF.  */
+  {
+    uint32_t h;
+
+    CHECK_EQ_I(arbint_set_i32(a, 42), ARBINT_OK);
+    CHECK_EQ_I(arbint_hash_fast(a, &h), ARBINT_OK);
+    CHECK_EQ_I(h, 0xa99c4943u);
+
+    CHECK_EQ_I(arbint_set_i32(a, 0), ARBINT_OK);
+    CHECK_EQ_I(arbint_hash_fast(a, &h), ARBINT_OK);
+    CHECK_EQ_I(h, 0x527d5351u);
+
+    CHECK_EQ_I(arbint_set_i32(a, -1), ARBINT_OK);
+    CHECK_EQ_I(arbint_hash_fast(a, &h), ARBINT_OK);
+    CHECK_EQ_I(h, 0xa0e9d052u);
+  }
+
   /*  Cleanup  */
   arbint_clear(b);
   arbint_clear(a);
