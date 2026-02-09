@@ -1,3 +1,63 @@
+2026-02-10  Kamila Szewczyk  <k@iczelia.net>
+
+	* Version 0.0.2 released.
+
+	* src/arbint_random.c, src/arbint_random.h: Implement Mersenne Twister
+	(MT19937) PRNG with platform entropy seeding. Add arbint_urandomb and
+	arbint_urandomm with rejection sampling for uniform distribution.
+	* src/arbint_random_urandom.c: /dev/urandom entropy source (Linux/POSIX).
+	* src/arbint_random_arc4.c: arc4random_buf entropy source (macOS/BSD).
+	* src/arbint_random_winapi.c: BCryptGenRandom/CryptGenRandom entropy
+	source (Windows).
+
+	* src/arbint_hash.c, src/arbint_hash.h: Implement cryptographic hashing
+	(arbint_hash_slow via SHA-256, arbint_hash_fast via CRC32C) with
+	counter-mode construction for variable-length output.
+	* src/arbint_hash_generic.c: Portable SHA-256 and CRC32C implementations.
+	* src/arbint_hash_shani.c: SHA-NI hardware-accelerated SHA-256 (x86).
+	* src/arbint_hash_crc32c_sse42.c: SSE4.2 hardware-accelerated CRC32C (x86-64).
+	* src/arbint_hash_crc32c_neon.c: ARM CRC32+PMULL hardware-accelerated
+	CRC32C (AArch64).
+	* src/arbint_hash_sha2_neon.c: ARM SHA-2 crypto extension SHA-256 (AArch64).
+
+	* src/arbint_bitops.c, src/arbint_bitops.h: Implement two's-complement
+	bitwise operations (and, or, xor, not), bit queries (testbit, setbit,
+	clrbit), counting functions (popcount, hammingdist, ctz, clz), and
+	size queries (nbits, sizeinbase).
+	* src/arbint_bitops_popcnt.c: x86 POPCNT-accelerated population count.
+
+	* src/arbint_shift.c, src/arbint_shift.h: Implement left and right shift
+	operations (arbint_shl, arbint_shr) with limb+bit decomposition.
+
+	* src/arbint_mul.c: Add arbint_pow_u32 (binary exponentiation) and
+	arbint_isqrt (Newton's method). Dedicated squaring paths with
+	Karatsuba optimization.
+	* src/arbint_mul_core.inc: Shared schoolbook/Karatsuba multiplication
+	and squaring template, included by both generic and BMI2 backends.
+
+	* src/arbint_tdiv_generic.c: Implement Knuth Algorithm D for multi-limb
+	division, replacing the O(n^2*bits) binary algorithm with O(n*m).
+	* src/arbint_tdiv_bmi2.c: BMI2-optimized Knuth Algorithm D variant.
+
+	* configure.ac: Add AArch64 host detection. Add feature detection for
+	POPCNT, SHA-NI, SSE4.2 CRC32C, ARM CRC32, ARM PMULL, ARM SHA-2.
+	Add --disable-entropy option. Detect explicit_bzero/memset_s.
+	Raise default optimization from -O2 to -O3. Enable
+	-fno-semantic-interposition where supported.
+	* m4/arbint_arm_feature_check.m4: New macro for ARM feature detection.
+
+	* include/arbint.h: Add ~19 new implemented API functions and declare
+	stubs for number-theoretic functions (moebius, totient, carmichael,
+	isprime, inv_mod, is_square, is_power, root).
+	* src/arbint_cpu.c, src/arbint_cpu.h: AArch64 runtime feature detection
+	via getauxval.
+
+	* tests/: Add test_random, test_hash, test_shift, test_bitops, test_pow,
+	test_isqrt, test_sqr, test_mul_exhaustive, compute_e, compute_bitops.
+	* man/c-arbint.3.in: Document all new APIs.
+	* contrib/sign_release: Armored signatures, bundled archive output.
+	* README => README.md: Convert to Markdown.
+
 2026-02-08  Kamila Szewczyk  <k@iczelia.net>
 
 	* Version 0.0.1 released.

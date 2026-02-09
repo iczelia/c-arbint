@@ -1,3 +1,105 @@
+c-arbint 0.0.2 (2026-02-10)
+===========================
+
+Second development release. Major feature additions across the board: random
+number generation, cryptographic hashing, bitwise operations, shift operations,
+exponentiation, integer square root, multi-limb division via Knuth Algorithm D,
+and optimized squaring. The public API grows from ~139 to ~158 functions.
+
+New Features
+------------
+- Random number generation (arbint_rng_t):
+  * Mersenne Twister (MT19937) seeded from platform entropy
+  * arbint_urandomb: uniform random in [0, 2^k)
+  * arbint_urandomm: uniform random in [0, bound) via rejection sampling
+  * Platform entropy: BCryptGenRandom (Windows), arc4random_buf (macOS/BSD),
+    /dev/urandom (Linux/POSIX)
+  * Configurable via --disable-entropy for embedded targets
+
+- Cryptographic hashing:
+  * arbint_hash_slow: SHA-256-based variable-length hash
+  * arbint_hash_fast: CRC32C-based 32-bit hash for hash tables
+  * Counter-mode construction for arbitrary output lengths
+
+- Bitwise operations (two's-complement semantics):
+  * arbint_and, arbint_or, arbint_xor, arbint_not
+  * Scalar variants: arbint_{and,or,xor}_{i32,u32}
+  * arbint_testbit, arbint_setbit, arbint_clrbit
+  * arbint_popcount, arbint_hammingdist, arbint_ctz, arbint_clz
+
+- Shift operations:
+  * arbint_shl: left shift (rop = a * 2^k)
+  * arbint_shr: right shift truncating toward zero
+
+- Size queries:
+  * arbint_nbits: number of significant bits
+  * arbint_sizeinbase: digit count in base 2-62 (fixed-point reciprocal LUT)
+
+- Exponentiation:
+  * arbint_pow_u32: base^exp via right-to-left binary exponentiation
+
+- Integer square root:
+  * arbint_isqrt: floor(sqrt(a)) via Newton's method with quadratic convergence
+
+- Multi-limb division via Knuth Algorithm D:
+  * Replaces the O(n^2 * bits) binary long-division algorithm
+  * O(n * m) for n-limb / m-limb division
+  * Reciprocal-based quotient estimation with Knuth's correction step
+
+- Optimized squaring:
+  * Dedicated Karatsuba and naive squaring paths (separate from multiplication)
+  * Shared core via arbint_mul_core.inc template
+
+- Declared (not yet implemented) number-theoretic stubs in arbint.h:
+  * arbint_moebius, arbint_totient, arbint_carmichael
+  * arbint_is_square, arbint_is_power, arbint_root
+  * arbint_isprime, arbint_inv_mod, arbint_inv_mod_u32
+
+Performance Optimizations
+-------------------------
+- Default optimization level raised from -O2 to -O3
+- -fno-semantic-interposition enabled where supported (shared library speedup)
+- x86 POPCNT intrinsics for arbint_popcount/arbint_hammingdist (8+ limbs)
+- SHA-NI hardware acceleration for SHA-256 (Intel Goldmont+, AMD Zen+)
+- SSE4.2 hardware acceleration for CRC32C
+- Knuth Algorithm D dramatically improves large-number division throughput
+
+New Platform Support
+--------------------
+- AArch64 (ARM64) hardware acceleration framework:
+  * Runtime feature detection via getauxval (Linux)
+  * ARM CRC32 + PMULL for CRC32C acceleration
+  * ARM SHA-2 crypto extensions for SHA-256 acceleration
+  * NEON SIMD support infrastructure
+
+Build System
+------------
+- New autoconf macros: ARBINT_CHECK_ARM_FEATURE_WITH_FLAG (m4/arbint_arm_feature_check.m4)
+- POPCNT, SHA-NI, SSE4.2 CRC32, ARM CRC32, ARM PMULL, ARM SHA-2 feature detection
+- --disable-entropy configure option for environments without entropy sources
+- Detection of explicit_bzero/memset_s for secure memory zeroing
+- Improved release signing script (armored signatures, bundled archives)
+
+Testing
+-------
+- 7 new test binaries: test_random, test_hash, test_shift, test_bitops,
+  test_pow, test_isqrt, test_sqr, test_mul_exhaustive
+- 2 new example programs: compute_e (e to 10000 digits), compute_bitops
+- Total: 17 test/example binaries (up from 8)
+
+Documentation
+-------------
+- Man page expanded with documentation for all new APIs
+- README converted to Markdown (README.md)
+
+Known Limitations
+-----------------
+- String conversion (arbint_set_str, arbint_get_str) not yet implemented
+- Floor/ceiling division variants planned for future releases
+- Number-theoretic functions (primality, totient, etc.) declared but not yet
+  implemented
+
+
 c-arbint 0.0.1 (2026-02-08)
 ===========================
 
