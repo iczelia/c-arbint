@@ -152,7 +152,7 @@ static arbint_err_t compute_e_brent(arbint_t result, uint32_t digits,
     goto cleanup;
 
   fprintf(stderr, "  Taylor series: ");
-  for (k = 2; ; k++) {
+  for (k = 2;; k++) {
     /*  term = term * x / one  */
     rc = arbint_mul(tmp, term, x);
     if (rc != ARBINT_OK)

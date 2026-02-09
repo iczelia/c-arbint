@@ -8,5 +8,6 @@ test_addsub_avx2
 test_random
 test_hash
 test_shift
+test_bitops
 compute_pi
 compute_e

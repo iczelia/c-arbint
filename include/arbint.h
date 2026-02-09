@@ -352,6 +352,20 @@ ARBINT_API arbint_err_t arbint_xor(arbint_t rop, const arbint_t a,
 /*  Two's-complement bitwise not.  */
 ARBINT_API arbint_err_t arbint_not(arbint_t rop, const arbint_t a);
 
+/*  Immediate-operand bitwise operations.  */
+ARBINT_API arbint_err_t arbint_and_u32(arbint_t rop, const arbint_t a,
+                                       uint32_t b);
+ARBINT_API arbint_err_t arbint_and_i32(arbint_t rop, const arbint_t a,
+                                       int32_t b);
+ARBINT_API arbint_err_t arbint_or_u32(arbint_t rop, const arbint_t a,
+                                      uint32_t b);
+ARBINT_API arbint_err_t arbint_or_i32(arbint_t rop, const arbint_t a,
+                                      int32_t b);
+ARBINT_API arbint_err_t arbint_xor_u32(arbint_t rop, const arbint_t a,
+                                       uint32_t b);
+ARBINT_API arbint_err_t arbint_xor_i32(arbint_t rop, const arbint_t a,
+                                       int32_t b);
+
 /* ---------------- Number theory ---------------- */
 ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
                                    const arbint_t b);

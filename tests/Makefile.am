@@ -29,6 +29,7 @@ check_PROGRAMS = \
   test_random \
   test_hash \
   test_shift \
+  test_bitops \
   compute_pi \
   compute_e
 

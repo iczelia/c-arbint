@@ -233,6 +233,32 @@ AS_IF([test "x$arbint_cv_have_bmi2_plain" = "xyes"], [
 AM_CONDITIONAL([ARBINT_BUILD_BMI2], [test "x$arbint_build_bmi2" = "xyes"])
 AC_SUBST([ARBINT_BMI2_CFLAGS])
 
+ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+  [POPCNT intrinsics], [arbint_cv_have_popcnt_plain], [arbint_cv_have_popcnt_mpopcnt],
+  [-mpopcnt],
+  [[
+#include <nmmintrin.h>
+  ]],
+  [[
+long long x = _mm_popcnt_u64(0ULL);
+(void)x;
+  ]],
+  [HAS_POPCNT], [HAS_POPCNT_ALWAYS],
+  [Define to 1 if POPCNT intrinsics are available (with or without -mpopcnt).],
+  [Define to 1 if POPCNT intrinsics are available globally.]
+)
+
+arbint_build_popcnt=no
+ARBINT_POPCNT_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_popcnt_plain" = "xyes"], [
+  arbint_build_popcnt=yes
+], [test "x$arbint_cv_have_popcnt_mpopcnt" = "xyes"], [
+  arbint_build_popcnt=yes
+  ARBINT_POPCNT_CFLAGS="-mpopcnt"
+])
+AM_CONDITIONAL([ARBINT_BUILD_POPCNT], [test "x$arbint_build_popcnt" = "xyes"])
+AC_SUBST([ARBINT_POPCNT_CFLAGS])
+
 dnl AVX2 is only enabled on 64-bit platforms (32-bit has limited AVX2 support and may cause issues)
 AS_IF([test "$ac_cv_sizeof_void_p" = "8"], [
   ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
