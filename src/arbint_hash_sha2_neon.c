@@ -37,53 +37,46 @@ static const uint32_t arbint_sha256_K[64] = {
     0x682e6ff3u, 0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u,
     0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u};
 
-/*  Perform four SHA-256 rounds on ABEF/CDGH with message schedule w
-    and round constants from K[i..i+3].
+/*  Perform four SHA-256 rounds with message schedule w and round
+    constants from K[i..i+3].
 
     ARM SHA-2 crypto instructions:
-      vsha256hq_u32(ABEF, CDGH, WK)  - 4 rounds updating ABEF
-      vsha256h2q_u32(CDGH, ABEF, WK) - 4 rounds updating CDGH
-    Both must use the SAME original ABEF for the second call.  */
-#define SHA256_4ROUNDS(abef, cdgh, w, i)                                      \
+      vsha256hq_u32(ABCD, EFGH, WK)  - 4 rounds updating ABCD
+      vsha256h2q_u32(EFGH, ABCD, WK) - 4 rounds updating EFGH
+    Both must use the SAME original ABCD for the second call.  */
+#define SHA256_4ROUNDS(abcd, efgh, w, i)                                      \
   do {                                                                         \
     uint32x4_t wk_ = vaddq_u32((w), vld1q_u32(&arbint_sha256_K[(i)]));        \
-    uint32x4_t abef_prev_ = (abef);                                           \
-    (abef) = vsha256hq_u32((abef), (cdgh), wk_);                              \
-    (cdgh) = vsha256h2q_u32((cdgh), abef_prev_, wk_);                         \
+    uint32x4_t abcd_prev_ = (abcd);                                           \
+    (abcd) = vsha256hq_u32((abcd), (efgh), wk_);                              \
+    (efgh) = vsha256h2q_u32((efgh), abcd_prev_, wk_);                         \
   } while (0)
 
 /*  SHA-256 single-block compression using ARM Crypto Extensions.
 
     The ARM SHA-2 instructions operate on two uint32x4_t registers:
-      ABEF = [A, B, E, F]
-      CDGH = [C, D, G, H]
+      ABCD = [A, B, C, D]
+      EFGH = [E, F, G, H]
 
     vsha256su0q_u32 and vsha256su1q_u32 perform message schedule
     expansion (sigma0 and sigma1 respectively).  */
 void arbint_sha256_compress_arm(uint32_t state[8], const uint8_t block[64]) {
-  uint32x4_t abef;
-  uint32x4_t cdgh;
-  uint32x4_t abef_save;
-  uint32x4_t cdgh_save;
+  uint32x4_t abcd;
+  uint32x4_t efgh;
+  uint32x4_t abcd_save;
+  uint32x4_t efgh_save;
   uint32x4_t w0;
   uint32x4_t w1;
   uint32x4_t w2;
   uint32x4_t w3;
 
-  /*  Load state.  Input layout: state[0..3] = A B C D, state[4..7] = E F G H.
-      SHA-2 instructions expect ABEF and CDGH packing.  */
-  {
-    uint32x4_t s0 = vld1q_u32(state);
-    uint32x4_t s1 = vld1q_u32(state + 4);
+  /*  Load state directly.  ARM SHA-2 instructions take [A,B,C,D] and
+      [E,F,G,H] without any rearrangement.  */
+  abcd = vld1q_u32(state);
+  efgh = vld1q_u32(state + 4);
 
-    /*  s0 = [A, B, C, D], s1 = [E, F, G, H]
-        Need: abef = [A, B, E, F], cdgh = [C, D, G, H]  */
-    abef = vcombine_u32(vget_low_u32(s0), vget_low_u32(s1));
-    cdgh = vcombine_u32(vget_high_u32(s0), vget_high_u32(s1));
-  }
-
-  abef_save = abef;
-  cdgh_save = cdgh;
+  abcd_save = abcd;
+  efgh_save = efgh;
 
   /*  Load message block as big-endian 32-bit words.  */
   w0 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block)));
@@ -92,58 +85,58 @@ void arbint_sha256_compress_arm(uint32_t state[8], const uint8_t block[64]) {
   w3 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(block + 48)));
 
   /*  Rounds 0-3  */
-  SHA256_4ROUNDS(abef, cdgh, w0, 0);
+  SHA256_4ROUNDS(abcd, efgh, w0, 0);
   /*  Rounds 4-7  */
-  SHA256_4ROUNDS(abef, cdgh, w1, 4);
+  SHA256_4ROUNDS(abcd, efgh, w1, 4);
   /*  Rounds 8-11  */
-  SHA256_4ROUNDS(abef, cdgh, w2, 8);
+  SHA256_4ROUNDS(abcd, efgh, w2, 8);
   /*  Rounds 12-15  */
-  SHA256_4ROUNDS(abef, cdgh, w3, 12);
+  SHA256_4ROUNDS(abcd, efgh, w3, 12);
 
   /*  Rounds 16-19  */
   w0 = vsha256su1q_u32(vsha256su0q_u32(w0, w1), w2, w3);
-  SHA256_4ROUNDS(abef, cdgh, w0, 16);
+  SHA256_4ROUNDS(abcd, efgh, w0, 16);
   /*  Rounds 20-23  */
   w1 = vsha256su1q_u32(vsha256su0q_u32(w1, w2), w3, w0);
-  SHA256_4ROUNDS(abef, cdgh, w1, 20);
+  SHA256_4ROUNDS(abcd, efgh, w1, 20);
   /*  Rounds 24-27  */
   w2 = vsha256su1q_u32(vsha256su0q_u32(w2, w3), w0, w1);
-  SHA256_4ROUNDS(abef, cdgh, w2, 24);
+  SHA256_4ROUNDS(abcd, efgh, w2, 24);
   /*  Rounds 28-31  */
   w3 = vsha256su1q_u32(vsha256su0q_u32(w3, w0), w1, w2);
-  SHA256_4ROUNDS(abef, cdgh, w3, 28);
+  SHA256_4ROUNDS(abcd, efgh, w3, 28);
 
   /*  Rounds 32-35  */
   w0 = vsha256su1q_u32(vsha256su0q_u32(w0, w1), w2, w3);
-  SHA256_4ROUNDS(abef, cdgh, w0, 32);
+  SHA256_4ROUNDS(abcd, efgh, w0, 32);
   /*  Rounds 36-39  */
   w1 = vsha256su1q_u32(vsha256su0q_u32(w1, w2), w3, w0);
-  SHA256_4ROUNDS(abef, cdgh, w1, 36);
+  SHA256_4ROUNDS(abcd, efgh, w1, 36);
   /*  Rounds 40-43  */
   w2 = vsha256su1q_u32(vsha256su0q_u32(w2, w3), w0, w1);
-  SHA256_4ROUNDS(abef, cdgh, w2, 40);
+  SHA256_4ROUNDS(abcd, efgh, w2, 40);
   /*  Rounds 44-47  */
   w3 = vsha256su1q_u32(vsha256su0q_u32(w3, w0), w1, w2);
-  SHA256_4ROUNDS(abef, cdgh, w3, 44);
+  SHA256_4ROUNDS(abcd, efgh, w3, 44);
 
   /*  Rounds 48-51  */
   w0 = vsha256su1q_u32(vsha256su0q_u32(w0, w1), w2, w3);
-  SHA256_4ROUNDS(abef, cdgh, w0, 48);
+  SHA256_4ROUNDS(abcd, efgh, w0, 48);
   /*  Rounds 52-55  */
   w1 = vsha256su1q_u32(vsha256su0q_u32(w1, w2), w3, w0);
-  SHA256_4ROUNDS(abef, cdgh, w1, 52);
+  SHA256_4ROUNDS(abcd, efgh, w1, 52);
   /*  Rounds 56-59  */
   w2 = vsha256su1q_u32(vsha256su0q_u32(w2, w3), w0, w1);
-  SHA256_4ROUNDS(abef, cdgh, w2, 56);
+  SHA256_4ROUNDS(abcd, efgh, w2, 56);
   /*  Rounds 60-63  */
   w3 = vsha256su1q_u32(vsha256su0q_u32(w3, w0), w1, w2);
-  SHA256_4ROUNDS(abef, cdgh, w3, 60);
+  SHA256_4ROUNDS(abcd, efgh, w3, 60);
 
   /*  Add saved state.  */
-  abef = vaddq_u32(abef, abef_save);
-  cdgh = vaddq_u32(cdgh, cdgh_save);
+  abcd = vaddq_u32(abcd, abcd_save);
+  efgh = vaddq_u32(efgh, efgh_save);
 
-  /*  Unpack from ABEF/CDGH back to [A B C D] [E F G H].  */
-  vst1q_u32(state, vcombine_u32(vget_low_u32(abef), vget_low_u32(cdgh)));
-  vst1q_u32(state + 4, vcombine_u32(vget_high_u32(abef), vget_high_u32(cdgh)));
+  /*  Store directly — no rearrangement needed.  */
+  vst1q_u32(state, abcd);
+  vst1q_u32(state + 4, efgh);
 }
