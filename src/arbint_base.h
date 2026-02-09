@@ -47,6 +47,12 @@ typedef uint32_t arbint_limb_t;
   #define ARBINT_TARGET_X86_FAMILY 0
 #endif /* x86 family detection */
 
+#if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+  #define ARBINT_TARGET_AARCH64 1
+#else
+  #define ARBINT_TARGET_AARCH64 0
+#endif /* aarch64 detection */
+
 #if defined(__GNUC__) || defined(__clang__)
   #define ARBINT_COMPILER_GNU_CLANG 1
 #else

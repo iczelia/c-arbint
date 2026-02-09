@@ -25,8 +25,9 @@ for future releases.
 .PP
 The library includes optimized code paths for x86 processors supporting
 BMI2 (multiplication), AVX2 (doubling), SHA-NI (hashing), and SSE4.2
-(CRC32C hashing) instructions, with automatic runtime dispatch based on
-CPU feature detection.
+(CRC32C hashing) instructions, and for AArch64 processors supporting
+CRC32 and PMULL instructions (CRC32C hashing), with automatic runtime
+dispatch based on CPU feature detection.
 .SH TYPES
 .TP
 .B arbint_t
@@ -277,6 +278,12 @@ hardware-accelerated via
 and
 .BR _mm_crc32_u64 ()
 intrinsics.
+On AArch64 processors with CRC32 and PMULL support, the computation
+uses
+.BR __crc32cb ()
+and
+.BR __crc32cd ()
+instructions with PMULL-based parallel stream folding.
 A portable table-based fallback is used on other platforms.
 .PP
 Returns

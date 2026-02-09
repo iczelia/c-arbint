@@ -52,6 +52,13 @@ static arbint_crc32c_fn_t arbint_select_crc32c(void) {
   return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_CRC32)
              ? arbint_crc32c_sse42
              : arbint_crc32c_generic;
+#elif (HAS_ARM_CRC32_ALWAYS && HAS_ARM_PMULL_ALWAYS)
+  return arbint_crc32c_neon;
+#elif (HAS_ARM_CRC32 && HAS_ARM_PMULL)
+  return (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_CRC32) &&
+          arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_PMULL))
+             ? arbint_crc32c_neon
+             : arbint_crc32c_generic;
 #else
   return arbint_crc32c_generic;
 #endif /* HAS_SSE42_CRC32_ALWAYS */

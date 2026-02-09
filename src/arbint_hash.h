@@ -47,4 +47,9 @@ uint32_t arbint_crc32c_generic(uint32_t crc, const uint8_t * data, size_t len);
 uint32_t arbint_crc32c_sse42(uint32_t crc, const uint8_t * data, size_t len);
 #endif /* HAS_SSE42_CRC32 */
 
+#if HAS_ARM_CRC32 && HAS_ARM_PMULL
+/*  CRC32C using ARM CRC32 instructions and NEON PMULL folding.  */
+uint32_t arbint_crc32c_neon(uint32_t crc, const uint8_t * data, size_t len);
+#endif /* HAS_ARM_CRC32 && HAS_ARM_PMULL */
+
 #endif /* ARBINT_HASH_H */
