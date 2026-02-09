@@ -26,12 +26,16 @@ int arbint_mul_cap(size_t an, size_t bn, size_t * out);
 arbint_err_t arbint_mul_impl_generic(arbint_t rop, const arbint_t a,
                                      const arbint_t b);
 
+arbint_err_t arbint_sqr_impl_generic(arbint_t rop, const arbint_t a);
+
 size_t arbint_mul_limb_1_generic(arbint_limb_t * dst, const arbint_limb_t * a,
                                  size_t an, arbint_limb_t b);
 
 #if HAS_BMI2
 arbint_err_t arbint_mul_impl_bmi2(arbint_t rop, const arbint_t a,
                                   const arbint_t b);
+
+arbint_err_t arbint_sqr_impl_bmi2(arbint_t rop, const arbint_t a);
 
 size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
                               size_t an, arbint_limb_t b);

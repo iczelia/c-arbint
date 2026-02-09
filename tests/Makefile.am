@@ -22,6 +22,8 @@ AM_LDFLAGS = $(ARBINT_LTO_LDFLAGS)
 check_PROGRAMS = \
   test_basic \
   test_mul \
+  test_mul_exhaustive \
+  test_sqr \
   test_tdiv \
   test_large \
   test_stochastic \
@@ -31,7 +33,8 @@ check_PROGRAMS = \
   test_shift \
   test_bitops \
   compute_pi \
-  compute_e
+  compute_e \
+  compute_bitops
 
 TESTS = $(check_PROGRAMS)
 TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH"

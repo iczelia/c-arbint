@@ -27,9 +27,11 @@ typedef arbint_err_t (*arbint_tdiv_qr_u32_impl_fn_t)(arbint_t q, arbint_t r,
                                                      const arbint_t n,
                                                      uint32_t dmag, int dsign);
 
-/*  Select optimal implementation for division by uint32_t.
-    Uses BMI2 reciprocal-based algorithm when available,
-    falls back to generic.  */
+typedef arbint_err_t (*arbint_div_mag_single_limb_fn_t)(
+    const arbint_limb_t * np, size_t nn, arbint_limb_t d_limb,
+    arbint_limb_t * qp, size_t * q_used, arbint_limb_t * rem_out);
+
+/*  Select optimal implementation for division by uint32_t.  */
 static arbint_tdiv_qr_u32_impl_fn_t arbint_select_tdiv_qr_u32_impl(void) {
 #if HAS_BMI2_ALWAYS
   return arbint_tdiv_qr_u32_bmi2_impl;
@@ -39,6 +41,20 @@ static arbint_tdiv_qr_u32_impl_fn_t arbint_select_tdiv_qr_u32_impl(void) {
              : arbint_tdiv_qr_u32_generic_impl;
 #else
   return arbint_tdiv_qr_u32_generic_impl;
+#endif /* HAS_BMI2_ALWAYS */
+}
+
+/*  Select optimal implementation for single-limb division.  */
+static arbint_div_mag_single_limb_fn_t
+arbint_select_div_mag_single_limb(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_div_mag_single_limb_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_div_mag_single_limb_bmi2
+             : arbint_div_mag_single_limb_generic;
+#else
+  return arbint_div_mag_single_limb_generic;
 #endif /* HAS_BMI2_ALWAYS */
 }
 
@@ -123,129 +139,6 @@ static arbint_err_t arbint_set_mag_signed(arbint_t x,
   return ARBINT_OK;
 }
 
-/*  Count significant bits in magnitude (total bit length).
-    Returns number of bits needed to represent x.  */
-static size_t arbint_nbits_mag(const arbint_limb_t * x, size_t xn) {
-  size_t nbits;
-  arbint_limb_t w;
-
-  if (x == NULL || xn == 0u)
-    return 0u;
-
-  nbits = (xn - 1u) * ARBINT_LIMB_BITS;
-  w = x[xn - 1u];
-  while (w != (arbint_limb_t) 0u) {
-    ++nbits;
-    w >>= 1u;
-  }
-  return nbits;
-}
-
-/*  Get bit at given index in magnitude (0 = LSB).
-    Returns 0 or 1, or 0 if bit_index is out of range.  */
-static int arbint_mag_get_bit(const arbint_limb_t * x, size_t n_limbs,
-                              size_t bit_index) {
-  size_t li = bit_index / ARBINT_LIMB_BITS;
-  size_t bi = bit_index % ARBINT_LIMB_BITS;
-  if (li >= n_limbs)
-    return 0;
-  return (int) ((x[li] >> bi) & (arbint_limb_t) 1u);
-}
-
-/*  Shift magnitude left by 1 bit in-place, updating limb count.
-    Returns 1 on success, 0 on overflow (would exceed capacity).  */
-static int arbint_mag_shl1_inplace(arbint_limb_t * x, size_t * xn,
-                                   size_t cap) {
-  size_t i;
-  arbint_limb_t carry = 0u;
-
-  if (x == NULL || xn == NULL)
-    return 0;
-
-  for (i = 0u; i < *xn; ++i) {
-    arbint_limb_t w = x[i];
-    arbint_limb_t ncarry = (arbint_limb_t) (w >> (ARBINT_LIMB_BITS - 1u));
-    x[i] = (arbint_limb_t) (w << 1u) | carry;
-    carry = ncarry;
-  }
-
-  if (carry != (arbint_limb_t) 0u) {
-    if (*xn >= cap)
-      return 0;
-    x[*xn] = carry;
-    ++(*xn);
-  }
-
-  return 1;
-}
-
-/*  Binary long division algorithm for multi-limb division (q = n / d, r = n %
-    d). Processes one bit at a time from MSB to LSB. Simple but O(n^2)
-    complexity. Used as fallback when reciprocal-based algorithms
-    don't apply.  */
-static arbint_err_t arbint_div_mag_binary(const arbint_limb_t * n, size_t nn,
-                                          const arbint_limb_t * d, size_t dn,
-                                          arbint_limb_t * q, size_t qcap,
-                                          size_t * q_used, arbint_limb_t * r,
-                                          size_t rcap, size_t * r_used) {
-  size_t nbits;
-  size_t b;
-
-  if (d == NULL || dn == 0u || r == NULL || r_used == NULL)
-    return ARBINT_EINVAL;
-
-  if (nn == 0u) {
-    if (q_used != NULL)
-      *q_used = 0u;
-    *r_used = 0u;
-    return ARBINT_OK;
-  }
-
-  if (n == NULL)
-    return ARBINT_EINVAL;
-
-  if (q != NULL) {
-    if (q_used == NULL)
-      return ARBINT_EINVAL;
-    memset(q, 0, qcap * sizeof(arbint_limb_t));
-  }
-
-  memset(r, 0, rcap * sizeof(arbint_limb_t));
-  *r_used = 0u;
-
-  nbits = arbint_nbits_mag(n, nn);
-  for (b = nbits; b != 0u; --b) {
-    if (!arbint_mag_shl1_inplace(r, r_used, rcap))
-      return ARBINT_EOVERFLOW;
-
-    if (arbint_mag_get_bit(n, nn, b - 1u)) {
-      if (*r_used == 0u) {
-        r[0] = (arbint_limb_t) 1u;
-        *r_used = 1u;
-      } else {
-        r[0] |= (arbint_limb_t) 1u;
-      }
-    }
-
-    if (arbint_cmp_mag_limbs(r, *r_used, d, dn) >= 0) {
-      *r_used = arbint__sub_mag(r, r, *r_used, d, dn);
-      if (q != NULL) {
-        size_t qi = (b - 1u) / ARBINT_LIMB_BITS;
-        size_t qb = (b - 1u) % ARBINT_LIMB_BITS;
-        if (qi >= qcap)
-          return ARBINT_EOVERFLOW;
-        q[qi] |= ((arbint_limb_t) 1u) << qb;
-      }
-    }
-  }
-
-  if (q != NULL)
-    *q_used = arbint_norm_used(q, qcap);
-  *r_used = arbint_norm_used(r, *r_used);
-
-  return ARBINT_OK;
-}
-
 static arbint_err_t
 arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
                         size_t nn, int nsign, const arbint_limb_t * dp,
@@ -299,12 +192,38 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
     return ARBINT_ENOMEM;
   }
 
-  rc = arbint_div_mag_binary(np, nn, dp, dn, qmag, qcap, &q_used, rmag, rcap,
-                             &r_used);
-  if (rc != ARBINT_OK) {
-    arbint_free_limbs(alloc, rmag);
-    arbint_free_limbs(alloc, qmag);
-    return rc;
+  if (dn >= 2u) {
+    /* Use Knuth Algorithm D (O(n*m) complexity).  */
+    rc = arbint_div_mag_knuth(np, nn, dp, dn, qmag, rmag);
+    if (rc != ARBINT_OK) {
+      arbint_free_limbs(alloc, rmag);
+      arbint_free_limbs(alloc, qmag);
+      return rc;
+    }
+    /* Knuth D writes quotient to qmag[0..nn-dn] and remainder to
+       rmag[0..dn-1]. Normalize the results.  */
+    if (qmag != NULL)
+      q_used = arbint_norm_used(qmag, nn - dn + 1u);
+    else
+      q_used = 0u;
+    r_used = arbint_norm_used(rmag, dn);
+  } else {
+    /* Use reciprocal-based single-limb division (O(n) complexity).  */
+    static arbint_div_mag_single_limb_fn_t impl = NULL;
+    arbint_limb_t rem_limb = 0u;
+
+    if (impl == NULL)
+      impl = arbint_select_div_mag_single_limb();
+
+    rc = impl(np, nn, dp[0], qmag, &q_used, &rem_limb);
+    if (rc != ARBINT_OK) {
+      arbint_free_limbs(alloc, rmag);
+      arbint_free_limbs(alloc, qmag);
+      return rc;
+    }
+    /* Store remainder in rmag. */
+    rmag[0] = rem_limb;
+    r_used = (rem_limb != 0u) ? 1u : 0u;
   }
 
   qsign = (q == NULL || q_used == 0u || nsign == 0)

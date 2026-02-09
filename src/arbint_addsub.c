@@ -187,6 +187,13 @@ size_t arbint__sub_mag(arbint_limb_t * dst, const arbint_limb_t * x, size_t nx,
                                   (arbint_x86_carry_word_t) 0, &out);
     dst[i] = (arbint_limb_t) out;
   }
+  /*  Suppress unused variable warning for borrow in release builds.
+      Mathematical invariant guarantees nx >= ny && |x| >= |y|, so borrow
+      cannot escape the loop. The assert(nx >= ny) at entry enforces this
+      precondition in debug builds. In release builds where assert() is
+      compiled out, the final borrow value is unused but compiler doesn't
+      know this, hence the (void) cast to explicitly document intentional
+      discard.  */
   (void) borrow;
   return arbint_norm_used(dst, nx);
 #else

@@ -15,6 +15,21 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
+/*  The following features are currently unimplemented:
+      - arbint_set_str, arbint_get_str
+      - arbint_addmul/arbint_submul and i32/u32 variants
+      - fdiv/cdiv (all), arbint_divisible, arbint_divisible_u32
+      - arbint_pow_u32, arbint_pow_mod, arbint_pow_u32_mod
+      - arbint_gcd, arbint_lcm and immediate variants.
+      - arbint_moebius, arbint_totient, arbint_carmichael,
+      - arbint_xgcd, arbint_legendre, arbint_jacobi,
+      - arbint_kronecker, arbint_removefactor_u32,
+      - arbint_fac_u32, arbint_bin_u32u32, arbint_fib_u32,
+      - arbint_lucas_u32, arbint_isqrt, arbint_is_square,
+      - arbint_is_power, arbint_root, arbint_isprime,
+      - arbint_nextprime, arbint_prevprime, arbint_inv_mod,
+      - arbint_inv_mod_u32  */
+
 #ifndef ARBINT_H
 #define ARBINT_H
 

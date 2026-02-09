@@ -1274,8 +1274,8 @@ static void test_popcount_complement(void) {
   size_t nb_nx = arbint_nbits(nx);
   size_t max_nb = (nb_x > nb_nx) ? nb_x : nb_nx;
   /*  Round up to limb boundary.  */
-  size_t w = ((max_nb + ARBINT_LIMB_BITS - 1u) / ARBINT_LIMB_BITS)
-              * ARBINT_LIMB_BITS;
+  size_t w =
+      ((max_nb + ARBINT_LIMB_BITS - 1u) / ARBINT_LIMB_BITS) * ARBINT_LIMB_BITS;
   CHECK_EQ_I(pc_x + pc_nx, w);
 
   arbint_clear(nx);

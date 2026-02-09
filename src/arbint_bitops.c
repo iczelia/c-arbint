@@ -16,9 +16,9 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "arbint_bitops.h"
-#include "config.h"
-#include "arbint_cpu.h"
 #include "arbint.h"
+#include "arbint_cpu.h"
+#include "config.h"
 
 #include <limits.h>
 #include <string.h>
@@ -85,7 +85,11 @@ static const unsigned arbint_recip_log2_16[] = {
     Returns 1 for x == 0.  base must be in [2, 62].
     For base == 2 this is exactly arbint_nbits(x).
     For power-of-two bases, an exact bit-count formula is used.
-    For other bases, the result may overestimate by at most 2.  */
+    For other bases, the result may overestimate by at most 2 due to the
+    ceiling operation in the fixed-point approximation of log2(base).
+    This overestimate is intentional and safe for buffer allocation; the
+    actual digit count should be determined after base conversion when
+    string formatting is implemented.  */
 size_t arbint_sizeinbase(const arbint_t x, int base) {
   size_t nb;
   if (x == NULL || base < 2 || base > 62)
@@ -113,8 +117,17 @@ size_t arbint_sizeinbase(const arbint_t x, int base) {
 
 /*  Increment magnitude by 1.  dst may alias src.
     Caller must ensure dst has capacity for n+1 limbs.
-    Returns used limb count (may be n+1). dst and src
-    may alias, careful!  */
+    Returns used limb count (may be n or n+1).
+
+    IMPORTANT: This function does NOT normalize its input. If src[0..n-1]
+    contains leading zero limbs, they will be copied to dst unchanged
+    (unless the carry propagates through them). However, if the INPUT is
+    already normalized (no leading zeros), then the OUTPUT is guaranteed
+    to be normalized as well, because:
+      - If no carry out: result = input (still normalized)
+      - If carry out: new top limb is 1 (never zero, so normalized)
+    Therefore, calling arbint_norm_used() after arbint_mag_inc() is only
+    necessary when the input may have leading zeros.  */
 static size_t arbint_mag_inc(arbint_limb_t * dst, const arbint_limb_t * src,
                              size_t n) {
   size_t i;
@@ -144,7 +157,12 @@ static size_t arbint_mag_inc(arbint_limb_t * dst, const arbint_limb_t * src,
 
 /*  Decrement magnitude by 1.  dst may alias src.
     Precondition: the value represented by src[0..n-1] is nonzero.
-    Returns normalized used limb count.  */
+    Returns normalized used limb count (guaranteed no leading zeros).
+
+    NOTE: Unlike arbint_mag_inc, this function ALWAYS normalizes its output
+    by calling arbint_norm_used before returning, because decrementing can
+    create leading zeros (e.g., 0x100...000 - 1 = 0x0FF...FFF has same
+    limb count but different magnitude).  */
 static size_t arbint_mag_dec(arbint_limb_t * dst, const arbint_limb_t * src,
                              size_t n) {
   size_t i;
@@ -292,7 +310,9 @@ arbint_err_t arbint_testbit(const arbint_t x, size_t bit_index, int * out) {
   }
 
   p = ARBINT_CLIMBS(x);
-  /*  Find first nonzero limb, scanning at most to limb_idx.  */
+  /*  Find first nonzero limb, scanning at most to limb_idx.
+      Note: We don't use arbint_first_nonzero() here because it scans the
+      entire array, but we only need to scan up to min(limb_idx, used-1).  */
   size_t k;
   arbint_limb_t tc;
 
@@ -403,7 +423,9 @@ arbint_err_t arbint_setbit(arbint_t x, size_t bit_index) {
 
   /*  Add 1 to get final magnitude.  */
   new_used = arbint_mag_inc(rp, rp, used);
-  /*  Normalize: magnitude could shrink.  */
+  /*  Normalization needed: (x-1) & ~(1<<p) may have leading zeros if the
+      cleared bit was in the top limb, so mag_inc output needs normalization.
+   */
   new_used = arbint_norm_used(rp, new_used);
   if (new_used == 0u)
     arbint_zero(x);
@@ -496,7 +518,8 @@ arbint_err_t arbint_clrbit(arbint_t x, size_t bit_index) {
       return ARBINT_OK;
     }
     new_used = arbint_mag_inc(rp, rp, xm1_used);
-    new_used = arbint_norm_used(rp, new_used);
+    /*  No normalization needed: xm1_used is normalized, so mag_inc output
+        is normalized (either same limb count or +1 limb with value 1).  */
   }
   if (new_used == 0u)
     arbint_zero(x);
@@ -636,18 +659,26 @@ arbint_err_t arbint_hammingdist(const arbint_t a, const arbint_t b,
 
   if (a_neg && b_neg) {
     /*  Both negative: popcount((a-1) ^ (b-1)).
-        On-the-fly borrow for each operand.  */
+        Phase 1: both borrows active for min_n limbs.
+        Phase 2: shorter operand zero-extends, (shorter-1) = 0,
+        so XOR = (longer-1)[i]; continue longer borrow only.  */
+    size_t min_n = (an < bn) ? an : bn;
+    const arbint_limb_t * longer = (an > bn) ? ap : bp;
     arbint_limb_t ba = 1u;
     arbint_limb_t bb = 1u;
+    arbint_limb_t * longer_borrow = (an > bn) ? &ba : &bb;
 
-    for (i = 0u; i < max_n; ++i) {
-      arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      arbint_limb_t ad = ai - ba;
-      ba = (ai < ba) ? 1u : 0u;
-      arbint_limb_t bd = bi - bb;
-      bb = (bi < bb) ? 1u : 0u;
+    for (i = 0u; i < min_n; ++i) {
+      arbint_limb_t ad = ap[i] - ba;
+      ba = (ap[i] < ba) ? 1u : 0u;
+      arbint_limb_t bd = bp[i] - bb;
+      bb = (bp[i] < bb) ? 1u : 0u;
       count += arbint_popcount_limb(ad ^ bd);
+    }
+    for (i = min_n; i < max_n; ++i) {
+      arbint_limb_t ld = longer[i] - *longer_borrow;
+      *longer_borrow = (longer[i] < *longer_borrow) ? 1u : 0u;
+      count += arbint_popcount_limb(ld);
     }
     *out = count;
     return ARBINT_OK;
@@ -663,16 +694,31 @@ arbint_err_t arbint_hammingdist(const arbint_t a, const arbint_t b,
     bn = tmp_n;
   }
 
-  /*  (+a) vs (-b): hamming = max_n * LIMB_BITS - popcount(a ^ (b-1)).  */
+  /*  (+a) vs (-b): hamming = max_n * LIMB_BITS - popcount(a ^ (b-1)).
+      Phase 1 (i < min(an,bn)): both operands present.
+      Phase 2 (bn <= i < an): (b-1) zero-extends to 0, XOR = a[i].
+      Phase 2 (an <= i < bn): a zero-extends to 0, XOR = (b-1)[i],
+      continue borrow.  */
+  size_t min_n = (an < bn) ? an : bn;
   arbint_limb_t bb = 1u;
   size_t xor_pop = 0u;
 
-  for (i = 0u; i < max_n; ++i) {
-    arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-    arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-    arbint_limb_t bd = bi - bb;
-    bb = (bi < bb) ? 1u : 0u;
-    xor_pop += arbint_popcount_limb(ai ^ bd);
+  for (i = 0u; i < min_n; ++i) {
+    arbint_limb_t bd = bp[i] - bb;
+    bb = (bp[i] < bb) ? 1u : 0u;
+    xor_pop += arbint_popcount_limb(ap[i] ^ bd);
+  }
+  if (an >= bn) {
+    /*  Beyond bn: (b-1) = 0, XOR = a[i].  */
+    for (i = min_n; i < max_n; ++i)
+      xor_pop += arbint_popcount_limb(ap[i]);
+  } else {
+    /*  Beyond an: a = 0, XOR = (b-1)[i].  */
+    for (i = min_n; i < max_n; ++i) {
+      arbint_limb_t bd = bp[i] - bb;
+      bb = (bp[i] < bb) ? 1u : 0u;
+      xor_pop += arbint_popcount_limb(bd);
+    }
   }
   *out = max_n * (size_t) ARBINT_LIMB_BITS - xor_pop;
   return ARBINT_OK;
@@ -716,6 +762,7 @@ arbint_err_t arbint_not(arbint_t rop, const arbint_t a) {
     }
 
     used = arbint_mag_inc(rp, ap, an);
+    /*  No normalization needed: ap is normalized, so mag_inc output is too. */
     if (!arbint_set_signed_sz(rop, used, -1))
       return ARBINT_EOVERFLOW;
     return ARBINT_OK;
@@ -749,7 +796,8 @@ arbint_err_t arbint_not(arbint_t rop, const arbint_t a) {
 /* ========== Public API: and ========== */
 
 /*  Two's-complement bitwise AND with 4-case sign decomposition.
-    For negative -x (x > 0): TC(-x) = ~(x-1).
+    For negative -x (x > 0): TC(-x) = ~(x-1) sign-extends with all-ones.
+    Example: TC(-4) = ~(3) = ~(0b...0011) = 0b...11100.
 
     (+a) & (+b) = a & b                                 (positive)
     (+a) & (-b) = a & ~(b-1)                            (positive)
@@ -829,8 +877,7 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
 
     /*  Beyond bn: ~(b-1) = all-ones, so result = a[i].  */
     if (rp != ap && phase1 < an)
-      memcpy(rp + phase1, ap + phase1,
-             (an - phase1) * sizeof(arbint_limb_t));
+      memcpy(rp + phase1, ap + phase1, (an - phase1) * sizeof(arbint_limb_t));
 
     used = arbint_norm_used(rp, an);
     if (used == 0u)
@@ -853,8 +900,8 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
       Intermediate needs max(an,bn) limbs, +1 for possible carry.  */
   size_t min_n = (an < bn) ? an : bn;
   size_t max_n = (an > bn) ? an : bn;
-  const arbint_limb_t * longer = (an > bn) ? ARBINT_CLIMBS(a)
-                                           : ARBINT_CLIMBS(b);
+  const arbint_limb_t * longer =
+      (an > bn) ? ARBINT_CLIMBS(a) : ARBINT_CLIMBS(b);
   size_t need = max_n + 1u;
   size_t used;
   arbint_limb_t ba = 1u;
@@ -888,6 +935,8 @@ arbint_err_t arbint_and(arbint_t rop, const arbint_t a, const arbint_t b) {
   }
 
   used = arbint_mag_inc(rp, rp, max_n);
+  /*  Normalization needed: (a-1) | (b-1) may have leading zeros, so the
+      output of mag_inc requires normalization.  */
   used = arbint_norm_used(rp, used);
   if (used == 0u)
     arbint_zero(rop);
@@ -932,8 +981,8 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
         Beyond the shorter operand, x | 0 = x, so the tail is a copy.  */
     size_t min_n = (an < bn) ? an : bn;
     size_t max_n = (an > bn) ? an : bn;
-    const arbint_limb_t * longer = (an > bn) ? ARBINT_CLIMBS(a)
-                                              : ARBINT_CLIMBS(b);
+    const arbint_limb_t * longer =
+        (an > bn) ? ARBINT_CLIMBS(a) : ARBINT_CLIMBS(b);
     size_t used;
 
     if (rop[0]._cap < max_n) {
@@ -1002,6 +1051,8 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
     }
 
     used = arbint_mag_inc(rp, rp, max_n);
+    /*  Normalization needed: (b-1) & ~a may have leading zeros (AND shrinks,
+        and tail may be zeros), so mag_inc output requires normalization.  */
     used = arbint_norm_used(rp, used);
     if (used == 0u)
       arbint_zero(rop);
@@ -1043,6 +1094,8 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
   }
 
   used = arbint_mag_inc(rp, rp, min_n);
+  /*  Normalization needed: (a-1) & (b-1) may have leading zeros (AND
+      operation shrinks), so mag_inc output requires normalization.  */
   used = arbint_norm_used(rp, used);
   if (used == 0u)
     arbint_zero(rop);
@@ -1160,6 +1213,8 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
     }
 
     used = arbint_mag_inc(rp, rp, max_n);
+    /*  Normalization needed: a ^ (b-1) may have leading zeros (XOR can zero
+        out high limbs), so mag_inc output requires normalization.  */
     used = arbint_norm_used(rp, used);
     if (used == 0u)
       arbint_zero(rop);
@@ -1228,9 +1283,9 @@ arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
     On 64-bit limbs, (uint32_t)b zero-extends; we need sign extension so
     that ~bmask has zeroes (not ones) in the upper 32 bits.  */
 #if ARBINT_LIMB_BITS == 64
-  #define ARBINT_I32_TO_LIMB(b) ((arbint_limb_t)(int64_t)(int32_t)(b))
+  #define ARBINT_I32_TO_LIMB(b) ((arbint_limb_t) (int64_t) (int32_t) (b))
 #else
-  #define ARBINT_I32_TO_LIMB(b) ((arbint_limb_t)(uint32_t)(b))
+  #define ARBINT_I32_TO_LIMB(b) ((arbint_limb_t) (uint32_t) (b))
 #endif
 
 /*  arbint_and_u32: rop = a & b, where b is a uint32_t (single limb).
@@ -1367,6 +1422,9 @@ arbint_err_t arbint_and_i32(arbint_t rop, const arbint_t a, int32_t b) {
 
   /*  +1 for magnitude.  */
   used = arbint_mag_inc(rp, rp, an);
+  /*  Normalization needed: (a-1) | ~bmask may have leading zeros (if ~bmask
+      didn't set bits in the top limb), so mag_inc output needs normalization.
+   */
   used = arbint_norm_used(rp, used);
   if (used == 0u)
     arbint_zero(rop);
@@ -1452,6 +1510,8 @@ arbint_err_t arbint_or_u32(arbint_t rop, const arbint_t a, uint32_t b) {
 
   /*  +1 for magnitude.  */
   used = arbint_mag_inc(rp, rp, an);
+  /*  Normalization needed: (a-1) & ~b may have leading zeros (AND operation
+      can zero out top limbs), so mag_inc output requires normalization.  */
   used = arbint_norm_used(rp, used);
   if (used == 0u)
     arbint_zero(rop);
@@ -1498,6 +1558,9 @@ arbint_err_t arbint_or_i32(arbint_t rop, const arbint_t a, int32_t b) {
 
     ARBINT_LIMBS(rop)[0] = r0;
     used = arbint_mag_inc(ARBINT_LIMBS(rop), ARBINT_LIMBS(rop), 1u);
+    /*  Normalization needed: r0 may be zero, so mag_inc may return 1 with
+        a carry limb of 1, but input could be all zeros requiring
+       normalization.  */
     used = arbint_norm_used(ARBINT_LIMBS(rop), used);
     if (used == 0u)
       arbint_zero(rop);
@@ -1531,6 +1594,8 @@ arbint_err_t arbint_or_i32(arbint_t rop, const arbint_t a, int32_t b) {
   r0 = am1_0 & ~bmask;
   ARBINT_LIMBS(rop)[0] = r0;
   used = arbint_mag_inc(ARBINT_LIMBS(rop), ARBINT_LIMBS(rop), 1u);
+  /*  Normalization needed: (a-1)[0] & ~bmask may be zero, and mag_inc may
+      produce a result that needs normalization.  */
   used = arbint_norm_used(ARBINT_LIMBS(rop), used);
   if (used == 0u)
     arbint_zero(rop);
@@ -1616,6 +1681,8 @@ arbint_err_t arbint_xor_u32(arbint_t rop, const arbint_t a, uint32_t b) {
 
   /*  +1 for magnitude.  */
   used = arbint_mag_inc(rp, rp, an);
+  /*  Normalization needed: (a-1) ^ b may have leading zeros (XOR can zero
+      out top limbs), so mag_inc output requires normalization.  */
   used = arbint_norm_used(rp, used);
   if (used == 0u)
     arbint_zero(rop);
@@ -1671,6 +1738,8 @@ arbint_err_t arbint_xor_i32(arbint_t rop, const arbint_t a, int32_t b) {
       rp[i] = ap[i];
 
     used = arbint_mag_inc(rp, rp, an);
+    /*  Normalization needed: a ^ ~bmask may have leading zeros (XOR can zero
+        out top limbs), so mag_inc output requires normalization.  */
     used = arbint_norm_used(rp, used);
     if (used == 0u)
       arbint_zero(rop);

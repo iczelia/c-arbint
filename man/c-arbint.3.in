@@ -192,7 +192,7 @@ Core signed arithmetic on arbitrary-size integers.
 Scalar multiplication variants
 .RB ( arbint_mul_i32 ", " arbint_mul_u32 )
 provide optimized fast paths for multiplication by 32-bit values with
-early-exit for special cases (0, ±1).
+early-exit for special cases (0, +/\-1).
 .SS Truncated Division and Remainder
 .BR arbint_tdiv_qr (),
 .BR arbint_tdiv_q (),
@@ -616,11 +616,30 @@ The caller owns that buffer and must free it with the same allocator contract.
 .B Multiplication
 dispatches between a generic implementation and an optimized
 BMI2 path on supported x86 targets (using runtime CPU detection).
-The implementation switches between schoolbook (O(n²)) and Karatsuba
-(O(n^log₂3)) algorithms based on operand size (threshold: 32 limbs).
+The implementation switches between schoolbook (O(n^2)) and Karatsuba
+(O(n^log2(3))) algorithms based on operand size (threshold: 32 limbs).
+Scalar multiplication by a power of two is detected and delegated to
+.BR arbint_shl ()
+as a fast path.
+.PP
+.B Squaring
+.RB ( arbint_sqr ())
+dispatches to a specialized kernel rather than falling through to general
+multiplication.
+The schoolbook squarer exploits the symmetry a[i]*a[j] == a[j]*a[i] to
+halve the number of cross-product multiplications, then doubles the
+accumulated off-diagonal terms and adds the diagonal squares.
+For operands at or above the Karatsuba threshold the identity
+a^2 = a1^2*B^(2k) + ((a0+a1)^2 \- a0^2 \- a1^2)*B^k + a0^2
+is applied recursively, requiring three half-size squarings per level
+instead of four half-size multiplications in general Karatsuba.
 .PP
 .B Division
-by multi-limb divisors uses binary long division with magnitude comparison.
+by multi-limb divisors uses Knuth's Algorithm D (TAOCP Vol 2, Section 4.3.1).
+The dividend and divisor are normalized so the divisor's most significant bit is
+set, then quotient digits are estimated via a precomputed reciprocal of the top
+divisor limb and refined with a correction step.
+This gives O(n*m) complexity for an n-limb dividend and m-limb divisor.
 Division by single-limb divisors (u32/i32 variants) uses a reciprocal-based
 algorithm (Granlund-Montgomery technique) that replaces expensive hardware
 DIV instructions with two multiplications per limb plus minimal ALU operations.

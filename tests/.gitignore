@@ -9,5 +9,8 @@ test_random
 test_hash
 test_shift
 test_bitops
+test_mul_exhaustive
+test_sqr
 compute_pi
 compute_e
+compute_bitops

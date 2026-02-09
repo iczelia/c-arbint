@@ -24,6 +24,8 @@
 typedef arbint_err_t (*arbint_mul_impl_fn_t)(arbint_t rop, const arbint_t a,
                                              const arbint_t b);
 
+typedef arbint_err_t (*arbint_sqr_impl_fn_t)(arbint_t rop, const arbint_t a);
+
 typedef size_t (*arbint_mul_limb_1_fn_t)(arbint_limb_t * dst,
                                          const arbint_limb_t * a, size_t an,
                                          arbint_limb_t b);
@@ -56,11 +58,55 @@ static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
 #endif /* HAS_BMI2_ALWAYS */
 }
 
+/*  Select optimal squaring implementation.
+    Prefers BMI2 when available for faster wide multiply.  */
+static arbint_sqr_impl_fn_t arbint_select_sqr_impl(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_sqr_impl_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_sqr_impl_bmi2
+             : arbint_sqr_impl_generic;
+#else
+  return arbint_sqr_impl_generic;
+#endif /* HAS_BMI2_ALWAYS */
+}
+
 /*  Compute required capacity for multiplication result with overflow check.
-    Returns 1 on success (*out = an + bn + 1), 0 on overflow.  */
+
+    Calculates the capacity needed to store the product of n-limb and m-limb
+    numbers, which is at most n + m limbs (actually n + m or n + m - 1, but
+    we allocate +1 for safety and normalize after the operation).
+
+    The function validates that (an + bn + 1) fits in size_t before computing
+    it, preventing silent integer overflow. The checks are performed in an
+    order-dependent sequence to avoid underflow in intermediate calculations.
+
+    CRITICAL: Check ordering matters! The condition (an > SIZE_MAX - bn - 1u)
+    relies on the previous check (bn > SIZE_MAX - 1u) having succeeded to avoid
+    underflow. If bn == SIZE_MAX, then SIZE_MAX - bn == 0, and SIZE_MAX - bn -
+   1u would underflow to SIZE_MAX, making the check pass incorrectly. The prior
+    check catches bn >= SIZE_MAX, so this is safe.
+
+    Parameters:
+      an  - Number of limbs in first operand
+      bn  - Number of limbs in second operand
+      out - Output pointer for computed capacity (receives an + bn + 1)
+
+    Returns:
+      1 on success (*out = an + bn + 1), 0 on overflow or NULL out.
+
+    Precondition: out must be non-NULL (checked).
+
+    Overflow conditions detected:
+      - out == NULL
+      - bn > SIZE_MAX - 1
+      - an > SIZE_MAX - bn - 1 (i.e., an + bn + 1 would overflow)  */
 int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
   if (out == NULL)
     return 0;
+  /*  Order-dependent overflow checks. Check bn first to prevent underflow
+      in the second condition. See detailed comment above.  */
   if (bn > SIZE_MAX - 1u)
     return 0;
   if (an > SIZE_MAX - bn - 1u)
@@ -79,13 +125,40 @@ arbint_err_t arbint_mul(arbint_t rop, const arbint_t a, const arbint_t b) {
 }
 
 arbint_err_t arbint_sqr(arbint_t rop, const arbint_t a) {
-  if (rop == NULL || a == NULL)
-    return ARBINT_EINVAL;
-  return arbint_mul(rop, a, a);
+  static arbint_sqr_impl_fn_t impl = NULL;
+
+  if (impl == NULL)
+    impl = arbint_select_sqr_impl();
+
+  return impl(rop, a);
+}
+
+/*  Count trailing zeros in a 32-bit unsigned integer.
+    Precondition: v != 0.  */
+static unsigned arbint_ctz32(uint32_t v) {
+#if ARBINT_COMPILER_GNU_CLANG
+  return (unsigned) __builtin_ctz(v);
+#elif ARBINT_COMPILER_MSVC
+  {
+    unsigned long idx;
+    _BitScanForward(&idx, (unsigned long) v);
+    return (unsigned) idx;
+  }
+#else
+  {
+    unsigned n = 0u;
+    while ((v & 1u) == 0u) {
+      v >>= 1u;
+      ++n;
+    }
+    return n;
+  }
+#endif /* ARBINT_COMPILER_GNU_CLANG */
 }
 
 /*  Multiply arbint by uint32_t (rop = a * b).
-    Optimized path for single-limb multiplier with early exit for 0 and 1.  */
+    Optimized path for single-limb multiplier with early exit for 0, 1,
+    and powers of two (delegated to shift).  */
 arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
   static arbint_mul_limb_1_fn_t impl = NULL;
   int as;
@@ -108,6 +181,10 @@ arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
 
   if (b == 1u)
     return arbint_set(rop, a);
+
+  /*  Power-of-two fast path: delegate to left shift.  */
+  if ((b & (b - 1u)) == 0u)
+    return arbint_shl(rop, a, arbint_ctz32(b));
 
   an = arbint_abs_sz(a[0]._sz);
   cap = an + 1u;
