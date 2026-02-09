@@ -353,6 +353,33 @@ poly128_t r = vmull_p64(1, 1);
   [Define to 1 if ARM PMULL intrinsics are available globally.]
 )
 
+ARBINT_CHECK_ARM_FEATURE_WITH_FLAG(
+  [SHA-2 crypto intrinsics], [arbint_cv_have_arm_sha2_plain], [arbint_cv_have_arm_sha2_march],
+  [-march=armv8-a+crypto],
+  [[
+#include <arm_neon.h>
+  ]],
+  [[
+uint32x4_t a = vdupq_n_u32(0);
+uint32x4_t b = vsha256hq_u32(a, a, a);
+(void)b;
+  ]],
+  [HAS_ARM_SHA2], [HAS_ARM_SHA2_ALWAYS],
+  [Define to 1 if ARM SHA-2 crypto intrinsics are available (with or without -march flag).],
+  [Define to 1 if ARM SHA-2 crypto intrinsics are available globally.]
+)
+
+arbint_build_arm_sha2=no
+ARBINT_ARM_SHA2_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_arm_sha2_plain" = "xyes"], [
+  arbint_build_arm_sha2=yes
+], [test "x$arbint_cv_have_arm_sha2_march" = "xyes"], [
+  arbint_build_arm_sha2=yes
+  ARBINT_ARM_SHA2_CFLAGS="-march=armv8-a+crypto"
+])
+AM_CONDITIONAL([ARBINT_BUILD_ARM_SHA2], [test "x$arbint_build_arm_sha2" = "xyes"])
+AC_SUBST([ARBINT_ARM_SHA2_CFLAGS])
+
 dnl ARM CRC32C requires both CRC32 and PMULL for the accelerated implementation.
 arbint_build_arm_crc32c=no
 ARBINT_ARM_CRC32C_CFLAGS=""

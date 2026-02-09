@@ -38,7 +38,8 @@ typedef enum arbint_cpu_feature {
   ARBINT_CPU_FEATURE_FMA,
   ARBINT_CPU_FEATURE_SHA,
   ARBINT_CPU_FEATURE_ARM_CRC32,
-  ARBINT_CPU_FEATURE_ARM_PMULL
+  ARBINT_CPU_FEATURE_ARM_PMULL,
+  ARBINT_CPU_FEATURE_ARM_SHA2
 } arbint_cpu_feature_t;
 
 int arbint_cpu_has_feature(arbint_cpu_feature_t feature);

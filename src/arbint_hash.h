@@ -39,6 +39,11 @@ void arbint_sha256_compress_generic(uint32_t state[8],
 void arbint_sha256_compress_shani(uint32_t state[8], const uint8_t block[64]);
 #endif /* HAS_SHA_NI */
 
+#if HAS_ARM_SHA2
+/*  ARM Crypto Extensions accelerated single-block compression.  */
+void arbint_sha256_compress_arm(uint32_t state[8], const uint8_t block[64]);
+#endif /* HAS_ARM_SHA2 */
+
 /*  CRC32C over a byte buffer (generic portable, table-based).  */
 uint32_t arbint_crc32c_generic(uint32_t crc, const uint8_t * data, size_t len);
 

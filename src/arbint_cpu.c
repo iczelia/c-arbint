@@ -144,6 +144,7 @@ typedef struct {
   unsigned int sha : 1;
   unsigned int arm_crc32 : 1;
   unsigned int arm_pmull : 1;
+  unsigned int arm_sha2 : 1;
   uint64_t xcr0;
 } arbint_cpu_caps_t;
 
@@ -286,15 +287,20 @@ static arbint_cpu_caps_t arbint_cpu_probe_caps(void) {
     #ifndef HWCAP_PMULL
       #define HWCAP_PMULL (1ul << 4)
     #endif
+    #ifndef HWCAP_SHA2
+      #define HWCAP_SHA2 (1ul << 6)
+    #endif
 
     hwcap = getauxval(AT_HWCAP);
     caps.arm_crc32 = (hwcap & HWCAP_CRC32) != 0u;
     caps.arm_pmull = (hwcap & HWCAP_PMULL) != 0u;
+    caps.arm_sha2 = (hwcap & HWCAP_SHA2) != 0u;
   }
   #elif defined(__APPLE__)
-  /*  All Apple Silicon has CRC32 and PMULL.  */
+  /*  All Apple Silicon has CRC32, PMULL, and SHA-2.  */
   caps.arm_crc32 = 1u;
   caps.arm_pmull = 1u;
+  caps.arm_sha2 = 1u;
   #else
     /*  Compile-time detection only.  */
     #ifdef __ARM_FEATURE_CRC32
@@ -302,6 +308,7 @@ static arbint_cpu_caps_t arbint_cpu_probe_caps(void) {
     #endif
     #ifdef __ARM_FEATURE_CRYPTO
   caps.arm_pmull = 1u;
+  caps.arm_sha2 = 1u;
     #endif
   #endif /* __linux__ && HAVE_SYS_AUXV_H */
 #endif   /* ARBINT_TARGET_AARCH64 */
@@ -359,6 +366,8 @@ int arbint_cpu_has_feature(arbint_cpu_feature_t feature) {
     return (int) caps.arm_crc32;
   case ARBINT_CPU_FEATURE_ARM_PMULL:
     return (int) caps.arm_pmull;
+  case ARBINT_CPU_FEATURE_ARM_SHA2:
+    return (int) caps.arm_sha2;
   default:
     return 0;
   }

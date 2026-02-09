@@ -19,7 +19,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libarbint.la
 libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c arbint_bitops.c arbint_random.c arbint_hash.c arbint_hash_generic.c
-EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c arbint_hash_shani.c arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
+EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c arbint_hash_shani.c arbint_hash_sha2_neon.c arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
 libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
@@ -55,6 +55,10 @@ if ARBINT_BUILD_SSE42_CRC32
 libarbint_la_LIBADD += libarbint_la-arbint_hash_crc32c_sse42.lo
 endif
 
+if ARBINT_BUILD_ARM_SHA2
+libarbint_la_LIBADD += libarbint_la-arbint_hash_sha2_neon.lo
+endif
+
 if ARBINT_BUILD_ARM_CRC32C
 libarbint_la_LIBADD += libarbint_la-arbint_hash_crc32c_neon.lo
 endif
@@ -82,6 +86,9 @@ libarbint_la-arbint_hash_shani.lo: arbint_hash_shani.c
 
 libarbint_la-arbint_hash_crc32c_sse42.lo: arbint_hash_crc32c_sse42.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_SSE42_CRC32_CFLAGS) -c -o $@ `test -f 'arbint_hash_crc32c_sse42.c' || echo '$(srcdir)/'`arbint_hash_crc32c_sse42.c
+
+libarbint_la-arbint_hash_sha2_neon.lo: arbint_hash_sha2_neon.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_ARM_SHA2_CFLAGS) -c -o $@ `test -f 'arbint_hash_sha2_neon.c' || echo '$(srcdir)/'`arbint_hash_sha2_neon.c
 
 libarbint_la-arbint_hash_crc32c_neon.lo: arbint_hash_crc32c_neon.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS) $(ARBINT_ARM_CRC32C_CFLAGS) -c -o $@ `test -f 'arbint_hash_crc32c_neon.c' || echo '$(srcdir)/'`arbint_hash_crc32c_neon.c

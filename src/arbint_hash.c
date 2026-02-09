@@ -40,6 +40,12 @@ static arbint_sha256_compress_fn_t arbint_select_sha256_compress(void) {
   return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_SHA)
              ? arbint_sha256_compress_shani
              : arbint_sha256_compress_generic;
+#elif HAS_ARM_SHA2_ALWAYS
+  return arbint_sha256_compress_arm;
+#elif HAS_ARM_SHA2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_SHA2)
+             ? arbint_sha256_compress_arm
+             : arbint_sha256_compress_generic;
 #else
   return arbint_sha256_compress_generic;
 #endif /* HAS_SHA_NI_ALWAYS */
