@@ -31,7 +31,7 @@ typedef void (*arbint_sha256_compress_fn_t)(uint32_t state[8],
                                             const uint8_t block[64]);
 
 typedef uint32_t (*arbint_crc32c_fn_t)(uint32_t crc, const uint8_t * data,
-                                        size_t len);
+                                       size_t len);
 
 static arbint_sha256_compress_fn_t arbint_select_sha256_compress(void) {
 #if HAS_SHA_NI_ALWAYS
@@ -78,7 +78,7 @@ static void arbint_sha256_init(arbint_sha256_state_t * st) {
 
 /*  Feed data into SHA-256 state, compressing complete 64-byte blocks.  */
 static void arbint_sha256_update(arbint_sha256_state_t * st,
-                                  const uint8_t * data, size_t len) {
+                                 const uint8_t * data, size_t len) {
   size_t i = 0u;
 
   st->total_len += (uint64_t) len;
@@ -120,7 +120,7 @@ static void arbint_sha256_store_be32(uint8_t * dst, uint32_t v) {
 
 /*  Finalize SHA-256: apply FIPS 180-4 padding and write digest.  */
 static void arbint_sha256_final(arbint_sha256_state_t * st,
-                                 uint8_t digest[32]) {
+                                uint8_t digest[32]) {
   uint64_t bit_len = st->total_len * 8u;
   size_t pad_start;
   unsigned i;
@@ -158,7 +158,7 @@ static void arbint_sha256_final(arbint_sha256_state_t * st,
 
 /*  Callback type: receives (ctx, data, len) for each chunk.  */
 typedef void (*arbint_hash_feed_fn_t)(void * ctx, const uint8_t * data,
-                                       size_t len);
+                                      size_t len);
 
 /*  Count the number of significant bytes in a limb (0 for zero).  */
 static size_t arbint_hash_limb_used_bytes(arbint_limb_t x) {
@@ -174,8 +174,7 @@ static size_t arbint_hash_limb_used_bytes(arbint_limb_t x) {
     Canonical form: sign byte (0x00/0x01/0xff) followed by the magnitude
     in little-endian byte order with no leading zero bytes.  */
 static void arbint_feed_canonical(const arbint_t op,
-                                   arbint_hash_feed_fn_t feed,
-                                   void * ctx) {
+                                  arbint_hash_feed_fn_t feed, void * ctx) {
   int sign;
   size_t used;
   const arbint_limb_t * p;
@@ -230,7 +229,7 @@ static void arbint_feed_canonical(const arbint_t op,
 /* ========== SHA-256 Feed Callback ========== */
 
 static void arbint_sha256_feed_cb(void * ctx, const uint8_t * data,
-                                   size_t len) {
+                                  size_t len) {
   arbint_sha256_update((arbint_sha256_state_t *) ctx, data, len);
 }
 
@@ -242,16 +241,15 @@ typedef struct arbint_crc32c_ctx {
 } arbint_crc32c_ctx_t;
 
 static void arbint_crc32c_feed_cb(void * ctx, const uint8_t * data,
-                                   size_t len) {
+                                  size_t len) {
   arbint_crc32c_ctx_t * st = (arbint_crc32c_ctx_t *) ctx;
   st->crc = st->fn(st->crc, data, len);
 }
 
 /* ========== Public API ========== */
 
-ARBINT_API arbint_err_t arbint_hash_slow(const arbint_t op,
-                                          uint8_t * out_hash,
-                                          size_t hash_len) {
+ARBINT_API arbint_err_t arbint_hash_slow(const arbint_t op, uint8_t * out_hash,
+                                         size_t hash_len) {
   if (op == NULL || out_hash == NULL)
     return ARBINT_EINVAL;
   if (hash_len == 0u)
@@ -308,7 +306,7 @@ ARBINT_API arbint_err_t arbint_hash_slow(const arbint_t op,
 }
 
 ARBINT_API arbint_err_t arbint_hash_fast(const arbint_t op,
-                                          uint32_t * out_hash) {
+                                         uint32_t * out_hash) {
   arbint_crc32c_ctx_t ctx;
 
   if (op == NULL || out_hash == NULL)

@@ -27,8 +27,7 @@
     Processes data in 8-byte (64-bit only), 4-byte, and single-byte
     chunks for maximum throughput.  Uses memcpy for safe unaligned
     loads (never casts void * to wider integer types).  */
-uint32_t arbint_crc32c_sse42(uint32_t crc, const uint8_t * data,
-                              size_t len) {
+uint32_t arbint_crc32c_sse42(uint32_t crc, const uint8_t * data, size_t len) {
   size_t i = 0u;
 
 #if ARBINT_LIMB_BITS == 64

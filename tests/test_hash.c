@@ -47,10 +47,11 @@ int main(void) {
     uint8_t buf[1] = {0xAAu};
     CHECK_EQ_I(arbint_set_i32(a, 42), ARBINT_OK);
     CHECK_EQ_I(arbint_hash_slow(a, buf, 0u), ARBINT_OK);
-    CHECK_EQ_I(buf[0], 0xAAu);  /*  Untouched.  */
+    CHECK_EQ_I(buf[0], 0xAAu); /*  Untouched.  */
   }
 
-  /*  Test 3: Determinism — hashing the same value twice gives identical output.  */
+  /*  Test 3: Determinism — hashing the same value twice gives identical
+   * output.  */
   {
     uint8_t h1[32];
     uint8_t h2[32];
@@ -109,7 +110,8 @@ int main(void) {
     CHECK_NE_I(f1, f2);
   }
 
-  /*  Test 6: Truncation — hash_len=16 matches first 16 bytes of hash_len=32.  */
+  /*  Test 6: Truncation — hash_len=16 matches first 16 bytes of hash_len=32.
+   */
   {
     uint8_t full[32];
     uint8_t trunc[16];

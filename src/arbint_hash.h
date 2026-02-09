@@ -22,10 +22,10 @@
 
 /*  SHA-256 intermediate state.  */
 typedef struct arbint_sha256_state {
-  uint32_t h[8];       /*  Chain values.  */
-  uint8_t buf[64];     /*  Partial block buffer.  */
-  size_t buf_len;      /*  Bytes currently in buf (0..63).  */
-  uint64_t total_len;  /*  Total bytes fed so far.  */
+  uint32_t h[8];      /*  Chain values.  */
+  uint8_t buf[64];    /*  Partial block buffer.  */
+  size_t buf_len;     /*  Bytes currently in buf (0..63).  */
+  uint64_t total_len; /*  Total bytes fed so far.  */
 } arbint_sha256_state_t;
 
 /*  SHA-256 single-block compression (generic portable).
@@ -36,18 +36,15 @@ void arbint_sha256_compress_generic(uint32_t state[8],
 
 #if HAS_SHA_NI
 /*  SHA-NI accelerated single-block compression.  */
-void arbint_sha256_compress_shani(uint32_t state[8],
-                                  const uint8_t block[64]);
+void arbint_sha256_compress_shani(uint32_t state[8], const uint8_t block[64]);
 #endif /* HAS_SHA_NI */
 
 /*  CRC32C over a byte buffer (generic portable, table-based).  */
-uint32_t arbint_crc32c_generic(uint32_t crc, const uint8_t * data,
-                                size_t len);
+uint32_t arbint_crc32c_generic(uint32_t crc, const uint8_t * data, size_t len);
 
 #if HAS_SSE42_CRC32
 /*  CRC32C using SSE4.2 _mm_crc32_* intrinsics.  */
-uint32_t arbint_crc32c_sse42(uint32_t crc, const uint8_t * data,
-                              size_t len);
+uint32_t arbint_crc32c_sse42(uint32_t crc, const uint8_t * data, size_t len);
 #endif /* HAS_SSE42_CRC32 */
 
 #endif /* ARBINT_HASH_H */
