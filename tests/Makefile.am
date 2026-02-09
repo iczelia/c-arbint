@@ -33,6 +33,7 @@ check_PROGRAMS = \
   test_shift \
   test_bitops \
   test_pow \
+  test_isqrt \
   compute_pi \
   compute_e \
   compute_bitops

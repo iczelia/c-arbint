@@ -298,6 +298,87 @@ cleanup:
   return rc;
 }
 
+/*  Compute rop = floor(sqrt(a)) via Newton's method (integer Heron).
+
+    The iteration x_{n+1} = floor((x_n + floor(a / x_n)) / 2) converges
+    quadratically from above. Termination: when x_{n+1} >= x_n, x_n is
+    the answer.
+
+    Initial guess: x_0 = 1 << ((nbits(a) + 1) / 2), which is always
+    >= floor(sqrt(a)) and at most 2x too large.
+
+    Returns ARBINT_EDOM if a < 0.  */
+arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a) {
+  arbint_ctx_t * ctx;
+  arbint_t x;
+  arbint_t t;
+  arbint_err_t rc;
+  size_t nbits;
+
+  if (rop == NULL || a == NULL)
+    return ARBINT_EINVAL;
+
+  if (a[0]._sz < 0)
+    return ARBINT_EDOM;
+
+  /*  isqrt(0) = 0.  */
+  if (a[0]._sz == 0) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = a[0]._ctx;
+
+  rc = arbint_init(x, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_init(t, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(x);
+    return rc;
+  }
+
+  /*  Initial guess: x = 1 << ((nbits(a) + 1) / 2).  */
+  nbits = arbint_nbits(a);
+  rc = arbint_set_i32(x, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_shl(x, x, (uint32_t) ((nbits + 1u) / 2u));
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Newton iteration: t = (x + a/x) / 2.
+      Terminate when t >= x (sequence is monotonically decreasing).  */
+  for (;;) {
+    rc = arbint_tdiv_q(t, a, x);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_add(t, t, x);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_shr(t, t, 1u);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (arbint_cmp(t, x) >= 0)
+      break;
+
+    rc = arbint_set(x, t);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  rc = arbint_set(rop, x);
+
+cleanup:
+  arbint_clear(t);
+  arbint_clear(x);
+  return rc;
+}
+
 /*  Multiply arbint by int32_t (rop = a * b).
     Handles sign extraction and delegates to mul_u32 for magnitude.  */
 arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {

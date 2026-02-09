@@ -11,6 +11,7 @@ test_shift
 test_bitops
 test_mul_exhaustive
 test_sqr
+test_isqrt
 test_pow
 compute_pi
 compute_e
