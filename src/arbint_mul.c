@@ -24,6 +24,8 @@
 typedef arbint_err_t (*arbint_mul_impl_fn_t)(arbint_t rop, const arbint_t a,
                                              const arbint_t b);
 
+typedef arbint_err_t (*arbint_sqr_impl_fn_t)(arbint_t rop, const arbint_t a);
+
 typedef size_t (*arbint_mul_limb_1_fn_t)(arbint_limb_t * dst,
                                          const arbint_limb_t * a, size_t an,
                                          arbint_limb_t b);
@@ -56,6 +58,20 @@ static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
 #endif /* HAS_BMI2_ALWAYS */
 }
 
+/*  Select optimal squaring implementation.
+    Prefers BMI2 when available for faster wide multiply.  */
+static arbint_sqr_impl_fn_t arbint_select_sqr_impl(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_sqr_impl_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_sqr_impl_bmi2
+             : arbint_sqr_impl_generic;
+#else
+  return arbint_sqr_impl_generic;
+#endif /* HAS_BMI2_ALWAYS */
+}
+
 /*  Compute required capacity for multiplication result with overflow check.
     Returns 1 on success (*out = an + bn + 1), 0 on overflow.  */
 int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
@@ -79,13 +95,40 @@ arbint_err_t arbint_mul(arbint_t rop, const arbint_t a, const arbint_t b) {
 }
 
 arbint_err_t arbint_sqr(arbint_t rop, const arbint_t a) {
-  if (rop == NULL || a == NULL)
-    return ARBINT_EINVAL;
-  return arbint_mul(rop, a, a);
+  static arbint_sqr_impl_fn_t impl = NULL;
+
+  if (impl == NULL)
+    impl = arbint_select_sqr_impl();
+
+  return impl(rop, a);
+}
+
+/*  Count trailing zeros in a 32-bit unsigned integer.
+    Precondition: v != 0.  */
+static unsigned arbint_ctz32(uint32_t v) {
+#if ARBINT_COMPILER_GNU_CLANG
+  return (unsigned) __builtin_ctz(v);
+#elif ARBINT_COMPILER_MSVC
+  {
+    unsigned long idx;
+    _BitScanForward(&idx, (unsigned long) v);
+    return (unsigned) idx;
+  }
+#else
+  {
+    unsigned n = 0u;
+    while ((v & 1u) == 0u) {
+      v >>= 1u;
+      ++n;
+    }
+    return n;
+  }
+#endif /* ARBINT_COMPILER_GNU_CLANG */
 }
 
 /*  Multiply arbint by uint32_t (rop = a * b).
-    Optimized path for single-limb multiplier with early exit for 0 and 1.  */
+    Optimized path for single-limb multiplier with early exit for 0, 1,
+    and powers of two (delegated to shift).  */
 arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
   static arbint_mul_limb_1_fn_t impl = NULL;
   int as;
@@ -108,6 +151,10 @@ arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
 
   if (b == 1u)
     return arbint_set(rop, a);
+
+  /*  Power-of-two fast path: delegate to left shift.  */
+  if ((b & (b - 1u)) == 0u)
+    return arbint_shl(rop, a, arbint_ctz32(b));
 
   an = arbint_abs_sz(a[0]._sz);
   cap = an + 1u;

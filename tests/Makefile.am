@@ -22,6 +22,8 @@ AM_LDFLAGS = $(ARBINT_LTO_LDFLAGS)
 check_PROGRAMS = \
   test_basic \
   test_mul \
+  test_mul_exhaustive \
+  test_sqr \
   test_tdiv \
   test_large \
   test_stochastic \

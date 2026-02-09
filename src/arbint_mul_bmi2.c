@@ -97,5 +97,6 @@ static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
 
 #define ARBINT_MUL_LIMB_1_FN arbint_mul_limb_1_bmi2
 #define ARBINT_MUL_IMPL_FN arbint_mul_impl_bmi2
+#define ARBINT_SQR_IMPL_FN arbint_sqr_impl_bmi2
 
 #include "arbint_mul_core.inc"
