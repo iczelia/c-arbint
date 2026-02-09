@@ -73,10 +73,40 @@ static arbint_sqr_impl_fn_t arbint_select_sqr_impl(void) {
 }
 
 /*  Compute required capacity for multiplication result with overflow check.
-    Returns 1 on success (*out = an + bn + 1), 0 on overflow.  */
+
+    Calculates the capacity needed to store the product of n-limb and m-limb
+    numbers, which is at most n + m limbs (actually n + m or n + m - 1, but
+    we allocate +1 for safety and normalize after the operation).
+
+    The function validates that (an + bn + 1) fits in size_t before computing
+    it, preventing silent integer overflow. The checks are performed in an
+    order-dependent sequence to avoid underflow in intermediate calculations.
+
+    CRITICAL: Check ordering matters! The condition (an > SIZE_MAX - bn - 1u)
+    relies on the previous check (bn > SIZE_MAX - 1u) having succeeded to avoid
+    underflow. If bn == SIZE_MAX, then SIZE_MAX - bn == 0, and SIZE_MAX - bn -
+   1u would underflow to SIZE_MAX, making the check pass incorrectly. The prior
+    check catches bn >= SIZE_MAX, so this is safe.
+
+    Parameters:
+      an  - Number of limbs in first operand
+      bn  - Number of limbs in second operand
+      out - Output pointer for computed capacity (receives an + bn + 1)
+
+    Returns:
+      1 on success (*out = an + bn + 1), 0 on overflow or NULL out.
+
+    Precondition: out must be non-NULL (checked).
+
+    Overflow conditions detected:
+      - out == NULL
+      - bn > SIZE_MAX - 1
+      - an > SIZE_MAX - bn - 1 (i.e., an + bn + 1 would overflow)  */
 int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
   if (out == NULL)
     return 0;
+  /*  Order-dependent overflow checks. Check bn first to prevent underflow
+      in the second condition. See detailed comment above.  */
   if (bn > SIZE_MAX - 1u)
     return 0;
   if (an > SIZE_MAX - bn - 1u)

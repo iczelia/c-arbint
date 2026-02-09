@@ -235,17 +235,49 @@ void arbint_swap(arbint_t a, arbint_t b) {
   b[0] = tmp;
 }
 
-/*  Set _sz with given magnitude and sign.
-    Returns 1 on success, 0 on overflow (used > PTRDIFF_MAX).  */
+/*  Set arbint size field from magnitude and sign.
+
+    Sets x->_sz to encode both the magnitude (number of used limbs) and sign
+    of the integer. The sign is encoded in the sign of _sz itself:
+      _sz > 0: positive number with _sz limbs
+      _sz < 0: negative number with abs(_sz) limbs
+      _sz = 0: exactly zero (canonical representation)
+
+    This function enforces the normalization invariant that _sz == 0 represents
+    zero (not negative zero) and abs(_sz) equals the actual used limb count.
+
+    Parameters:
+      x    - Target arbint (must be non-NULL)
+      used - Number of significant limbs (magnitude)
+      sign - Sign indicator: <0 for negative, 0 for zero, >0 for positive
+
+    Returns:
+      1 on success, 0 on overflow (used > PTRDIFF_MAX)
+
+    Preconditions:
+      - x != NULL
+      - used <= PTRDIFF_MAX (enforced by check below)
+      - If used == 0, the final _sz will be 0 regardless of sign (enforced)
+
+    Overflow handling: Since _sz is ptrdiff_t (signed), the maximum
+    representable magnitude is PTRDIFF_MAX (typically 2^62 - 1 on 64-bit). If
+    used exceeds this, returns 0 to signal overflow. On 64-bit systems with
+    64-bit limbs, this limits numbers to ~2^(62 * 64) = 2^3968 bits, which is
+    acceptable for practical use.
+
+    Sign handling: For negative numbers, computes -(ptrdiff_t)used safely
+    without overflow since used <= PTRDIFF_MAX guarantees the negation fits in
+    ptrdiff_t. The special case used==0 forces _sz=0 regardless of sign to
+    maintain the invariant that zero has no sign.  */
 int arbint_set_signed_sz(arbint_t x, size_t used, int sign) {
   if (x == NULL)
     return 0;
   if (used == 0u) {
-    x[0]._sz = 0;
+    x[0]._sz = 0; /* Canonical zero: always _sz == 0, not negative zero */
     return 1;
   }
   if (used > (size_t) PTRDIFF_MAX)
-    return 0;
+    return 0; /* Magnitude too large to represent in ptrdiff_t */
   x[0]._sz = (sign < 0) ? -(ptrdiff_t) used : (ptrdiff_t) used;
   return 1;
 }
@@ -280,20 +312,64 @@ size_t arbint_norm_used(const arbint_limb_t * x, size_t n) {
   return n;
 }
 
-/*  Allocate temporary limb array using given allocator.
-    Treats n=0 as n=1 to avoid zero-size allocations.  */
+/*  Allocate temporary limb array for intermediate calculations.
+
+    Allocates a temporary buffer of n limbs using the provided allocator.
+    Used throughout the library for scratch space in algorithms like Karatsuba
+    multiplication, division, and other multi-limb operations.
+
+    Zero-size allocation handling: Requesting 0 limbs is treated as requesting
+    1 limb. Rationale: Some allocators (including some libc implementations)
+    return NULL for zero-size allocations, which creates ambiguity (NULL could
+    mean "allocation failed" or "empty allocation succeeded"). Requesting at
+    least 1 byte ensures non-NULL return on success, making error detection
+    straightforward via NULL check.
+
+    Parameters:
+      alloc - Allocator to use (must be non-NULL with valid realloc function)
+      n     - Number of limbs to allocate (0 treated as 1)
+
+    Returns:
+      Pointer to allocated limb array on success, NULL on failure (out of
+      memory or overflow in size calculation).
+
+    Preconditions:
+      - alloc != NULL && alloc->realloc != NULL
+      - n <= SIZE_MAX / sizeof(arbint_limb_t) (checked internally)
+
+    Caller responsibility: Must free returned pointer via arbint_free_limbs
+    using the same allocator. Failure to free causes memory leak.
+
+    Overflow protection: Checks n * sizeof(arbint_limb_t) <= SIZE_MAX before
+    allocating to prevent integer overflow in size calculation.  */
 arbint_limb_t * arbint_alloc_limbs(const arbint_alloc_t * alloc, size_t n) {
   if (alloc == NULL || alloc->realloc == NULL)
     return NULL;
   if (n == 0u)
-    n = 1u;
+    n = 1u; /* Avoid zero-size allocation ambiguity (see comment above) */
   if (n > SIZE_MAX / sizeof(arbint_limb_t))
     return NULL;
   return (arbint_limb_t *) alloc->realloc(alloc->ud, NULL,
                                           n * sizeof(arbint_limb_t));
 }
 
-/*  Free temporary limb array allocated by arbint_alloc_limbs.  */
+/*  Free temporary limb array allocated by arbint_alloc_limbs.
+
+    Releases memory allocated by arbint_alloc_limbs. Safe to call with NULL
+    pointer (no-op). Must use the same allocator that was used for allocation.
+
+    Parameters:
+      alloc - Same allocator used in arbint_alloc_limbs (must be non-NULL)
+      p     - Pointer to limb array, or NULL
+
+    Precondition: If p is non-NULL, it must have been allocated via
+    arbint_alloc_limbs using the same allocator. Passing a pointer from a
+    different source or different allocator is undefined behavior.
+
+    Implementation note: Uses realloc(ptr, 0) to free, per the allocator
+    contract (see arbint_realloc_fn typedef in arbint.h). The cast to (void)
+    discards the return value since realloc(ptr, 0) may return NULL or an
+    opaque marker, neither of which is meaningful for freeing.  */
 void arbint_free_limbs(const arbint_alloc_t * alloc, arbint_limb_t * p) {
   if (p == NULL || alloc == NULL || alloc->realloc == NULL)
     return;

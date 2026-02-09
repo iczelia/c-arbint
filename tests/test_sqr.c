@@ -173,8 +173,8 @@ static void test_sqr_vs_mul_small(void) {
   CHECK_EQ_I(arbint_init(mul_r, &ctx), ARBINT_OK);
 
   {
-    int32_t vals[] = {0, 1, -1, 2, -2, 127, -128, 32767, -32768,
-                      INT32_MAX, INT32_MIN + 1};
+    int32_t vals[] = {0,    1,     -1,     2,         -2,           127,
+                      -128, 32767, -32768, INT32_MAX, INT32_MIN + 1};
     size_t i;
 
     for (i = 0u; i < sizeof(vals) / sizeof(vals[0]); ++i) {
@@ -306,15 +306,13 @@ static void test_sqr_vs_mul_multi_limb(void) {
   {
     /*  Test at sizes that exercise schoolbook, threshold boundary,
         and Karatsuba.  KARATSUBA_THRESHOLD is 32.  */
-    static const size_t sizes[] = {
-      1u, 2u, 3u, 4u, 7u, 8u, 15u, 16u,
-      30u, 31u, 32u, 33u, 34u, 48u, 63u, 64u, 65u,
-      96u, 100u, 128u
-    };
+    static const size_t sizes[] = {1u,  2u,  3u,  4u,  7u,   8u,  15u,
+                                   16u, 30u, 31u, 32u, 33u,  34u, 48u,
+                                   63u, 64u, 65u, 96u, 100u, 128u};
     size_t si;
 
-    for (si = 0u; si < sizeof(sizes) / sizeof(sizes[0]) &&
-                  g_failures == 0; ++si) {
+    for (si = 0u; si < sizeof(sizes) / sizeof(sizes[0]) && g_failures == 0;
+         ++si) {
       size_t n = sizes[si];
       int sign = (xrng_u64(&rng) & 1u) ? 1 : -1;
 
@@ -324,9 +322,8 @@ static void test_sqr_vs_mul_multi_limb(void) {
       CHECK_EQ_I(arbint_mul(mul_r, a, a), ARBINT_OK);
 
       if (!arbint_eq(sqr_r, mul_r)) {
-        fprintf(stderr,
-                "FAIL sqr vs mul mismatch at size %zu (sign %d)\n",
-                n, sign);
+        fprintf(stderr, "FAIL sqr vs mul mismatch at size %zu (sign %d)\n", n,
+                sign);
         ++g_failures;
       }
 
@@ -370,8 +367,8 @@ static void test_sqr_algebraic_identity(void) {
     static const size_t sizes[] = {1u, 4u, 16u, 31u, 32u, 33u, 50u};
     size_t si;
 
-    for (si = 0u; si < sizeof(sizes) / sizeof(sizes[0]) &&
-                  g_failures == 0; ++si) {
+    for (si = 0u; si < sizeof(sizes) / sizeof(sizes[0]) && g_failures == 0;
+         ++si) {
       size_t n = sizes[si];
 
       fill_random(a, 1, n, &rng);
@@ -390,8 +387,7 @@ static void test_sqr_algebraic_identity(void) {
       CHECK_EQ_I(arbint_add(rhs, rhs, ab), ARBINT_OK);
 
       if (!arbint_eq(lhs, rhs)) {
-        fprintf(stderr,
-                "FAIL (a+b)^2 identity at size %zu\n", n);
+        fprintf(stderr, "FAIL (a+b)^2 identity at size %zu\n", n);
         ++g_failures;
       }
     }
@@ -437,8 +433,8 @@ static void test_sqr_diff_of_squares(void) {
     static const size_t sizes[] = {2u, 8u, 31u, 32u, 33u, 64u};
     size_t si;
 
-    for (si = 0u; si < sizeof(sizes) / sizeof(sizes[0]) &&
-                  g_failures == 0; ++si) {
+    for (si = 0u; si < sizeof(sizes) / sizeof(sizes[0]) && g_failures == 0;
+         ++si) {
       size_t n = sizes[si];
 
       fill_random(a, 1, n, &rng);
@@ -455,8 +451,7 @@ static void test_sqr_diff_of_squares(void) {
       CHECK_EQ_I(arbint_sub(rhs, a2, b2), ARBINT_OK);
 
       if (!arbint_eq(lhs, rhs)) {
-        fprintf(stderr,
-                "FAIL diff-of-squares identity at size %zu\n", n);
+        fprintf(stderr, "FAIL diff-of-squares identity at size %zu\n", n);
         ++g_failures;
       }
     }
@@ -561,9 +556,8 @@ static void test_sqr_stochastic(void) {
     CHECK_EQ_I(arbint_mul(mul_r, a, a), ARBINT_OK);
 
     if (!arbint_eq(sqr_r, mul_r)) {
-      fprintf(stderr,
-              "FAIL stochastic sqr vs mul at iter %d (size %zu)\n",
-              i, n);
+      fprintf(stderr, "FAIL stochastic sqr vs mul at iter %d (size %zu)\n", i,
+              n);
       ++g_failures;
     }
   }
@@ -589,10 +583,10 @@ static void test_mul_u32_power_of_two(void) {
 
   /*  Test various power-of-two multipliers against shl.  */
   {
-    uint32_t pows[] = {2u, 4u, 8u, 16u, 32u, 64u, 256u, 1024u,
+    uint32_t pows[] = {2u,         4u,         8u,         16u,
+                       32u,        64u,        256u,       1024u,
                        (1u << 16), (1u << 20), (1u << 30), (1u << 31)};
-    uint32_t shifts[] = {1u, 2u, 3u, 4u, 5u, 6u, 8u, 10u,
-                         16u, 20u, 30u, 31u};
+    uint32_t shifts[] = {1u, 2u, 3u, 4u, 5u, 6u, 8u, 10u, 16u, 20u, 30u, 31u};
     size_t i;
 
     for (i = 0u; i < sizeof(pows) / sizeof(pows[0]); ++i) {

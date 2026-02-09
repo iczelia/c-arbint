@@ -46,7 +46,11 @@ static inline unsigned arbint_popcount_limb(arbint_limb_t x) {
 #endif /* ARBINT_COMPILER_GNU_CLANG */
 }
 
-/*  Count trailing zeros in a single limb.  Undefined if x == 0.  */
+/*  Count trailing zeros in a single limb.
+    Precondition: x != 0 (behavior is undefined for zero input).
+    On GCC/Clang, __builtin_ctz(0) is undefined. On MSVC, _BitScanForward(0)
+    writes an unspecified value to the output parameter. The fallback loop
+    would run indefinitely. Callers MUST check for zero before calling.  */
 static inline unsigned arbint_ctz_limb(arbint_limb_t x) {
 #if ARBINT_COMPILER_GNU_CLANG
   #if ARBINT_LIMB_BITS == 64

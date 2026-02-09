@@ -89,7 +89,12 @@ static inline size_t arbint_abs_sz(ptrdiff_t sz) {
   return (size_t) (-(sz + 1)) + 1;
 }
 
-/*  Internal function to count the number of leading zeros in a limb.  */
+/*  Internal function to count the number of leading zeros in a limb.
+    Precondition: x != 0 (behavior is undefined for zero input).
+    On GCC/Clang, __builtin_clz(0) is undefined. On MSVC, _BitScanReverse(0)
+    writes an unspecified value to the output parameter. The fallback loop
+    returns LIMB_BITS for zero, which is technically correct but callers
+    should not rely on this. Callers MUST check for zero before calling.  */
 static inline unsigned arbint_clz_limb(arbint_limb_t x) {
 #if ARBINT_COMPILER_GNU_CLANG
   #if ARBINT_LIMB_BITS == 64

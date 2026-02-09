@@ -163,7 +163,7 @@ static void test_bitwise_adder(void) {
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
   CHECK_EQ_I(arbint_init_all(&ctx, a, b, t, sum_bit, sum_ref, base,
-                              (arbint_t *) NULL),
+                             (arbint_t *) NULL),
              ARBINT_OK);
 
   /*  a = 2^256 - 1, b = 1.  Full carry chain.  */
@@ -278,9 +278,9 @@ static void test_bitwise_subtractor(void) {
   fprintf(stderr, "  bitwise subtractor: ");
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
-  CHECK_EQ_I(arbint_init_all(&ctx, a, b, diff_bit, diff_ref, base,
-                              (arbint_t *) NULL),
-             ARBINT_OK);
+  CHECK_EQ_I(
+      arbint_init_all(&ctx, a, b, diff_bit, diff_ref, base, (arbint_t *) NULL),
+      ARBINT_OK);
 
   /*  2^256 - 1.  */
   CHECK_EQ_I(arbint_set_u32(base, 2u), ARBINT_OK);
@@ -328,7 +328,7 @@ static void test_bitwise_subtractor(void) {
 /* ========== Section 3: Binary GCD (Stein's algorithm) ========== */
 
 static arbint_err_t binary_gcd(arbint_t g, const arbint_t a,
-                                const arbint_t b) {
+                               const arbint_t b) {
   arbint_t u, v;
   arbint_err_t rc;
   arbint_ctx_t * ctx = arbint_get_ctx(a);
@@ -457,8 +457,7 @@ static void test_binary_gcd(void) {
   fprintf(stderr, "  binary GCD: ");
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
-  CHECK_EQ_I(arbint_init_all(&ctx, a, b, g, expected, base,
-                              (arbint_t *) NULL),
+  CHECK_EQ_I(arbint_init_all(&ctx, a, b, g, expected, base, (arbint_t *) NULL),
              ARBINT_OK);
 
   /*  gcd(0, 0) = 0.  */
@@ -615,8 +614,7 @@ static void test_identity_gauntlet(void) {
 
   for (i = 0; i < N_OPERANDS; ++i)
     CHECK_EQ_I(arbint_init(ops[i], &ctx), ARBINT_OK);
-  CHECK_EQ_I(arbint_init_all(&ctx, r1, r2, t1, t2, zero,
-                              (arbint_t *) NULL),
+  CHECK_EQ_I(arbint_init_all(&ctx, r1, r2, t1, t2, zero, (arbint_t *) NULL),
              ARBINT_OK);
 
   build_operands(ops, &ctx);
@@ -718,11 +716,10 @@ static void test_identity_gauntlet(void) {
 
   /*  Distributive laws with triples.  */
   {
-    static const int triples[][3] = {
-      {1, 3, 6},  {2, 4, 7},  {0, 8, 9},  {3, 6, 10},
-      {1, 7, 9},  {4, 8, 10}, {2, 6, 8},  {0, 1, 2},
-      {5, 11, 13}, {3, 12, 7}, {4, 10, 13}, {1, 9, 12}
-    };
+    static const int triples[][3] = {{1, 3, 6},  {2, 4, 7},   {0, 8, 9},
+                                     {3, 6, 10}, {1, 7, 9},   {4, 8, 10},
+                                     {2, 6, 8},  {0, 1, 2},   {5, 11, 13},
+                                     {3, 12, 7}, {4, 10, 13}, {1, 9, 12}};
     int t;
     for (t = 0;
          t < (int) (sizeof(triples) / sizeof(triples[0])) && g_failures == 0;
@@ -794,8 +791,8 @@ static void test_popcount_hamming_cross(void) {
 
   /*  hamming(a, b) = popcount(a ^ b) for non-negative a, b.  */
   {
-    static const uint32_t vals[] = {0u, 1u, 42u, 0xFFu, 0xFFFFu,
-                                    0x7FFFFFFFu, 0xFFFFFFFFu};
+    static const uint32_t vals[] = {0u,      1u,          42u,        0xFFu,
+                                    0xFFFFu, 0x7FFFFFFFu, 0xFFFFFFFFu};
     int nvals = (int) (sizeof(vals) / sizeof(vals[0]));
 
     for (i = 0; i < nvals && g_failures == 0; ++i) {
@@ -822,9 +819,9 @@ static void test_popcount_hamming_cross(void) {
       CHECK_EQ_I(arbint_popcount(na, &pc_na), ARBINT_OK);
       nb_a = arbint_nbits(a);
       nb_na = arbint_nbits(na);
-      w = ((((nb_a > nb_na) ? nb_a : nb_na) + ARBINT_LIMB_BITS - 1u)
-            / ARBINT_LIMB_BITS)
-          * ARBINT_LIMB_BITS;
+      w = ((((nb_a > nb_na) ? nb_a : nb_na) + ARBINT_LIMB_BITS - 1u) /
+           ARBINT_LIMB_BITS) *
+          ARBINT_LIMB_BITS;
       CHECK_EQ_I(pc_a + pc_na, w);
     }
   }
@@ -841,9 +838,9 @@ static void test_popcount_hamming_cross(void) {
   CHECK_EQ_I(arbint_popcount(na, &pc_na), ARBINT_OK);
   nb_a = arbint_nbits(a);
   nb_na = arbint_nbits(na);
-  w = ((((nb_a > nb_na) ? nb_a : nb_na) + ARBINT_LIMB_BITS - 1u)
-        / ARBINT_LIMB_BITS)
-      * ARBINT_LIMB_BITS;
+  w = ((((nb_a > nb_na) ? nb_a : nb_na) + ARBINT_LIMB_BITS - 1u) /
+       ARBINT_LIMB_BITS) *
+      ARBINT_LIMB_BITS;
   CHECK_EQ_I(pc_a + pc_na, w);
 
   /*  hamming(2^k, 2^k + 1) = 1.  */
@@ -888,8 +885,7 @@ static void test_popcount_hamming_cross(void) {
   {
     size_t h1, h2;
     arbint_t ac, bc, c;
-    CHECK_EQ_I(arbint_init_all(&ctx, ac, bc, c, (arbint_t *) NULL),
-               ARBINT_OK);
+    CHECK_EQ_I(arbint_init_all(&ctx, ac, bc, c, (arbint_t *) NULL), ARBINT_OK);
     CHECK_EQ_I(arbint_set_u32(a, 123u), ARBINT_OK);
     CHECK_EQ_I(arbint_set_u32(b, 456u), ARBINT_OK);
     CHECK_EQ_I(arbint_set_u32(c, 789u), ARBINT_OK);
@@ -922,7 +918,7 @@ static void test_bit_manipulation_stress(void) {
 
   /*  Build x by setting individual bits at limb boundaries and beyond.  */
   {
-    static const unsigned bits[] = {0u, 1u, 7u, 63u, 64u, 65u, 127u,
+    static const unsigned bits[] = {0u,   1u,   7u,   63u,  64u,  65u, 127u,
                                     128u, 255u, 256u, 500u, 511u, 512u};
     int nbits = (int) (sizeof(bits) / sizeof(bits[0]));
 
@@ -949,7 +945,7 @@ static void test_bit_manipulation_stress(void) {
 
     /*  Verify some non-set bits are 0.  */
     {
-      static const unsigned non_bits[] = {2u, 3u, 62u, 66u, 126u,
+      static const unsigned non_bits[] = {2u,   3u,   62u,  66u, 126u,
                                           129u, 254u, 257u, 499u};
       int nnon = (int) (sizeof(non_bits) / sizeof(non_bits[0]));
       for (i = 0; i < (size_t) nnon; ++i) {
@@ -1083,7 +1079,7 @@ static void test_shift_bitwise_cross(void) {
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
   CHECK_EQ_I(arbint_init_all(&ctx, x, doubled, shifted, mask, masked_ref,
-                              masked, (arbint_t *) NULL),
+                             masked, (arbint_t *) NULL),
              ARBINT_OK);
 
   /*  a << 1 = a + a for various values.  */
@@ -1139,7 +1135,7 @@ static void test_shift_bitwise_cross(void) {
   fprintf(stderr, "passed\n");
 
   arbint_clear_all(masked, masked_ref, mask, shifted, doubled, x,
-                    (arbint_t *) NULL);
+                   (arbint_t *) NULL);
   arbint_ctx_clear(&ctx);
 }
 
@@ -1159,10 +1155,10 @@ static void test_aliasing_stress(void) {
   CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
   CHECK_EQ_I(arbint_shl(a, a, 1000u), ARBINT_OK);
   CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK);
-  CHECK_EQ_I(arbint_neg(a, a), ARBINT_OK);   /*  -(2^1000 - 1)  */
+  CHECK_EQ_I(arbint_neg(a, a), ARBINT_OK); /*  -(2^1000 - 1)  */
 
   CHECK_EQ_I(arbint_set_u32(b, 1u), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(b, b, 500u), ARBINT_OK);   /*  2^500  */
+  CHECK_EQ_I(arbint_shl(b, b, 500u), ARBINT_OK); /*  2^500  */
 
   /*  OR: rop == a.  */
   CHECK_EQ_I(arbint_or(expected, a, b), ARBINT_OK);
@@ -1204,7 +1200,7 @@ static void test_aliasing_stress(void) {
   CHECK_EQ_I(arbint_cmp(r, expected), 0);
 
   /*  OR with both-negative multi-limb, rop == a.  */
-  CHECK_EQ_I(arbint_neg(b, b), ARBINT_OK);   /*  b = -(2^500)  */
+  CHECK_EQ_I(arbint_neg(b, b), ARBINT_OK); /*  b = -(2^500)  */
   CHECK_EQ_I(arbint_or(expected, a, b), ARBINT_OK);
   CHECK_EQ_I(arbint_set(r, a), ARBINT_OK);
   CHECK_EQ_I(arbint_or(r, r, b), ARBINT_OK);
@@ -1238,8 +1234,7 @@ static void test_immediate_cross_validation(void) {
   fprintf(stderr, "  immediate cross-validation: ");
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
-  CHECK_EQ_I(arbint_init_all(&ctx, a, bval, r1, r2, base,
-                              (arbint_t *) NULL),
+  CHECK_EQ_I(arbint_init_all(&ctx, a, bval, r1, r2, base, (arbint_t *) NULL),
              ARBINT_OK);
 
   /*  Multi-limb positive: 3^128.  */
@@ -1293,12 +1288,12 @@ static void test_immediate_cross_validation(void) {
 
   /*  Test i32 variants with positive and negative a.  */
   {
-    static const int32_t i32vals[] = {0, 1, -1, -2, 42, -42, 0x7FFFFFFF,
-                                      -0x7FFFFFFF};
+    static const int32_t i32vals[] = {0,  1,   -1,         -2,
+                                      42, -42, 0x7FFFFFFF, -0x7FFFFFFF};
     int nvals = (int) (sizeof(i32vals) / sizeof(i32vals[0]));
 
     /*  Positive a.  */
-    CHECK_EQ_I(arbint_neg(a, a), ARBINT_OK);   /*  back to positive  */
+    CHECK_EQ_I(arbint_neg(a, a), ARBINT_OK); /*  back to positive  */
     for (i = 0; i < nvals && g_failures == 0; ++i) {
       CHECK_EQ_I(arbint_set_i32(bval, i32vals[i]), ARBINT_OK);
 

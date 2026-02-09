@@ -174,7 +174,7 @@ static void test_wide_limb_via_mul(void) {
   em[1] = (arbint_limb_t) 1u;
   CHECK(limbs_equal(r, 1, em, 2u));
 
-  /*  A6: half_max * half_max -- fits in one limb since (2^(N/2)-1)^2 < 2^N.  */
+  /*  A6: half_max * half_max -- fits in one limb since (2^(N/2)-1)^2 < 2^N. */
   am[0] = half_max;
   bm[0] = half_max;
   set_mag_limbs(a, 1, am, 1u);
@@ -330,7 +330,8 @@ static void test_schoolbook_patterns(void) {
   }
 
   /*  C6: all-ones * all-ones (max carry).
-      (B^n - 1)^2 = B^(2n) - 2*B^n + 1 = [1, 0,..,0, B-2, B-1,..,B-1] (2n limbs).  */
+      (B^n - 1)^2 = B^(2n) - 2*B^n + 1 = [1, 0,..,0, B-2, B-1,..,B-1] (2n
+      limbs).  */
   {
     static const size_t sizes[] = {2u, 4u, 8u, 16u, 31u};
     size_t si;
@@ -492,7 +493,8 @@ static void test_karatsuba_threshold(void) {
     }
   }
 
-  /*  D4: cross-validate Karatsuba at 32 limbs via (a+b)^2 = a^2 + 2ab + b^2.  */
+  /*  D4: cross-validate Karatsuba at 32 limbs via (a+b)^2 = a^2 + 2ab + b^2.
+   */
   {
     arbint_t a2, b2, ab2, sum, lhs;
 
