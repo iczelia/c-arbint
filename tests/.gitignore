@@ -11,3 +11,4 @@ test_shift
 test_bitops
 compute_pi
 compute_e
+compute_bitops

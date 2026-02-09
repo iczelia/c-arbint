@@ -636,18 +636,26 @@ arbint_err_t arbint_hammingdist(const arbint_t a, const arbint_t b,
 
   if (a_neg && b_neg) {
     /*  Both negative: popcount((a-1) ^ (b-1)).
-        On-the-fly borrow for each operand.  */
+        Phase 1: both borrows active for min_n limbs.
+        Phase 2: shorter operand zero-extends, (shorter-1) = 0,
+        so XOR = (longer-1)[i]; continue longer borrow only.  */
+    size_t min_n = (an < bn) ? an : bn;
+    const arbint_limb_t * longer = (an > bn) ? ap : bp;
     arbint_limb_t ba = 1u;
     arbint_limb_t bb = 1u;
+    arbint_limb_t * longer_borrow = (an > bn) ? &ba : &bb;
 
-    for (i = 0u; i < max_n; ++i) {
-      arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-      arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-      arbint_limb_t ad = ai - ba;
-      ba = (ai < ba) ? 1u : 0u;
-      arbint_limb_t bd = bi - bb;
-      bb = (bi < bb) ? 1u : 0u;
+    for (i = 0u; i < min_n; ++i) {
+      arbint_limb_t ad = ap[i] - ba;
+      ba = (ap[i] < ba) ? 1u : 0u;
+      arbint_limb_t bd = bp[i] - bb;
+      bb = (bp[i] < bb) ? 1u : 0u;
       count += arbint_popcount_limb(ad ^ bd);
+    }
+    for (i = min_n; i < max_n; ++i) {
+      arbint_limb_t ld = longer[i] - *longer_borrow;
+      *longer_borrow = (longer[i] < *longer_borrow) ? 1u : 0u;
+      count += arbint_popcount_limb(ld);
     }
     *out = count;
     return ARBINT_OK;
@@ -663,16 +671,31 @@ arbint_err_t arbint_hammingdist(const arbint_t a, const arbint_t b,
     bn = tmp_n;
   }
 
-  /*  (+a) vs (-b): hamming = max_n * LIMB_BITS - popcount(a ^ (b-1)).  */
+  /*  (+a) vs (-b): hamming = max_n * LIMB_BITS - popcount(a ^ (b-1)).
+      Phase 1 (i < min(an,bn)): both operands present.
+      Phase 2 (bn <= i < an): (b-1) zero-extends to 0, XOR = a[i].
+      Phase 2 (an <= i < bn): a zero-extends to 0, XOR = (b-1)[i],
+      continue borrow.  */
+  size_t min_n = (an < bn) ? an : bn;
   arbint_limb_t bb = 1u;
   size_t xor_pop = 0u;
 
-  for (i = 0u; i < max_n; ++i) {
-    arbint_limb_t ai = (i < an) ? ap[i] : 0u;
-    arbint_limb_t bi = (i < bn) ? bp[i] : 0u;
-    arbint_limb_t bd = bi - bb;
-    bb = (bi < bb) ? 1u : 0u;
-    xor_pop += arbint_popcount_limb(ai ^ bd);
+  for (i = 0u; i < min_n; ++i) {
+    arbint_limb_t bd = bp[i] - bb;
+    bb = (bp[i] < bb) ? 1u : 0u;
+    xor_pop += arbint_popcount_limb(ap[i] ^ bd);
+  }
+  if (an >= bn) {
+    /*  Beyond bn: (b-1) = 0, XOR = a[i].  */
+    for (i = min_n; i < max_n; ++i)
+      xor_pop += arbint_popcount_limb(ap[i]);
+  } else {
+    /*  Beyond an: a = 0, XOR = (b-1)[i].  */
+    for (i = min_n; i < max_n; ++i) {
+      arbint_limb_t bd = bp[i] - bb;
+      bb = (bp[i] < bb) ? 1u : 0u;
+      xor_pop += arbint_popcount_limb(bd);
+    }
   }
   *out = max_n * (size_t) ARBINT_LIMB_BITS - xor_pop;
   return ARBINT_OK;
