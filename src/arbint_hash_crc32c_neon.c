@@ -85,8 +85,10 @@ uint32_t arbint_crc32c_neon(uint32_t crc, const uint8_t * buf, size_t len) {
     vc0 = clmul_hi_e(vc0, vk, vreinterpretq_u64_u8(vld1q_u8(buf + 32)));
     uint64x2_t vbr = vld1q_u64(kc + 4);
     uint64x2_t vt;
-    vt = vmull_p64(vgetq_lane_u64(vc0, 0), vgetq_lane_u64(vbr, 0));
-    vt = vmull_p64(vgetq_lane_u64(vt, 0), vgetq_lane_u64(vbr, 1));
+    vt = vreinterpretq_u64_p128(
+        vmull_p64(vgetq_lane_u64(vc0, 0), vgetq_lane_u64(vbr, 0)));
+    vt = vreinterpretq_u64_p128(
+        vmull_p64(vgetq_lane_u64(vt, 0), vgetq_lane_u64(vbr, 1)));
     vc0 = veorq_u64(vc0, vt);
     crc = vgetq_lane_u32(vreinterpretq_u32_u64(vc0), 1);
     crc = __crc32cd(crc, *(const uint64_t *) (buf + 40));
