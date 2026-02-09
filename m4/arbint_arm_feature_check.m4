@@ -1,7 +1,7 @@
 dnl ARBINT_CHECK_ARM_FEATURE_WITH_FLAG
 dnl ---------------------------------
-dnl Probe an ARM feature by compiling a test program first without extra flags,
-dnl then (if needed) with a specified compiler flag.
+dnl Probe an ARM feature by compiling and linking a test program first without
+dnl extra flags, then (if needed) with a specified compiler flag.
 dnl
 dnl Parameters:
 dnl  1: feature description (for AC_CACHE_CHECK messages)
@@ -19,7 +19,7 @@ AC_DEFUN([ARBINT_CHECK_ARM_FEATURE_WITH_FLAG], [
     AS_IF([test "x$arbint_host_aarch64" != "xyes"], [
       AS_VAR_SET([$2], [no])
     ], [
-      AC_COMPILE_IFELSE([AC_LANG_PROGRAM([$5], [$6])],
+      AC_LINK_IFELSE([AC_LANG_PROGRAM([$5], [$6])],
         [AS_VAR_SET([$2], [yes])],
         [AS_VAR_SET([$2], [no])])
     ])
@@ -32,7 +32,7 @@ AC_DEFUN([ARBINT_CHECK_ARM_FEATURE_WITH_FLAG], [
       ], [
         arbint_saved_cflags="$CFLAGS"
         CFLAGS="$CFLAGS $4"
-        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([$5], [$6])],
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([$5], [$6])],
           [AS_VAR_SET([$3], [yes])],
           [AS_VAR_SET([$3], [no])])
         CFLAGS="$arbint_saved_cflags"
