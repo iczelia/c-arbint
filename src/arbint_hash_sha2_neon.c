@@ -39,13 +39,12 @@ static const uint32_t arbint_sha256_K[64] = {
 
 /*  Perform four SHA-256 rounds with message schedule w and round
     constants from K[i..i+3].
-
     ARM SHA-2 crypto instructions:
       vsha256hq_u32(ABCD, EFGH, WK)  - 4 rounds updating ABCD
       vsha256h2q_u32(EFGH, ABCD, WK) - 4 rounds updating EFGH
     Both must use the SAME original ABCD for the second call.  */
 #define SHA256_4ROUNDS(abcd, efgh, w, i)                                      \
-  do {                                                                         \
+  do {                                                                        \
     uint32x4_t wk_ = vaddq_u32((w), vld1q_u32(&arbint_sha256_K[(i)]));        \
     uint32x4_t abcd_prev_ = (abcd);                                           \
     (abcd) = vsha256hq_u32((abcd), (efgh), wk_);                              \
@@ -53,11 +52,9 @@ static const uint32_t arbint_sha256_K[64] = {
   } while (0)
 
 /*  SHA-256 single-block compression using ARM Crypto Extensions.
-
     The ARM SHA-2 instructions operate on two uint32x4_t registers:
       ABCD = [A, B, C, D]
       EFGH = [E, F, G, H]
-
     vsha256su0q_u32 and vsha256su1q_u32 perform message schedule
     expansion (sigma0 and sigma1 respectively).  */
 void arbint_sha256_compress_arm(uint32_t state[8], const uint8_t block[64]) {

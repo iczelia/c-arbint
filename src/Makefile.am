@@ -18,12 +18,12 @@
 AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libarbint.la
-libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c arbint_bitops.c arbint_random.c arbint_hash.c arbint_hash_generic.c
+libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c arbint_bitops.c arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c
 EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c arbint_hash_shani.c arbint_hash_sha2_neon.c arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
 libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
-noinst_HEADERS = arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h arbint_bitops.h arbint_random.h arbint_hash.h
+noinst_HEADERS = arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h arbint_bitops.h arbint_shift.h arbint_random.h arbint_hash.h
 libarbint_la_LDFLAGS = -version-info 0:0:0 -no-undefined $(ARBINT_LTO_LDFLAGS)
 
 # Common libtool compilation command prefix

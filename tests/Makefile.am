@@ -28,6 +28,7 @@ check_PROGRAMS = \
   test_addsub_avx2 \
   test_random \
   test_hash \
+  test_shift \
   compute_pi
 
 TESTS = $(check_PROGRAMS)
