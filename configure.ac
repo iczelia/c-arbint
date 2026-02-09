@@ -309,11 +309,18 @@ unsigned int x = _mm_crc32_u8(0u, 0u);
 
 arbint_build_sse42_crc32=no
 ARBINT_SSE42_CRC32_CFLAGS=""
-AS_IF([test "x$arbint_cv_have_sse42_crc32_plain" = "xyes"], [
-  arbint_build_sse42_crc32=yes
-], [test "x$arbint_cv_have_sse42_crc32_msse42" = "xyes"], [
-  arbint_build_sse42_crc32=yes
-  ARBINT_SSE42_CRC32_CFLAGS="-msse4.2"
+dnl The SSE4.2 CRC32C implementation uses _mm_crc32_u64, which is only
+dnl available on x86-64.  Disable on 32-bit x86.
+dnl I'm not sure why this is needed. There is not a single
+dnl 32-bit SSE4.2 x86 CPU. But for some reason the detection here is
+dnl flaky.
+AS_IF([test "x$arbint_host_x86_64" = "xyes"], [
+  AS_IF([test "x$arbint_cv_have_sse42_crc32_plain" = "xyes"], [
+    arbint_build_sse42_crc32=yes
+  ], [test "x$arbint_cv_have_sse42_crc32_msse42" = "xyes"], [
+    arbint_build_sse42_crc32=yes
+    ARBINT_SSE42_CRC32_CFLAGS="-msse4.2"
+  ])
 ])
 AM_CONDITIONAL([ARBINT_BUILD_SSE42_CRC32], [test "x$arbint_build_sse42_crc32" = "xyes"])
 AC_SUBST([ARBINT_SSE42_CRC32_CFLAGS])
