@@ -6,4 +6,5 @@ test_tdiv
 test_large
 test_addsub_avx2
 test_random
+test_hash
 compute_pi

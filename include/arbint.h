@@ -432,8 +432,13 @@ ARBINT_API arbint_err_t arbint_export(const arbint_t op, void ** out_buf,
 /*  Hash canonical integer value into hash_len bytes at out_hash.
     Intended for hash tables only; algorithm and output are intentionally
     unstable across library versions and may also vary across process runs.  */
-ARBINT_API arbint_err_t arbint_hash(const arbint_t op, uint8_t * out_hash,
-                                    size_t hash_len);
+ARBINT_API arbint_err_t arbint_hash_slow(const arbint_t op, uint8_t * out_hash,
+                                         size_t hash_len);
+/*  Hash canonical integer value into a 32-bit unsigned integer value.
+    Intended for hash tables only; algorithm and output are intentionally
+    unstable across library versions and may also vary across process runs.  */
+ARBINT_API arbint_err_t arbint_hash_fast(const arbint_t op,
+                                         uint32_t * out_hash);
 
 /* ---------------- Random Number Generation ---------------- */
 

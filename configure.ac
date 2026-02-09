@@ -265,6 +265,59 @@ __m256i b = _mm256_add_epi64(a, a);
 AM_CONDITIONAL([ARBINT_BUILD_AVX2], [test "x$arbint_build_avx2" = "xyes"])
 AC_SUBST([ARBINT_AVX2_CFLAGS])
 
+ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+  [SHA-NI intrinsics], [arbint_cv_have_sha_ni_plain], [arbint_cv_have_sha_ni_msha],
+  [-msha -msse4.1],
+  [[
+#include <immintrin.h>
+  ]],
+  [[
+__m128i a = _mm_setzero_si128();
+__m128i b = _mm_sha256rnds2_epu32(a, a, a);
+(void)b;
+  ]],
+  [HAS_SHA_NI], [HAS_SHA_NI_ALWAYS],
+  [Define to 1 if SHA-NI intrinsics are available (with or without -msha).],
+  [Define to 1 if SHA-NI intrinsics are available globally.]
+)
+
+arbint_build_sha_ni=no
+ARBINT_SHA_NI_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_sha_ni_plain" = "xyes"], [
+  arbint_build_sha_ni=yes
+], [test "x$arbint_cv_have_sha_ni_msha" = "xyes"], [
+  arbint_build_sha_ni=yes
+  ARBINT_SHA_NI_CFLAGS="-msha -msse4.1"
+])
+AM_CONDITIONAL([ARBINT_BUILD_SHA_NI], [test "x$arbint_build_sha_ni" = "xyes"])
+AC_SUBST([ARBINT_SHA_NI_CFLAGS])
+
+ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+  [SSE4.2 CRC32C intrinsics], [arbint_cv_have_sse42_crc32_plain], [arbint_cv_have_sse42_crc32_msse42],
+  [-msse4.2],
+  [[
+#include <nmmintrin.h>
+  ]],
+  [[
+unsigned int x = _mm_crc32_u8(0u, 0u);
+(void)x;
+  ]],
+  [HAS_SSE42_CRC32], [HAS_SSE42_CRC32_ALWAYS],
+  [Define to 1 if SSE4.2 CRC32C intrinsics are available (with or without -msse4.2).],
+  [Define to 1 if SSE4.2 CRC32C intrinsics are available globally.]
+)
+
+arbint_build_sse42_crc32=no
+ARBINT_SSE42_CRC32_CFLAGS=""
+AS_IF([test "x$arbint_cv_have_sse42_crc32_plain" = "xyes"], [
+  arbint_build_sse42_crc32=yes
+], [test "x$arbint_cv_have_sse42_crc32_msse42" = "xyes"], [
+  arbint_build_sse42_crc32=yes
+  ARBINT_SSE42_CRC32_CFLAGS="-msse4.2"
+])
+AM_CONDITIONAL([ARBINT_BUILD_SSE42_CRC32], [test "x$arbint_build_sse42_crc32" = "xyes"])
+AC_SUBST([ARBINT_SSE42_CRC32_CFLAGS])
+
 AS_IF([test "x$arbint_cc_msvc_cl" = "xyes"], [
   arbint_cv_cc_visibility_hidden=no
 ], [
