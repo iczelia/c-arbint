@@ -123,6 +123,66 @@ static inline unsigned arbint_clz_limb(arbint_limb_t x) {
 #endif /* ARBINT_COMPILER_GNU_CLANG */
 }
 
+/*  Count trailing zeros in a single limb.
+    Precondition: x != 0 (behavior is undefined for zero input).
+    On GCC/Clang, __builtin_ctz(0) is undefined. On MSVC, _BitScanForward(0)
+    writes an unspecified value to the output parameter. The fallback loop
+    would run indefinitely. Callers MUST check for zero before calling.  */
+static inline unsigned arbint_ctz_limb(arbint_limb_t x) {
+#if ARBINT_COMPILER_GNU_CLANG
+  #if ARBINT_LIMB_BITS == 64
+  return (unsigned) __builtin_ctzll((unsigned long long) x);
+  #else
+  return (unsigned) __builtin_ctz((unsigned) x);
+  #endif /* ARBINT_LIMB_BITS */
+#elif ARBINT_COMPILER_MSVC
+  {
+    unsigned long idx;
+  #if ARBINT_LIMB_BITS == 64
+    _BitScanForward64(&idx, x);
+  #else
+    _BitScanForward(&idx, x);
+  #endif /* ARBINT_LIMB_BITS */
+    return (unsigned) idx;
+  }
+#else
+  {
+    unsigned n = 0u;
+    while ((x & 1u) == 0u) {
+      ++n;
+      x >>= 1u;
+    }
+    return n;
+  }
+#endif /* ARBINT_COMPILER_GNU_CLANG */
+}
+
+/*  Portable popcount of a single limb.  */
+static inline unsigned arbint_popcount_limb(arbint_limb_t x) {
+#if ARBINT_COMPILER_GNU_CLANG
+  #if ARBINT_LIMB_BITS == 64
+  return (unsigned) __builtin_popcountll((unsigned long long) x);
+  #else
+  return (unsigned) __builtin_popcount((unsigned) x);
+  #endif /* ARBINT_LIMB_BITS */
+#elif ARBINT_COMPILER_MSVC
+  #if ARBINT_LIMB_BITS == 64
+  return (unsigned) __popcnt64(x);
+  #else
+  return (unsigned) __popcnt(x);
+  #endif /* ARBINT_LIMB_BITS */
+#else
+  {
+    unsigned count = 0u;
+    while (x != 0u) {
+      x &= x - 1u;
+      ++count;
+    }
+    return count;
+  }
+#endif /* ARBINT_COMPILER_GNU_CLANG */
+}
+
 /*  Securely zero memory so the compiler cannot optimise the store away.
     Prefers explicit_bzero (glibc 2.25+, most BSDs) or memset_s (C11 Annex K),
     falling back to a volatile-function-pointer indirection that defeats
