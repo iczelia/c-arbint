@@ -136,7 +136,7 @@ void arbint_sha256_compress_arm(uint32_t state[8], const uint8_t block[64]) {
   abcd = vaddq_u32(abcd, abcd_save);
   efgh = vaddq_u32(efgh, efgh_save);
 
-  /*  Store directly — no rearrangement needed.  */
+  /*  Store directly -- no rearrangement needed.  */
   vst1q_u32(state, abcd);
   vst1q_u32(state + 4, efgh);
 }

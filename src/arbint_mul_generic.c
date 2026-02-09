@@ -223,7 +223,7 @@ static int arbint_add_shifted(arbint_limb_t * dst, size_t dst_n,
 /*  Recursive multiplication using Karatsuba algorithm for large operands.
     Falls back to schoolbook multiplication below ARBINT_KARATSUBA_THRESHOLD.
     Splits operands in half and uses identity: (a1*B + a0) * (b1*B + b0) =
-    a1*b1*B² + ((a1+a0)*(b1+b0) - a1*b1 - a0*b0)*B + a0*b0.  */
+    a1*b1*B^2 + ((a1+a0)*(b1+b0) - a1*b1 - a0*b0)*B + a0*b0.  */
 static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
                                        const arbint_limb_t * a, size_t an,
                                        const arbint_limb_t * b, size_t bn,
