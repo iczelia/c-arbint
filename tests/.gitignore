@@ -9,3 +9,4 @@ test_random
 test_hash
 test_shift
 compute_pi
+compute_e

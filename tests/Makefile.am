@@ -29,7 +29,8 @@ check_PROGRAMS = \
   test_random \
   test_hash \
   test_shift \
-  compute_pi
+  compute_pi \
+  compute_e
 
 TESTS = $(check_PROGRAMS)
 TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH"
@@ -39,4 +40,4 @@ TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH
 LDADD = $(top_builddir)/src/libarbint.la
 
 noinst_HEADERS = test_framework.h
-EXTRA_DIST = test_framework.h pi10k.txt
+EXTRA_DIST = test_framework.h pi10k.txt e10k.txt
