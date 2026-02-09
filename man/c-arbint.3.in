@@ -193,6 +193,41 @@ Scalar multiplication variants
 .RB ( arbint_mul_i32 ", " arbint_mul_u32 )
 provide optimized fast paths for multiplication by 32-bit values with
 early-exit for special cases (0, +/\-1).
+.SS Powers and Roots
+.BR arbint_pow_u32 (),
+.BR arbint_isqrt ()
+.PP
+.BI "arbint_err_t arbint_pow_u32(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ")"
+.RS
+Set
+.I rop
+to
+.IR base ^ exp .
+Uses binary exponentiation (repeated squaring), requiring
+O(log\ \fIexp\fP) multiplications.
+.I rop
+may alias
+.IR base .
+The convention 0^0\ =\ 1 is followed.
+.RE
+.PP
+.BI "arbint_err_t arbint_isqrt(arbint_t " rop ", const arbint_t " a ")"
+.RS
+Set
+.I rop
+to floor(sqrt(\fIa\fP)).
+Returns
+.B ARBINT_EDOM
+if
+.I a
+is negative.
+.I rop
+may alias
+.IR a .
+Uses Newton's method (integer Heron iteration) with quadratic convergence,
+requiring O(log\ \fInbits\fP) iterations each dominated by one
+big-integer division.
+.RE
 .SS Truncated Division and Remainder
 .BR arbint_tdiv_qr (),
 .BR arbint_tdiv_q (),
@@ -633,6 +668,23 @@ For operands at or above the Karatsuba threshold the identity
 a^2 = a1^2*B^(2k) + ((a0+a1)^2 \- a0^2 \- a1^2)*B^k + a0^2
 is applied recursively, requiring three half-size squarings per level
 instead of four half-size multiplications in general Karatsuba.
+.PP
+.B Exponentiation
+.RB ( arbint_pow_u32 ())
+uses right-to-left binary exponentiation (repeated squaring).
+At each step the exponent is right-shifted by one bit; when the low bit is
+set the running accumulator is multiplied by the current power of the base.
+This requires at most 2\ *\ log2(\fIexp\fP) big-integer multiplications.
+.PP
+.B Integer square root
+.RB ( arbint_isqrt ())
+uses Newton's method on the integer iteration
+x_{n+1}\ =\ floor((x_n\ +\ floor(\fIa\fP\ /\ x_n))\ /\ 2),
+starting from the overestimate x_0\ =\ 2^(ceil(nbits(\fIa\fP)/2)).
+The sequence is monotonically decreasing and bounded below by
+floor(sqrt(\fIa\fP)); convergence is detected when x_{n+1}\ >=\ x_n.
+Quadratic convergence yields O(log\ nbits(\fIa\fP)) iterations, each
+dominated by one truncated division.
 .PP
 .B Division
 by multi-limb divisors uses Knuth's Algorithm D (TAOCP Vol 2, Section 4.3.1).
