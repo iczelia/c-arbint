@@ -70,22 +70,18 @@ if ARBINT_BUILD_ARM_CRC32C
 libarbint_la_LIBADD += libarbint_la-arbint_hash_crc32c_neon.lo
 endif
 
-# BMI2-optimized files
 libarbint_la-arbint_mul_bmi2.lo: arbint_mul_bmi2.c
 	$(LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
 libarbint_la-arbint_tdiv_bmi2.lo: arbint_tdiv_bmi2.c
 	$(LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# AVX2-optimized files
 libarbint_la-arbint_addsub_avx2.lo: arbint_addsub_avx2.c
 	$(LTCOMPILE) $(ARBINT_AVX2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# POPCNT-optimized files
 libarbint_la-arbint_bitops_popcnt.lo: arbint_bitops_popcnt.c
 	$(LTCOMPILE) $(ARBINT_POPCNT_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# Platform RNG sources (no extra flags)
 libarbint_la-arbint_random_urandom.lo: arbint_random_urandom.c
 	$(LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
@@ -95,18 +91,14 @@ libarbint_la-arbint_random_winapi.lo: arbint_random_winapi.c
 libarbint_la-arbint_random_arc4.lo: arbint_random_arc4.c
 	$(LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# SHA-NI optimized file
 libarbint_la-arbint_hash_shani.lo: arbint_hash_shani.c
 	$(LTCOMPILE) $(ARBINT_SHA_NI_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# SSE4.2 CRC32 optimized file
 libarbint_la-arbint_hash_crc32c_sse42.lo: arbint_hash_crc32c_sse42.c
 	$(LTCOMPILE) $(ARBINT_SSE42_CRC32_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# ARM SHA2 NEON optimized file
 libarbint_la-arbint_hash_sha2_neon.lo: arbint_hash_sha2_neon.c
 	$(LTCOMPILE) $(ARBINT_ARM_SHA2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-# ARM CRC32C NEON optimized file
 libarbint_la-arbint_hash_crc32c_neon.lo: arbint_hash_crc32c_neon.c
 	$(LTCOMPILE) $(ARBINT_ARM_CRC32C_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<

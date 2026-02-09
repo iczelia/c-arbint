@@ -24,8 +24,9 @@ Additional declarations may exist in
 for future releases.
 .PP
 The library includes optimized code paths for x86 processors supporting
-BMI2 (multiplication), AVX2 (doubling), SHA-NI (hashing), and SSE4.2
-(CRC32C hashing) instructions, and for AArch64 processors supporting
+BMI2 (multiplication), AVX2 (doubling), POPCNT (bit counting), SHA-NI
+(hashing), and SSE4.2 (CRC32C hashing) instructions, and for AArch64
+processors supporting
 CRC32 and PMULL instructions (CRC32C hashing), with automatic runtime
 dispatch based on CPU feature detection.
 .SH TYPES
@@ -301,6 +302,246 @@ and may vary across process runs.
 The canonical input is a sign byte (0x00 for zero, 0x01 for positive,
 0xff for negative) followed by the magnitude in little-endian byte order
 with no leading zero bytes.
+.SS Shifts
+.BR arbint_shl (),
+.BR arbint_shr ()
+.PP
+.BI "arbint_err_t arbint_shl(arbint_t " rop ", const arbint_t " a ", uint32_t " k ")"
+.RS
+Set
+.I rop
+to
+.IR a " * 2^" k .
+Sign is preserved.
+.I rop
+may alias
+.IR a .
+.RE
+.PP
+.BI "arbint_err_t arbint_shr(arbint_t " rop ", const arbint_t " a ", uint32_t " k ")"
+.RS
+Set
+.I rop
+to
+.I a
+with the low
+.I k
+bits discarded (truncation toward zero).
+Sign is preserved.
+.I rop
+may alias
+.IR a .
+.RE
+.SS Bit Queries
+.BR arbint_sizeinbase (),
+.BR arbint_nbits (),
+.BR arbint_testbit (),
+.BR arbint_setbit (),
+.BR arbint_clrbit (),
+.BR arbint_ctz (),
+.BR arbint_clz (),
+.BR arbint_popcount (),
+.BR arbint_hammingdist ()
+.PP
+.BI "size_t arbint_sizeinbase(const arbint_t " x ", int " base ")"
+.RS
+Return the number of digits needed to represent
+.I x
+in the given
+.IR base ,
+which must be in the range [2,\ 62].
+Returns 1 if
+.I x
+is zero.
+.RE
+.PP
+.BI "size_t arbint_nbits(const arbint_t " x ")"
+.RS
+Return the number of significant bits in
+.IR x ,
+i.e.\& the position of the highest set bit plus one.
+Returns 0 if
+.I x
+is zero.
+.RE
+.PP
+All remaining bit operations in this section use two's-complement semantics:
+they behave as if operating on infinite sign-extended two's-complement
+representations, then normalize the result back to the sign-magnitude
+.B arbint_t
+form.
+Define the
+.I canonical width
+.RI W( x )
+as the smallest positive multiple of the implementation limb width that can
+represent
+.I x
+in two's-complement form.
+.PP
+.BI "arbint_err_t arbint_testbit(const arbint_t " x ", size_t " bit_index ", int *" out ")"
+.RS
+Set
+.RI * out
+to 1 if bit
+.I bit_index
+(zero-indexed from the LSB) is set in the two's-complement representation
+of
+.IR x ,
+or to 0 otherwise.
+.RE
+.PP
+.BI "arbint_err_t arbint_setbit(arbint_t " x ", size_t " bit_index ")"
+.RS
+Set bit
+.I bit_index
+in the two's-complement representation of
+.IR x .
+The value is modified in place.
+.RE
+.PP
+.BI "arbint_err_t arbint_clrbit(arbint_t " x ", size_t " bit_index ")"
+.RS
+Clear bit
+.I bit_index
+in the two's-complement representation of
+.IR x .
+The value is modified in place.
+.RE
+.PP
+.BI "arbint_err_t arbint_ctz(const arbint_t " x ", size_t *" out ")"
+.RS
+Count the number of trailing zero bits in
+.IR x .
+Returns
+.B ARBINT_EDOM
+if
+.I x
+is zero.
+.RE
+.PP
+.BI "arbint_err_t arbint_clz(const arbint_t " x ", size_t *" out ")"
+.RS
+Count the number of leading zero bits within the canonical width
+.RI W( x ).
+For negative values the most significant bit is always set, so
+.RI * out
+is 0.
+Returns
+.B ARBINT_EDOM
+if
+.I x
+is zero.
+.RE
+.PP
+.BI "arbint_err_t arbint_popcount(const arbint_t " x ", size_t *" out ")"
+.RS
+Count the number of set bits in the low
+.RI W( x )
+bits of
+.IR x .
+.PP
+On x86 processors with POPCNT support, the inner loop is
+hardware-accelerated via
+.BR _mm_popcnt_u64 ()
+intrinsics when the operand exceeds the dispatch threshold (8 limbs).
+.RE
+.PP
+.BI "arbint_err_t arbint_hammingdist(const arbint_t " a ", const arbint_t " b ", size_t *" out ")"
+.RS
+Count the number of bit positions where
+.I a
+and
+.I b
+differ within the low
+.RI max(W( a ),\ W( b ))
+bits.
+.PP
+Hardware POPCNT acceleration is used when available, as with
+.BR arbint_popcount ().
+.RE
+.SS Bitwise Logic
+.BR arbint_or (),
+.BR arbint_and (),
+.BR arbint_xor (),
+.BR arbint_not (),
+.BR arbint_and_u32 (),
+.BR arbint_and_i32 (),
+.BR arbint_or_u32 (),
+.BR arbint_or_i32 (),
+.BR arbint_xor_u32 (),
+.BR arbint_xor_i32 ()
+.PP
+All bitwise logic operations use two's-complement semantics as described
+in
+.BR "Bit Queries" .
+.PP
+.BI "arbint_err_t arbint_or(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.RS
+Set
+.I rop
+to
+.IR a " | " b
+(bitwise OR).
+.I rop
+may alias either input.
+.RE
+.PP
+.BI "arbint_err_t arbint_and(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.RS
+Set
+.I rop
+to
+.IR a " & " b
+(bitwise AND).
+.I rop
+may alias either input.
+.RE
+.PP
+.BI "arbint_err_t arbint_xor(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.RS
+Set
+.I rop
+to
+.IR a " ^ " b
+(bitwise exclusive OR).
+.I rop
+may alias either input.
+.RE
+.PP
+.BI "arbint_err_t arbint_not(arbint_t " rop ", const arbint_t " a ")"
+.RS
+Set
+.I rop
+to the two's-complement bitwise NOT of
+.IR a ,
+which is equivalent to
+.RI \-( a +1).
+.I rop
+may alias
+.IR a .
+.RE
+.PP
+The immediate-operand variants perform the same operation with a 32-bit
+scalar second operand.
+Signed
+.RB ( _i32 )
+variants sign-extend the scalar to match the width of
+.IR a ;
+unsigned
+.RB ( _u32 )
+variants zero-extend.
+.PP
+.BI "arbint_err_t arbint_and_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " b ")"
+.br
+.BI "arbint_err_t arbint_and_i32(arbint_t " rop ", const arbint_t " a ", int32_t " b ")"
+.br
+.BI "arbint_err_t arbint_or_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " b ")"
+.br
+.BI "arbint_err_t arbint_or_i32(arbint_t " rop ", const arbint_t " a ", int32_t " b ")"
+.br
+.BI "arbint_err_t arbint_xor_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " b ")"
+.br
+.BI "arbint_err_t arbint_xor_i32(arbint_t " rop ", const arbint_t " a ", int32_t " b ")"
 .SS Random Number Generation
 .BR arbint_rng_init (),
 .BR arbint_rng_clear (),
@@ -402,6 +643,25 @@ and CRC32C (Castagnoli polynomial) for
 Both dispatch to hardware-accelerated implementations when available:
 SHA-NI extensions for SHA-256 compression and SSE4.2 intrinsics for CRC32C.
 Canonical data is fed through a streaming interface with O(1) auxiliary memory.
+.PP
+.B Bitwise operations
+use two's-complement sign decomposition: each binary operation branches on the
+four possible sign combinations of its operands, converts negative magnitudes
+to two's-complement form, performs the limb-wise operation, and re-normalizes.
+.BR arbint_popcount ()
+and
+.BR arbint_hammingdist ()
+dispatch between a portable scalar loop and a POPCNT-accelerated
+implementation on x86 processors with hardware POPCNT support
+(dispatch threshold: 8 limbs).
+.PP
+.B arbint_sizeinbase ()
+uses a fixed-point reciprocal lookup table to avoid floating-point arithmetic,
+computing
+.RI ceil( nbits " * " recip )
+where
+.I recip
+approximates 1/log2(\fIbase\fP).
 .SH ENTROPY SOURCES
 .PP
 When
