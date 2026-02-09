@@ -210,6 +210,94 @@ arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
   return ARBINT_OK;
 }
 
+/*  Compute rop = base^exp via binary exponentiation (repeated squaring).
+
+    Uses right-to-left scanning of exponent bits:
+      result = 1
+      while exp > 0:
+        if exp is odd: result *= base
+        base *= base
+        exp >>= 1
+
+    Edge cases:
+      - base^0 = 1 (including 0^0 = 1)
+      - base^1 = base
+      - 0^exp = 0 for exp > 0
+
+    Aliasing: rop may alias base. We work entirely in temporaries and
+    swap the result into rop at the end.  */
+arbint_err_t arbint_pow_u32(arbint_t rop, const arbint_t base, uint32_t exp) {
+  arbint_ctx_t * ctx;
+  arbint_t acc;
+  arbint_t b;
+  arbint_err_t rc;
+
+  if (rop == NULL || base == NULL)
+    return ARBINT_EINVAL;
+
+  /*  base^0 = 1 (including 0^0 = 1).  */
+  if (exp == 0u)
+    return arbint_set_i32(rop, 1);
+
+  /*  base^1 = base.  */
+  if (exp == 1u)
+    return arbint_set(rop, base);
+
+  /*  0^exp = 0 for exp > 0.  */
+  if (base[0]._sz == 0) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = base[0]._ctx;
+
+  rc = arbint_init(acc, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_init(b, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(acc);
+    return rc;
+  }
+
+  /*  acc = 1, b = base.  */
+  rc = arbint_set_i32(acc, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set(b, base);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  while (exp > 1u) {
+    if ((exp & 1u) != 0u) {
+      rc = arbint_mul(acc, acc, b);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+    rc = arbint_sqr(b, b);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    exp >>= 1u;
+  }
+
+  /*  Final multiply for the remaining bit (exp == 1 here).  */
+  rc = arbint_mul(acc, acc, b);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  arbint_swap(rop, acc);
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_clear(b);
+  arbint_clear(acc);
+  return rc;
+}
+
 /*  Multiply arbint by int32_t (rop = a * b).
     Handles sign extraction and delegates to mul_u32 for magnitude.  */
 arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {

@@ -19,7 +19,7 @@
       - arbint_set_str, arbint_get_str
       - arbint_addmul/arbint_submul and i32/u32 variants
       - fdiv/cdiv (all), arbint_divisible, arbint_divisible_u32
-      - arbint_pow_u32, arbint_pow_mod, arbint_pow_u32_mod
+      - arbint_pow_mod, arbint_pow_u32_mod
       - arbint_gcd, arbint_lcm and immediate variants.
       - arbint_moebius, arbint_totient, arbint_carmichael,
       - arbint_xgcd, arbint_legendre, arbint_jacobi,
