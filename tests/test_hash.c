@@ -50,7 +50,7 @@ int main(void) {
     CHECK_EQ_I(buf[0], 0xAAu); /*  Untouched.  */
   }
 
-  /*  Test 3: Determinism — hashing the same value twice gives identical
+  /*  Test 3: Determinism - hashing the same value twice gives identical
    * output.  */
   {
     uint8_t h1[32];
@@ -68,7 +68,7 @@ int main(void) {
     CHECK_EQ_I(f1, f2);
   }
 
-  /*  Test 4: Sign sensitivity — different signs produce different hashes.  */
+  /*  Test 4: Sign sensitivity - different signs produce different hashes.  */
   {
     uint8_t h_pos[32], h_neg[32], h_zero[32];
     uint32_t f_pos, f_neg, f_zero;
@@ -110,7 +110,7 @@ int main(void) {
     CHECK_NE_I(f1, f2);
   }
 
-  /*  Test 6: Truncation — hash_len=16 matches first 16 bytes of hash_len=32.
+  /*  Test 6: Truncation - hash_len=16 matches first 16 bytes of hash_len=32.
    */
   {
     uint8_t full[32];
@@ -122,7 +122,7 @@ int main(void) {
     CHECK(memcmp(full, trunc, 16u) == 0);
   }
 
-  /*  Test 7: Counter mode — hash_len=64.
+  /*  Test 7: Counter mode - hash_len=64.
       First 32 bytes should NOT match hash_len=32 (counter mode appends
       counter suffix for len>32, whereas len<=32 has no counter suffix).
       But the two 32-byte halves of the 64-byte output should differ.  */
@@ -136,7 +136,7 @@ int main(void) {
     CHECK(memcmp(h64, h64 + 32, 32u) != 0);
   }
 
-  /*  Test 8: Counter mode — hash_len=33.
+  /*  Test 8: Counter mode - hash_len=33.
       The first 32 bytes = SHA256(canonical || le32(0)).
       Byte 33 = first byte of SHA256(canonical || le32(1)).
       Verify consistency: 64-byte output's first 33 bytes match.  */
@@ -150,7 +150,7 @@ int main(void) {
     CHECK(memcmp(h33, h64, 33u) == 0);
   }
 
-  /*  Test 9: Large number — build via squaring, verify deterministic.  */
+  /*  Test 9: Large number - build via squaring, verify deterministic.  */
   {
     uint8_t h1[32], h2[32];
     uint32_t f1, f2;
