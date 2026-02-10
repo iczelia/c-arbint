@@ -32,8 +32,9 @@
 	* src/arbint_mul.c: Add arbint_pow_u32 (binary exponentiation) and
 	arbint_isqrt (Newton's method). Dedicated squaring paths with
 	Karatsuba optimization.
-	* src/arbint_mul_core.inc: Shared schoolbook/Karatsuba multiplication
-	and squaring template, included by both generic and BMI2 backends.
+	* src/arbint_mul_core.inc: Shared schoolbook/Karatsuba/Toom-Cook 3-way
+	multiplication and squaring template, included by both generic and BMI2
+	backends. Toom-3 threshold at 96 limbs.
 
 	* src/arbint_tdiv_generic.c: Implement Knuth Algorithm D for multi-limb
 	division, replacing the O(n^2*bits) binary algorithm with O(n*m).

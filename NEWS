@@ -4,7 +4,8 @@ c-arbint 0.0.2 (2026-02-10)
 Second development release. Major feature additions across the board: random
 number generation, cryptographic hashing, bitwise operations, shift operations,
 exponentiation, integer square root, multi-limb division via Knuth Algorithm D,
-and optimized squaring. The public API grows from ~139 to ~158 functions.
+Toom-Cook 3-way multiplication, and optimized squaring. The public API grows
+from ~139 to ~158 functions.
 
 New Features
 ------------
@@ -46,9 +47,12 @@ New Features
   * O(n * m) for n-limb / m-limb division
   * Reciprocal-based quotient estimation with Knuth's correction step
 
+- Toom-Cook 3-way multiplication (threshold: 96 limbs):
+  * O(n^log3(5)) asymptotic complexity, faster than Karatsuba for large operands
+  * Shared core via arbint_mul_core.inc template for generic and BMI2 backends
+
 - Optimized squaring:
   * Dedicated Karatsuba and naive squaring paths (separate from multiplication)
-  * Shared core via arbint_mul_core.inc template
 
 - Declared (not yet implemented) number-theoretic stubs in arbint.h:
   * arbint_moebius, arbint_totient, arbint_carmichael

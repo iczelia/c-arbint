@@ -651,8 +651,10 @@ The caller owns that buffer and must free it with the same allocator contract.
 .B Multiplication
 dispatches between a generic implementation and an optimized
 BMI2 path on supported x86 targets (using runtime CPU detection).
-The implementation switches between schoolbook (O(n^2)) and Karatsuba
-(O(n^log2(3))) algorithms based on operand size (threshold: 32 limbs).
+The implementation selects among three algorithms based on operand size:
+schoolbook (O(n^2)) for small operands,
+Karatsuba (O(n^log2(3))) above 32 limbs, and
+Toom-Cook 3-way (O(n^log3(5))) above 96 limbs.
 Scalar multiplication by a power of two is detected and delegated to
 .BR arbint_shl ()
 as a fast path.
