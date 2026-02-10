@@ -540,8 +540,9 @@ AS_IF([test "x$arbint_host_windows" = "xyes"], [
 AC_CHECK_HEADERS([sys/random.h])  # getentropy + arc4random_buf on macOS/BSD
 AC_CHECK_FUNCS([arc4random_buf])
 
-# getentropy: available on Emscripten (via crypto.getRandomValues),
-# modern Linux (glibc 2.25+), FreeBSD 12+, OpenBSD, macOS 10.12+
+# getentropy: we only use it on Emscripten (routes to crypto.getRandomValues).
+# It exists on native platforms too, but arc4random_buf / /dev/urandom / WinAPI
+# are better and avoid header portability hassles.
 AC_CHECK_FUNCS([getentropy])
 
 # Secure memory zeroing: prefer explicit_bzero, then memset_s
@@ -562,9 +563,13 @@ arbint_has_urandom=no
 arbint_has_winapi_entropy=no
 arbint_has_arc4random=no
 AS_IF([test "x$enable_entropy" = "xyes"], [
-  AS_IF([test "x$ac_cv_func_getentropy" = "xyes"], [
+  # getentropy: only used on Emscripten (routes to crypto.getRandomValues).
+  # On native platforms arc4random_buf, /dev/urandom, or WinAPI are better
+  # and avoid header portability issues (macOS wants sys/random.h, Linux
+  # wants unistd.h, etc.).
+  AS_IF([test "x$arbint_host_emscripten" = "xyes" && test "x$ac_cv_func_getentropy" = "xyes"], [
     AC_DEFINE([ARBINT_HAS_GETENTROPY], [1],
-              [Define if getentropy() is available (Emscripten, modern Linux, BSD, macOS).])
+              [Define if getentropy() is available (Emscripten only).])
     arbint_has_getentropy=yes
   ])
   # ARBINT_HAS_URANDOM: only on non-Windows, non-Emscripten POSIX with unistd.h.

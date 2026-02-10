@@ -22,7 +22,7 @@
 #include <string.h>
 
 #if ARBINT_COMPILER_MSVC && HAVE_WINDOWS_H
-#include <windows.h>
+  #include <windows.h>
 #endif
 
 /*  Default allocator using libc malloc/realloc/free.
@@ -382,8 +382,9 @@ void arbint_free_limbs(const arbint_alloc_t * alloc, arbint_limb_t * p) {
 
 /*  Securely zero memory so the compiler cannot optimise the store away.
     Prefers explicit_bzero (glibc 2.25+, most BSDs) or memset_s (C11 Annex K),
-    then SecureZeroMemory on Windows, falling back to a volatile-function-pointer
-    indirection that defeats dead-store elimination on all known compilers.  */
+    then SecureZeroMemory on Windows, falling back to a
+    volatile-function-pointer indirection that defeats dead-store elimination
+    on all known compilers.  */
 void arbint_secure_zero(void * ptr, size_t len) {
 #if HAVE_EXPLICIT_BZERO
   explicit_bzero(ptr, len);

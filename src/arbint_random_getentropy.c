@@ -19,16 +19,11 @@
 
 #if defined(ARBINT_HAS_GETENTROPY)
 
-  #if HAVE_SYS_RANDOM_H
-    #include <sys/random.h>
-  #else
-    #include <unistd.h>
-  #endif
+  #include <unistd.h>
 
 /*  Read entropy via getentropy().
-    This is the preferred entropy path on Emscripten (where it routes to
-    crypto.getRandomValues), modern Linux (glibc 2.25+), FreeBSD 12+,
-    OpenBSD, and macOS 10.12+.
+    This is the entropy path on Emscripten, where it routes to
+    crypto.getRandomValues.
     Parameters:
       dst - Output buffer for random bytes
       len - Number of bytes to generate

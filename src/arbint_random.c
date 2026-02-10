@@ -138,9 +138,10 @@ static uint32_t arbint_mt19937_u32(arbint_rng_t * rng) {
 /*  Select platform entropy source at runtime.
     Returns NULL if no platform source is available.
     Platform priority (in order):
-      1. Windows: BCryptGenRandom or CryptGenRandom
-      2. macOS/BSD: arc4random_buf
-      3. Linux/POSIX: /dev/urandom  */
+      1. Emscripten: getentropy (routes to crypto.getRandomValues)
+      2. Windows: BCryptGenRandom or CryptGenRandom
+      3. macOS/BSD: arc4random_buf
+      4. Linux/POSIX: /dev/urandom  */
 arbint_entropy_fn_t arbint_select_entropy_source(void) {
 #if defined(ARBINT_HAS_GETENTROPY)
   return arbint_entropy_getentropy;
