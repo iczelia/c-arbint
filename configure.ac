@@ -496,14 +496,6 @@ AS_CASE([$host_os],
   [emscripten*], [arbint_host_windows=no; arbint_host_emscripten=yes],
   [arbint_host_windows=no; arbint_host_emscripten=no])
 
-# Emscripten + libtool translates -shared into -sSIDE_MODULE=2, which
-# forces --no-export-dynamic in wasm-ld.  With -fvisibility=hidden the
-# resulting .so exports nothing.  Disable hidden visibility on emscripten
-# so that all public symbols are exported by the side module.
-AS_IF([test "x$arbint_host_emscripten" = "xyes"], [
-  ARBINT_VISIBILITY_CFLAGS=""
-])
-
 ARBINT_LIB_API_CPPFLAGS=""
 AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$enable_shared" = "xyes"], [
   ARBINT_LIB_API_CPPFLAGS="$ARBINT_LIB_API_CPPFLAGS -DARBINT_BUILD_DLL"
@@ -545,7 +537,7 @@ AS_IF([test "x$arbint_host_windows" = "xyes"], [
   # then RtlGenRandom (XP+, only needs windows.h)
 ])
 
-AC_CHECK_HEADERS([sys/random.h])  # macOS/BSD arc4random_buf
+AC_CHECK_HEADERS([sys/random.h])  # getentropy + arc4random_buf on macOS/BSD
 AC_CHECK_FUNCS([arc4random_buf])
 
 # getentropy: available on Emscripten (via crypto.getRandomValues),

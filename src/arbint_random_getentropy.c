@@ -19,7 +19,11 @@
 
 #if defined(ARBINT_HAS_GETENTROPY)
 
-  #include <unistd.h>
+  #if HAVE_SYS_RANDOM_H
+    #include <sys/random.h>
+  #else
+    #include <unistd.h>
+  #endif
 
 /*  Read entropy via getentropy().
     This is the preferred entropy path on Emscripten (where it routes to
