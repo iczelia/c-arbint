@@ -65,7 +65,4 @@ fi
 # e10k.txt) are found by tests that open them relative to cwd.
 cd "$test_dir"
 
-# wasm64 (MEMORY64) binaries need the memory64+table64 V8 features.
-# --experimental-wasm-memory64 enables them on Node 22-23; on Node 24+
-# (where they are unflagged) the flag is silently accepted.
-exec node --experimental-wasm-memory64 "$js_file"
+exec node "$js_file"

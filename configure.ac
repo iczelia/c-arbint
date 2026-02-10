@@ -496,6 +496,28 @@ AS_CASE([$host_os],
   [emscripten*], [arbint_host_windows=no; arbint_host_emscripten=yes],
   [arbint_host_windows=no; arbint_host_emscripten=no])
 
+dnl -Wl,-Bsymbolic tells the dynamic linker to bind references to global
+dnl symbols within the shared library to the definitions inside it.  This is
+dnl the linker-side complement of -fno-semantic-interposition (which only
+dnl affects the compiler).  Skip on Windows (PE/COFF has no interposition)
+dnl and Emscripten (Wasm linker does not support it).
+ARBINT_BSYMBOLIC_LDFLAGS=""
+AS_IF([test "x$arbint_host_windows" != "xyes" && test "x$arbint_host_emscripten" != "xyes" && test "x$arbint_cc_msvc_cl" != "xyes"], [
+  AC_CACHE_CHECK([whether the linker supports -Wl,-Bsymbolic],
+    [arbint_cv_ld_bsymbolic], [
+    arbint_saved_ldflags="$LDFLAGS"
+    LDFLAGS="$LDFLAGS -Wl,-Bsymbolic"
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[return 0;]])],
+      [arbint_cv_ld_bsymbolic=yes],
+      [arbint_cv_ld_bsymbolic=no])
+    LDFLAGS="$arbint_saved_ldflags"
+  ])
+  AS_IF([test "x$arbint_cv_ld_bsymbolic" = "xyes"], [
+    ARBINT_BSYMBOLIC_LDFLAGS="-Wl,-Bsymbolic"
+  ])
+])
+AC_SUBST([ARBINT_BSYMBOLIC_LDFLAGS])
+
 ARBINT_LIB_API_CPPFLAGS=""
 AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$enable_shared" = "xyes"], [
   ARBINT_LIB_API_CPPFLAGS="$ARBINT_LIB_API_CPPFLAGS -DARBINT_BUILD_DLL"

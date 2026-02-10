@@ -1078,10 +1078,14 @@ jobs:
       - name: Copy artifacts to upload directory
         run: |
           mkdir -p artifacts
-          find dist -path "*/src/.libs/*" -type f
-          find dist -name "*.wasm" -path "*/src/.libs/*" | xargs -I {} cp {} artifacts/ || true
-          find dist -name "*.so" -path "*/src/.libs/*" -type f | xargs -I {} cp {} artifacts/ || true
-          ls -la artifacts/
+          echo "=== All files in src/.libs ==="
+          find dist -path "*/src/.libs/*" -type f -ls || true
+          # Copy the wasm side-module library (.so is a wasm binary under emscripten)
+          find dist -path "*/src/.libs/*" -type f \
+            \( -name "*.wasm" -o -name "*.so" -o -name "*.so.*" \) \
+            -exec cp -v {} artifacts/ \;
+          echo "=== Artifacts to upload ==="
+          ls -la artifacts/ || echo "(empty)"
 
       - name: Upload library artifacts
         uses: actions/upload-artifact@v4

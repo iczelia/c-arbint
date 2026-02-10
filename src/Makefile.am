@@ -24,7 +24,7 @@ libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
 noinst_HEADERS = arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h arbint_mul_core.inc arbint_bitops.h arbint_shift.h arbint_random.h arbint_hash.h
-libarbint_la_LDFLAGS = -version-info 0:0:0 -no-undefined $(ARBINT_LTO_LDFLAGS)
+libarbint_la_LDFLAGS = -version-info 0:0:0 -no-undefined $(ARBINT_BSYMBOLIC_LDFLAGS) $(ARBINT_LTO_LDFLAGS)
 
 # Common libtool compilation command prefix
 LTCOMPILE = $(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile \
