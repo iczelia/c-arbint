@@ -998,7 +998,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [wasm32, wasm64, asmjs]
+        mode: [wasm32, wasm64]
         lto: ['on', 'off']
     name: build-wasm (${{ matrix.mode }}, lto-${{ matrix.lto }})
 
