@@ -25,10 +25,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(_MSC_VER) && defined(HAVE_WINDOWS_H)
-  #include <windows.h>
-#endif /* defined(_MSC_VER) && defined(HAVE_WINDOWS_H) */
-
 #if ARBINT_LIMB_BITS == 64
 typedef uint64_t arbint_limb_t;
 #elif ARBINT_LIMB_BITS == 32
