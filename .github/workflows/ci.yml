@@ -1006,6 +1006,11 @@ jobs:
       - name: Install Emscripten
         uses: mymindstorm/setup-emsdk@v14
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Download dist artifact
         uses: actions/download-artifact@v4
         with:
@@ -1018,6 +1023,10 @@ jobs:
           srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
           tar -xf "$tarball" -C dist
           cd "dist/$srcdir"
+
+          echo "=== Toolchain versions ==="
+          emcc --version | head -1
+          node --version
 
           # Build shared only; configure detects emscripten and sets up
           # libtool patches (SIDE_MODULE), test flags (MAIN_MODULE +
@@ -1047,6 +1056,15 @@ jobs:
           echo "=== Library ==="
           file src/.libs/libarbint.so || true
           ls -la src/.libs/libarbint.so || true
+
+          # Build test executables first so we can inspect the output
+          # before the test harness runs.
+          emmake make -C tests -j"$(nproc)" 2>&1 || true
+          echo "=== Test build output ==="
+          echo "-- tests/ directory --"
+          ls -la tests/test_basic* tests/compute_pi* 2>/dev/null || true
+          echo "-- tests/.libs/ directory --"
+          ls -la tests/.libs/ 2>/dev/null || echo "(does not exist)"
 
           echo "=== Running tests ==="
           emmake make check || {
