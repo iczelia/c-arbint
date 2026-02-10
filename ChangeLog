@@ -2,6 +2,28 @@
 
 	* Version 0.0.2 released.
 
+	* src/Makefile.am: Add Emscripten/WebAssembly build support.  On
+	emscripten, bypass libtool's broken link mode via convenience library
+	(noinst_LTLIBRARIES) + direct emcc -sSIDE_MODULE link.  Replace
+	EXTRA_*_SOURCES with EXTRA_DIST to avoid automake 1.18 phantom rule
+	generation bug that caused platform-specific files to be compiled
+	without required flags (e.g. -mbmi2).
+	* tests/Makefile.am: Conditional LDADD for emscripten (link against
+	libarbint.wasm instead of libarbint.la).  Add LOG_COMPILER +
+	AM_LOG_FLAGS for running wasm tests via run_wasm_test.sh under node.
+	* tests/run_wasm_test.sh: New test runner for emscripten.  Finds JS
+	output from emcc, copies side module next to test binary, executes
+	under node.
+	* configure.ac: Force enable_shared=yes on emscripten when libtool's
+	ld_shlibs detection fails.  Add ARBINT_HOST_EMSCRIPTEN conditional.
+	Add ARBINT_EMSCRIPTEN_TEST_LDFLAGS for -sMAIN_MODULE=2 -sNODERAWFS.
+	Skip arc4random_buf on emscripten (links but declaration missing).
+	* .github/workflows/ci.yml: Add build-wasm job with wasm32/wasm64
+	matrix (with and without LTO).  Node 24 for wasm64 Memory64 support.
+	Wasm artifacts included in repack-artifacts job.
+	* src/arbint_random_getentropy.c: Emscripten entropy via getentropy()
+	(routes to crypto.getRandomValues).
+
 	* src/arbint_random.c, src/arbint_random.h: Implement Mersenne Twister
 	(MT19937) PRNG with platform entropy seeding. Add arbint_urandomb and
 	arbint_urandomm with rejection sampling for uniform distribution.

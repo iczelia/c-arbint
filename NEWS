@@ -76,6 +76,14 @@ New Platform Support
   * ARM SHA-2 crypto extensions for SHA-256 acceleration
   * NEON SIMD support infrastructure
 
+- WebAssembly via Emscripten:
+  * wasm32 and wasm64 (Memory64) targets
+  * Builds as a SIDE_MODULE (.wasm) with dynamic linking at runtime
+  * Symbol visibility matches native shared library behavior
+  * getentropy()-based platform entropy (routes to crypto.getRandomValues)
+  * Full test suite passes under Node.js
+  * LTO supported
+
 Build System
 ------------
 - New autoconf macros: ARBINT_CHECK_ARM_FEATURE_WITH_FLAG (m4/arbint_arm_feature_check.m4)
@@ -83,13 +91,19 @@ Build System
 - --disable-entropy configure option for environments without entropy sources
 - Detection of explicit_bzero/memset_s for secure memory zeroing
 - Improved release signing script (armored signatures, bundled archives)
+- Emscripten build bypasses libtool link mode (broken ld_shlibs detection) via
+  convenience library + direct emcc link
+- Platform-specific source files use EXTRA_DIST instead of EXTRA_*_SOURCES to
+  avoid automake 1.18 phantom rule generation bug
 
 Testing
 -------
 - 7 new test binaries: test_random, test_hash, test_shift, test_bitops,
   test_pow, test_isqrt, test_sqr, test_mul_exhaustive
 - 2 new example programs: compute_e (e to 10000 digits), compute_bitops
-- Total: 17 test/example binaries (up from 8)
+- Total: 18 test/example binaries (up from 8)
+- Emscripten tests run under Node.js via run_wasm_test.sh log compiler
+- CI: wasm32/wasm64 build matrix (with and without LTO)
 
 Documentation
 -------------
