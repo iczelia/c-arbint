@@ -1009,7 +1009,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # wasm64 (MEMORY64) requires memory64+table64 support in V8.
+          # These proposals are unflagged starting in Node 24 (V8 13.6+).
+          node-version: '24'
 
       - name: Download dist artifact
         uses: actions/download-artifact@v4
