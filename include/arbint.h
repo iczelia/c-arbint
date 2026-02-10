@@ -18,7 +18,6 @@
 /*  The following features are currently unimplemented:
       - arbint_set_str, arbint_get_str
       - fdiv/cdiv (all), arbint_divisible, arbint_divisible_u32
-      - arbint_pow_mod, arbint_pow_u32_mod
       - arbint_gcd, arbint_lcm and immediate variants.
       - arbint_moebius, arbint_totient, arbint_carmichael,
       - arbint_xgcd, arbint_legendre, arbint_jacobi,
@@ -152,13 +151,12 @@ ARBINT_API arbint_err_t arbint_set_i32(arbint_t rop, int32_t v);
 ARBINT_API arbint_err_t arbint_set_u32(arbint_t rop, uint32_t v);
 
 /* Parse optional sign + digits in base 2..36 and assign the parsed value. */
-ARBINT_API arbint_err_t arbint_set_str(arbint_t rop, const char * s,
-                                       int base); // UNIMPLEMENTED
+ARBINT_API arbint_err_t arbint_set_str(arbint_t rop, const char * s, int base);
 /*  Format op in base 2..36 into a newly allocated NUL-terminated string.
     Allocation is performed through op's context allocator and ownership
     transfers to the caller.  */
 ARBINT_API arbint_err_t arbint_get_str(const arbint_t op, char ** out_str,
-                                       int base); // UNIMPLEMENTED
+                                       int base);
 
 /* ---------------- Extraction (get) ---------------- */
 /* Convert to i32, EOVERFLOW if doesn't fit */

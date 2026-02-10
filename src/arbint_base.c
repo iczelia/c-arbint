@@ -59,7 +59,9 @@ arbint_err_t arbint_ctx_init(arbint_ctx_t * ctx, const arbint_alloc_t * a,
   return ARBINT_OK;
 }
 
-/*  Clear context (currently a no-op, reserved for future cleanup).  */
+/*  Clear context.  Currently a no-op since contexts hold no dynamic state,
+    but callers should always invoke this for forward compatibility: future
+    versions may cache RNG state or allocator pools that require cleanup.  */
 void arbint_ctx_clear(arbint_ctx_t * ctx) { (void) ctx; }
 
 /*  Initialize arbint to zero with given context.
