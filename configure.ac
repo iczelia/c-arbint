@@ -19,7 +19,26 @@ AS_CASE([$host_cpu],
 AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
 AM_PROG_AR
+
+dnl Save the user's explicit --enable-shared / --disable-shared choice
+dnl before LT_INIT, which may override it based on platform detection.
+arbint_user_enable_shared="$enable_shared"
+
 LT_INIT
+
+dnl Emscripten: libtool's ld_shlibs detection may fail because the default
+dnl case checks for ELF targets and emcc does not always advertise ELF in
+dnl its --help output.  When ld_shlibs=no, libtool forces can_build_shared
+dnl and enable_shared to "no", disabling shared libraries entirely.
+dnl Override here unless the user explicitly passed --disable-shared.
+AS_CASE([$host_os],
+  [emscripten*], [
+    AS_IF([test "x$enable_shared" = "xno" && test "x$arbint_user_enable_shared" != "xno"], [
+      enable_shared=yes
+      can_build_shared=yes
+      AC_MSG_NOTICE([emscripten detected: forcing enable_shared=yes (libtool platform detection failed)])
+    ])
+  ])
 
 AC_C_INLINE
 AC_C_RESTRICT
@@ -640,14 +659,22 @@ AC_CONFIG_FILES([
   c-arbint.pc
 ])
 
-# Emscripten: libtool's archive_cmds uses -sSIDE_MODULE=2 which only
-# exports explicitly listed symbols.  Patch it to -sSIDE_MODULE (level 1)
-# so that all non-hidden symbols are exported by the side module.
+# Emscripten: patch the generated libtool script for two issues:
+# 1. archive_cmds uses -sSIDE_MODULE=2 which only exports explicitly
+#    listed symbols.  Patch to -sSIDE_MODULE (level 1) so that all
+#    non-hidden symbols are exported by the side module.
+# 2. build_libtool_libs may be "no" if libtool's platform detection
+#    failed to recognise emscripten as a shared-library-capable target.
+#    Force it to "yes" so shared libraries are actually built.
 AS_IF([test "x$arbint_host_emscripten" = "xyes"], [
   AC_CONFIG_COMMANDS([libtool-emscripten-patch], [
     if grep -q 'sSIDE_MODULE=2' libtool 2>/dev/null; then
       sed -i 's/-sSIDE_MODULE=2/-sSIDE_MODULE/g' libtool
       AC_MSG_NOTICE([patched libtool: -sSIDE_MODULE=2 -> -sSIDE_MODULE])
+    fi
+    if grep -q '^build_libtool_libs=no$' libtool 2>/dev/null; then
+      sed -i 's/^build_libtool_libs=no$/build_libtool_libs=yes/' libtool
+      AC_MSG_NOTICE([patched libtool: build_libtool_libs=no -> yes])
     fi
   ])
 ])
