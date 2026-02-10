@@ -212,6 +212,17 @@ AC_SUBST([ARBINT_LTO_CFLAGS])
 AC_SUBST([ARBINT_LTO_LDFLAGS])
 AC_MSG_NOTICE([LTO requested=$arbint_enable_lto, enabled=$arbint_enable_lto_effective])
 
+AC_ARG_ENABLE([assertions],
+  [AS_HELP_STRING([--enable-assertions],
+                  [Keep assert() checks enabled (do not define NDEBUG).
+                   Default is disabled: NDEBUG is defined.])],
+  [],
+  [enable_assertions=no])
+
+AS_IF([test "x$enable_assertions" != "xyes"], [
+  AC_DEFINE([NDEBUG], [1], [Define to 1 to disable assert() checks.])
+])
+
 AC_CHECK_HEADERS([stdint.h stdlib.h string.h])
 
 AS_IF([test "x$arbint_host_has_cpuid" = "xyes"], [

@@ -19,6 +19,7 @@
 
 #include "config.h"
 
+#include <assert.h>
 #include <string.h>
 
 /*  Multiply two limbs producing full double-width result (hi:lo = x * y).
@@ -91,6 +92,90 @@ static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
 #endif /* ARBINT_HAVE_X86_CARRY_KERNEL */
 }
 
+/*  Barrett division step for a known normalized divisor.
+    Computes *q = floor((nh:nl) / d), *r = (nh:nl) mod d.
+    Precondition: nh < d, d normalized (MSB set), di = reciprocal of d.  */
+static inline void arbint_div3_barrett(arbint_limb_t * q, arbint_limb_t * r,
+                                       arbint_limb_t nh, arbint_limb_t nl,
+                                       arbint_limb_t d, arbint_limb_t di) {
+  arbint_limb_t qh;
+  arbint_limb_t ql;
+  arbint_limb_t _r;
+  arbint_limb_t mask;
+
+  arbint_mul_wide_limb(nh, di, &qh, &ql);
+
+  {
+    arbint_limb_t lo = ql + nl;
+    arbint_limb_t carry = (lo < ql) ? (arbint_limb_t) 1u : (arbint_limb_t) 0u;
+    ql = lo;
+    qh = qh + (nh + (arbint_limb_t) 1u) + carry;
+  }
+
+  _r = nl - qh * d;
+
+  mask = -(arbint_limb_t) (_r > ql);
+  qh += mask;
+  _r += mask & d;
+
+  if (_r >= d) {
+    _r -= d;
+    qh++;
+  }
+
+  *q = qh;
+  *r = _r;
+}
+
+/*  Exact division by 3, in-place, high-to-low reciprocal division.
+    Precondition: x[0..n-1] must be exactly divisible by 3.
+    Returns normalized result limb count.
+
+    Uses Barrett reciprocal to replace hardware DIV instructions with
+    a single wide multiply + a few ALU ops per limb.
+
+    Compile-time constants for divisor 3:
+      64-bit: d_norm = 0xC000000000000000, di = 0x5555555555555555, shift = 62
+      32-bit: d_norm = 0xC0000000,         di = 0x55555555,         shift = 30  */
+static size_t arbint_divexact3_generic(arbint_limb_t * x, size_t n) {
+  arbint_limb_t rem;
+  size_t i;
+
+#if ARBINT_LIMB_BITS == 64
+  static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
+  static const arbint_limb_t di     = UINT64_C(0x5555555555555555);
+  static const unsigned shift = 62u;
+#elif ARBINT_LIMB_BITS == 32
+  static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
+  static const arbint_limb_t di     = UINT32_C(0x55555555);
+  static const unsigned shift = 30u;
+#else
+  #error "Unsupported ARBINT_LIMB_BITS for divexact3"
+#endif
+
+  if (n == 0u)
+    return 0u;
+
+  rem = x[n - 1u] >> (ARBINT_LIMB_BITS - shift);
+
+  for (i = n; i != 0u; ) {
+    arbint_limb_t nl;
+    arbint_limb_t qi;
+
+    --i;
+    nl = x[i] << shift;
+    if (i >= 1u)
+      nl |= x[i - 1u] >> (ARBINT_LIMB_BITS - shift);
+
+    arbint_div3_barrett(&qi, &rem, rem, nl, d_norm, di);
+    x[i] = qi;
+  }
+
+  (void) rem;
+  return arbint_norm_used(x, n);
+}
+
+#define ARBINT_DIVEXACT3_FN arbint_divexact3_generic
 #define ARBINT_MUL_LIMB_1_FN arbint_mul_limb_1_generic
 #define ARBINT_MUL_IMPL_FN arbint_mul_impl_generic
 #define ARBINT_SQR_IMPL_FN arbint_sqr_impl_generic

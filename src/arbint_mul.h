@@ -42,5 +42,6 @@ size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
 #endif /* HAS_BMI2 */
 
 #define ARBINT_KARATSUBA_THRESHOLD 32u
+#define ARBINT_TOOM3_THRESHOLD 96u
 
 #endif /* ARBINT_MUL_H */

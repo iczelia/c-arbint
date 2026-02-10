@@ -34,6 +34,7 @@ check_PROGRAMS = \
   test_bitops \
   test_pow \
   test_isqrt \
+  test_toom3 \
   compute_pi \
   compute_e \
   compute_bitops

@@ -269,6 +269,436 @@ static int arbint_add_shifted(arbint_limb_t * dst, size_t dst_n,
   return 1;
 }
 
+/*  Forward declaration for recursive multiplication (used by Toom-3).  */
+static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
+                                       const arbint_limb_t * a, size_t an,
+                                       const arbint_limb_t * b, size_t bn,
+                                       const arbint_alloc_t * alloc);
+
+/* ========== Toom-Cook-3 helpers ========== */
+
+/*  Right-shift by 1 bit, in-place. Input must be even.
+    Returns normalized result limb count.  */
+static size_t arbint_rsh1(arbint_limb_t * x, size_t n) {
+  size_t i;
+
+  if (n == 0u)
+    return 0u;
+
+  for (i = 0u; i < n - 1u; ++i)
+    x[i] = (x[i] >> 1u) | (x[i + 1u] << (ARBINT_LIMB_BITS - 1u));
+  x[n - 1u] >>= 1u;
+
+  return arbint_norm_used(x, n);
+}
+
+/*  dst = x * 3. Returns used count. dst must have room for n+1 limbs.  */
+static size_t arbint_mul3(arbint_limb_t * dst, const arbint_limb_t * x,
+                           size_t n) {
+  size_t dn;
+
+  if (n == 0u)
+    return 0u;
+
+  dn = arbint__dbl_mag(dst, x, n);
+  return arbint__add_mag(dst, dst, dn, x, n);
+}
+
+/*  dst = x * 12. Returns used count. dst must have room for n+2 limbs.  */
+static size_t arbint_mul12(arbint_limb_t * dst, const arbint_limb_t * x,
+                            size_t n) {
+  size_t dn;
+
+  if (n == 0u)
+    return 0u;
+
+  dn = arbint_mul3(dst, x, n);
+  dn = arbint__dbl_mag(dst, dst, dn);
+  return arbint__dbl_mag(dst, dst, dn);
+}
+
+/*  Signed-magnitude addition: dst = a + b (algebraic).
+    Signs: 0 = non-negative, 1 = negative. Zero is always non-negative.  */
+static void toom3_signed_add(arbint_limb_t * dst, size_t * dst_used,
+                              int * dst_neg,
+                              const arbint_limb_t * a, size_t an, int a_neg,
+                              const arbint_limb_t * b, size_t bn, int b_neg) {
+  if (a_neg == b_neg) {
+    /*  Same sign: add magnitudes, keep sign.  */
+    *dst_used = arbint__add_mag(dst, a, an, b, bn);
+    *dst_neg = a_neg;
+  } else {
+    /*  Different signs: subtract smaller from larger.  */
+    int cmp = arbint_cmp_mag_limbs(a, an, b, bn);
+    if (cmp >= 0) {
+      *dst_used = arbint__sub_mag(dst, a, an, b, bn);
+      *dst_neg = a_neg;
+    } else {
+      *dst_used = arbint__sub_mag(dst, b, bn, a, an);
+      *dst_neg = b_neg;
+    }
+  }
+
+  if (*dst_used == 0u)
+    *dst_neg = 0;
+}
+
+/*  Signed-magnitude subtraction: dst = a - b (algebraic).
+    Implemented as a + (-b).  */
+static void toom3_signed_sub(arbint_limb_t * dst, size_t * dst_used,
+                              int * dst_neg,
+                              const arbint_limb_t * a, size_t an, int a_neg,
+                              const arbint_limb_t * b, size_t bn, int b_neg) {
+  int b_neg_flipped = (bn == 0u) ? 0 : !b_neg;
+  toom3_signed_add(dst, dst_used, dst_neg, a, an, a_neg, b, bn,
+                   b_neg_flipped);
+}
+
+/*  Toom-Cook-3 multiplication: dst = a * b for large balanced operands.
+
+    Splits each operand into 3 pieces of k = ceil(an/3) limbs, evaluates
+    at points {0, 1, -1, 2, inf}, performs 5 recursive multiplications,
+    then interpolates and recomposes.
+
+    Precondition: an >= bn, bn >= ARBINT_TOOM3_THRESHOLD, an/bn <= 3.
+    dst must have capacity for an + bn + 1 limbs.  */
+static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
+                                      const arbint_limb_t * a, size_t an,
+                                      const arbint_limb_t * b, size_t bn,
+                                      const arbint_alloc_t * alloc) {
+  size_t k;
+  size_t a0n;
+  size_t a1n;
+  size_t a2n;
+  size_t b0n;
+  size_t b1n;
+  size_t b2n;
+  const arbint_limb_t * a0;
+  const arbint_limb_t * a1;
+  const arbint_limb_t * a2;
+  const arbint_limb_t * b0;
+  const arbint_limb_t * b1;
+  const arbint_limb_t * b2;
+  size_t prod_cap;
+  size_t r_cap;
+  size_t scr_cap;
+  size_t total;
+  arbint_limb_t * work = NULL;
+  arbint_limb_t * w0;
+  arbint_limb_t * w1;
+  arbint_limb_t * wm1;
+  arbint_limb_t * w2;
+  arbint_limb_t * winf;
+  arbint_limb_t * r1;
+  arbint_limb_t * r2;
+  arbint_limb_t * r3;
+  arbint_limb_t * scr;
+  arbint_limb_t * scr2;
+  size_t w0n;
+  size_t w1n;
+  size_t wm1n;
+  size_t w2n;
+  size_t winfn;
+  size_t r1n;
+  size_t r2n;
+  size_t r3n;
+  int wm1_neg;
+  size_t va1n;
+  size_t vb1n;
+  size_t va_neg1n;
+  size_t vb_neg1n;
+  int a_neg1_sign;
+  int b_neg1_sign;
+  size_t va2n;
+  size_t vb2n;
+  size_t tn;
+  int t_neg;
+  size_t scrn;
+  size_t cap;
+  arbint_err_t rc;
+
+  /*  Splitting: k = ceil(an / 3).  */
+  k = (an + 2u) / 3u;
+
+  /*  a = a2 * B^(2k) + a1 * B^k + a0.  */
+  a0 = a;
+  a0n = (k < an) ? k : an;
+  a0n = arbint_norm_used(a0, a0n);
+
+  if (an > k) {
+    a1 = a + k;
+    a1n = ((2u * k) < an) ? k : (an - k);
+    a1n = arbint_norm_used(a1, a1n);
+  } else {
+    a1 = a;
+    a1n = 0u;
+  }
+
+  if (an > 2u * k) {
+    a2 = a + 2u * k;
+    a2n = an - 2u * k;
+    a2n = arbint_norm_used(a2, a2n);
+  } else {
+    a2 = a;
+    a2n = 0u;
+  }
+
+  /*  b = b2 * B^(2k) + b1 * B^k + b0.  */
+  b0 = b;
+  b0n = (k < bn) ? k : bn;
+  b0n = arbint_norm_used(b0, b0n);
+
+  if (bn > k) {
+    b1 = b + k;
+    b1n = ((2u * k) < bn) ? k : (bn - k);
+    b1n = arbint_norm_used(b1, b1n);
+  } else {
+    b1 = b;
+    b1n = 0u;
+  }
+
+  if (bn > 2u * k) {
+    b2 = b + 2u * k;
+    b2n = bn - 2u * k;
+    b2n = arbint_norm_used(b2, b2n);
+  } else {
+    b2 = b;
+    b2n = 0u;
+  }
+
+  /*  Degenerate split: if either high piece is empty, the three-way split
+      is wasteful. Fall back to Karatsuba via arbint_mul_mag_rec which will
+      use schoolbook or Karatsuba as appropriate.  */
+  if (a2n == 0u || b2n == 0u) {
+    *out_used = arbint_mul_schoolbook(dst, a, an, b, bn);
+    return ARBINT_OK;
+  }
+
+  /*  Allocate workspace.
+      product buffers: 2k+7 limbs (product of two (k+3)-limb values).
+      w0/winf: 2k+2 limbs (products of k-limb pieces).
+      r1/r2/r3: 2k+3 limbs each.
+      scr/scr2: 2k+7 limbs each (scratch for scalar multiplies).  */
+  prod_cap = 2u * k + 7u;
+  r_cap = 2u * k + 3u;
+  scr_cap = 2u * k + 7u;
+
+  /*  Layout: w0 + w1 + wm1 + w2 + winf + r1 + r2 + r3 + scr + scr2.
+      w0 = 2k+2, w1 = 2k+7, wm1 = 2k+7, w2 = 2k+7, winf = 2k+2,
+      r1 = 2k+3, r2 = 2k+3, r3 = 2k+3, scr = 2k+7, scr2 = 2k+7.
+      Total = 20k + 48.  */
+  total = 20u * k + 48u;
+
+  work = arbint_alloc_limbs(alloc, total);
+  if (work == NULL)
+    return ARBINT_ENOMEM;
+
+  w0   = work;
+  w1   = w0   + (2u * k + 2u);
+  wm1  = w1   + prod_cap;
+  w2   = wm1  + prod_cap;
+  winf = w2   + prod_cap;
+  r1   = winf + (2u * k + 2u);
+  r2   = r1   + r_cap;
+  r3   = r2   + r_cap;
+  scr  = r3   + r_cap;
+  scr2 = scr  + scr_cap;
+
+  /*  No memset: all buffers are written before being read.  */
+
+  /* ---- Pointwise multiplications (cache-friendly order) ---- */
+
+  /*  w0 = a0 * b0 and winf = a2 * b2 first (smallest inputs).  */
+  rc = arbint_mul_mag_rec(w0, &w0n, a0, a0n, b0, b0n, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_mul_mag_rec(winf, &winfn, a2, a2n, b2, b2n, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /* ---- Evaluation and remaining products ---- */
+
+  /*  Point 1: a(1) = a0 + a1 + a2, b(1) = b0 + b1 + b2.  */
+  va1n = arbint__add_mag(scr, a0, a0n, a2, a2n);
+  va1n = arbint__add_mag(scr, scr, va1n, a1, a1n);
+
+  vb1n = arbint__add_mag(scr2, b0, b0n, b2, b2n);
+  vb1n = arbint__add_mag(scr2, scr2, vb1n, b1, b1n);
+
+  /*  w1 = a(1) * b(1). Skip if either eval is zero.  */
+  if (va1n == 0u || vb1n == 0u) {
+    w1n = 0u;
+  } else {
+    rc = arbint_mul_mag_rec(w1, &w1n, scr, va1n, scr2, vb1n, alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /*  Point -1: a(-1) = (a0 + a2) - a1, b(-1) = (b0 + b2) - b1.
+      Track signs explicitly.  */
+  tn = arbint__add_mag(scr, a0, a0n, a2, a2n);
+  if (arbint_cmp_mag_limbs(scr, tn, a1, a1n) >= 0) {
+    va_neg1n = arbint__sub_mag(scr, scr, tn, a1, a1n);
+    a_neg1_sign = 0;
+  } else {
+    va_neg1n = arbint__sub_mag(scr, a1, a1n, scr, tn);
+    a_neg1_sign = 1;
+  }
+  if (va_neg1n == 0u)
+    a_neg1_sign = 0;
+
+  tn = arbint__add_mag(scr2, b0, b0n, b2, b2n);
+  if (arbint_cmp_mag_limbs(scr2, tn, b1, b1n) >= 0) {
+    vb_neg1n = arbint__sub_mag(scr2, scr2, tn, b1, b1n);
+    b_neg1_sign = 0;
+  } else {
+    vb_neg1n = arbint__sub_mag(scr2, b1, b1n, scr2, tn);
+    b_neg1_sign = 1;
+  }
+  if (vb_neg1n == 0u)
+    b_neg1_sign = 0;
+
+  /*  wm1 = |a(-1)| * |b(-1)|, sign tracked separately.  */
+  wm1_neg = a_neg1_sign ^ b_neg1_sign;
+  if (va_neg1n == 0u || vb_neg1n == 0u) {
+    wm1n = 0u;
+    wm1_neg = 0;
+  } else {
+    rc = arbint_mul_mag_rec(wm1, &wm1n, scr, va_neg1n, scr2, vb_neg1n,
+                            alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    if (wm1n == 0u)
+      wm1_neg = 0;
+  }
+
+  /*  Point 2: a(2) = a0 + 2*(a1 + 2*a2), b(2) = b0 + 2*(b1 + 2*b2).  */
+  tn = arbint__dbl_mag(scr, a2, a2n);
+  tn = arbint__add_mag(scr, scr, tn, a1, a1n);
+  tn = arbint__dbl_mag(scr, scr, tn);
+  va2n = arbint__add_mag(scr, scr, tn, a0, a0n);
+
+  tn = arbint__dbl_mag(scr2, b2, b2n);
+  tn = arbint__add_mag(scr2, scr2, tn, b1, b1n);
+  tn = arbint__dbl_mag(scr2, scr2, tn);
+  vb2n = arbint__add_mag(scr2, scr2, tn, b0, b0n);
+
+  /*  w2 = a(2) * b(2). Skip if either eval is zero.  */
+  if (va2n == 0u || vb2n == 0u) {
+    w2n = 0u;
+  } else {
+    rc = arbint_mul_mag_rec(w2, &w2n, scr, va2n, scr2, vb2n, alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /* ---- Interpolation ---- */
+
+  /*  r0 = w0 (already in w0).
+      r4 = winf (already in winf).  */
+
+  /*  Compute r2 = (w1 + wm1_algebraic - 2*w0 - 2*winf) / 2.
+      Accumulate directly into r2 buffer, use scr as temp.  */
+
+  /*  r2 = w1 + wm1_algebraic (signed).  */
+  toom3_signed_add(r2, &r2n, &t_neg, w1, w1n, 0, wm1, wm1n, wm1_neg);
+
+  /*  r2 -= 2*w0.  */
+  scrn = arbint__dbl_mag(scr, w0, w0n);
+  toom3_signed_sub(r2, &r2n, &t_neg, r2, r2n, t_neg, scr, scrn, 0);
+
+  /*  r2 -= 2*winf.  */
+  scrn = arbint__dbl_mag(scr, winf, winfn);
+  toom3_signed_sub(r2, &r2n, &t_neg, r2, r2n, t_neg, scr, scrn, 0);
+
+  /*  r2 numerator must be non-negative and even.  */
+  assert(r2n == 0u || t_neg == 0);
+  assert(r2n == 0u || (r2[0] & 1u) == 0u);
+
+  /*  r2 = t / 2 (exact).  */
+  r2n = arbint_rsh1(r2, r2n);
+
+  /*  Compute r3 = (w2 - 3*w1 - wm1_algebraic + 3*w0 - 12*winf) / 6.
+      Accumulate directly into r3 buffer, use scr as temp.  */
+
+  /*  r3 = w2 + 3*w0.  */
+  scrn = arbint_mul3(scr, w0, w0n);
+  toom3_signed_add(r3, &r3n, &t_neg, w2, w2n, 0, scr, scrn, 0);
+
+  /*  r3 -= 3*w1.  */
+  scrn = arbint_mul3(scr, w1, w1n);
+  toom3_signed_sub(r3, &r3n, &t_neg, r3, r3n, t_neg, scr, scrn, 0);
+
+  /*  r3 -= wm1_algebraic.  */
+  toom3_signed_sub(r3, &r3n, &t_neg, r3, r3n, t_neg,
+                   wm1, wm1n, wm1_neg);
+
+  /*  r3 -= 12*winf.  */
+  scrn = arbint_mul12(scr, winf, winfn);
+  toom3_signed_sub(r3, &r3n, &t_neg, r3, r3n, t_neg, scr, scrn, 0);
+
+  /*  r3 numerator must be non-negative and even.  */
+  assert(r3n == 0u || t_neg == 0);
+  assert(r3n == 0u || (r3[0] & 1u) == 0u);
+
+  /*  r3 = t / 6 = (t / 2) / 3.  */
+  r3n = arbint_rsh1(r3, r3n);
+  r3n = ARBINT_DIVEXACT3_FN(r3, r3n);
+
+  /*  Compute r1 = w1 - w0 - r2 - r3 - winf.
+      All subtractions are provably non-negative after correct r2, r3.  */
+  assert(arbint_cmp_mag_limbs(w1, w1n, w0, w0n) >= 0);
+  r1n = arbint__sub_mag(r1, w1, w1n, w0, w0n);
+
+  assert(arbint_cmp_mag_limbs(r1, r1n, r2, r2n) >= 0);
+  r1n = arbint__sub_mag(r1, r1, r1n, r2, r2n);
+
+  assert(arbint_cmp_mag_limbs(r1, r1n, r3, r3n) >= 0);
+  r1n = arbint__sub_mag(r1, r1, r1n, r3, r3n);
+
+  assert(arbint_cmp_mag_limbs(r1, r1n, winf, winfn) >= 0);
+  r1n = arbint__sub_mag(r1, r1, r1n, winf, winfn);
+
+  /* ---- Recomposition ---- */
+
+  /*  result = r0 + r1*B^k + r2*B^(2k) + r3*B^(3k) + r4*B^(4k).  */
+  cap = an + bn + 1u;
+  memset(dst, 0, cap * sizeof(arbint_limb_t));
+
+  /*  r0 = w0.  */
+  if (w0n > 0u)
+    memcpy(dst, w0, w0n * sizeof(arbint_limb_t));
+
+  /*  r4 = winf at offset 4k.  */
+  if (winfn > 0u)
+    memcpy(dst + 4u * k, winf, winfn * sizeof(arbint_limb_t));
+
+  if (!arbint_add_shifted(dst, cap, r1, r1n, k)) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  if (!arbint_add_shifted(dst, cap, r2, r2n, 2u * k)) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  if (!arbint_add_shifted(dst, cap, r3, r3n, 3u * k)) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  *out_used = arbint_norm_used(dst, cap);
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_free_limbs(alloc, work);
+  return rc;
+}
+
+/* ========== End Toom-Cook-3 helpers ========== */
+
 /*  Recursive multiplication using Karatsuba algorithm for large operands.
     Falls back to schoolbook multiplication below ARBINT_KARATSUBA_THRESHOLD.
     Splits operands in half and uses identity: (a1*B + a0) * (b1*B + b0) =
@@ -305,6 +735,13 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
     *out_used = arbint_mul_schoolbook(dst, a, an, b, bn);
     return ARBINT_OK;
   }
+
+  /*  Toom-Cook-3 for large balanced operands (an <= 3*bn).
+      Use subtraction form to avoid both division and multiplication overflow:
+      an >= bn is guaranteed by the swap above, so an - bn >= 0.
+      bn >= 96 so bn + bn cannot overflow size_t.  */
+  if (bn >= ARBINT_TOOM3_THRESHOLD && an - bn <= bn + bn)
+    return arbint_toom3_mul(dst, out_used, a, an, b, bn, alloc);
 
   {
     size_t k = an / 2u;
