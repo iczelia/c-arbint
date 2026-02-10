@@ -20,20 +20,21 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 # Sources and headers shared between all platforms.
 ARBINT_CORE_SOURCES = \
   arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c \
-  arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c \
-  arbint_mul_generic.c arbint_tdiv_generic.c arbint_bitops.c \
+  arbint_div.c arbint_tdiv.c arbint_fdiv.c arbint_cdiv.c \
+  arbint_iex.c arbint_cpu.c arbint_mul.c \
+  arbint_mul_generic.c arbint_div_generic.c arbint_bitops.c \
   arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c
 
 noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
-  arbint_tdiv.h arbint_iex.h arbint_cpu.h arbint_mul.h \
+  arbint_div.h arbint_iex.h arbint_cpu.h arbint_mul.h \
   arbint_mul_core.inc arbint_bitops.h arbint_shift.h arbint_random.h \
   arbint_hash.h
 
 # Platform-specific sources: distributed but compiled only via custom rules
 # (not EXTRA_*_SOURCES, which triggers broken automake 1.18 auto-rules).
 EXTRA_DIST = \
-  arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c \
+  arbint_mul_bmi2.c arbint_div_bmi2.c arbint_addsub_avx2.c \
   arbint_bitops_popcnt.c arbint_random_getentropy.c \
   arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c \
   arbint_hash_shani.c arbint_hash_sha2_neon.c \
@@ -103,7 +104,7 @@ ARBINT_LTCOMPILE = $(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $
 	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libarbint_la_CPPFLAGS) $(CPPFLAGS) $(libarbint_la_CFLAGS) $(CFLAGS)
 
 if ARBINT_BUILD_BMI2
-libarbint_la_LIBADD += libarbint_la-arbint_mul_bmi2.lo libarbint_la-arbint_tdiv_bmi2.lo
+libarbint_la_LIBADD += libarbint_la-arbint_mul_bmi2.lo libarbint_la-arbint_div_bmi2.lo
 endif
 
 if ARBINT_BUILD_AVX2
@@ -149,7 +150,7 @@ endif
 libarbint_la-arbint_mul_bmi2.lo: arbint_mul_bmi2.c
 	$(ARBINT_LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
-libarbint_la-arbint_tdiv_bmi2.lo: arbint_tdiv_bmi2.c
+libarbint_la-arbint_div_bmi2.lo: arbint_div_bmi2.c
 	$(ARBINT_LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
 libarbint_la-arbint_addsub_avx2.lo: arbint_addsub_avx2.c

@@ -20,7 +20,7 @@
 #include "config.h"
 
 #include "arbint_cpu.h"
-#include "arbint_tdiv.h"
+#include "arbint_div.h"
 
 typedef arbint_err_t (*arbint_mul_impl_fn_t)(arbint_t rop, const arbint_t a,
                                              const arbint_t b);

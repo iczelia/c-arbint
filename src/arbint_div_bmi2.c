@@ -15,7 +15,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
-#include "arbint_tdiv.h"
+#include "arbint_div.h"
 
 #include "config.h"
 
@@ -235,7 +235,7 @@ arbint_err_t arbint_div_mag_single_limb_bmi2(const arbint_limb_t * np,
 /*  BMI2-optimized truncated division by uint32_t using reciprocal algorithm.
     Uses _mulx_u64 for fast wide multiply in reciprocal-based division step.
     1.5-2x faster than generic implementation.  */
-arbint_err_t arbint_tdiv_qr_u32_bmi2_impl(arbint_t q, arbint_t r,
+arbint_err_t arbint_div_qr_u32_bmi2_impl(arbint_t q, arbint_t r,
                                           const arbint_t n, uint32_t dmag,
                                           int dsign) {
   const arbint_limb_t * np;

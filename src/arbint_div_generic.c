@@ -15,7 +15,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
-#include "arbint_tdiv.h"
+#include "arbint_div.h"
 
 #include "config.h"
 
@@ -221,7 +221,7 @@ static inline void arbint_ubarrett(arbint_limb_t * q, arbint_limb_t * r,
 
 /*  Generic truncated division by uint32_t (magnitude) using Barrett
     reduction.  */
-arbint_err_t arbint_tdiv_qr_u32_generic_impl(arbint_t q, arbint_t r,
+arbint_err_t arbint_div_qr_u32_generic_impl(arbint_t q, arbint_t r,
                                              const arbint_t n, uint32_t dmag,
                                              int dsign) {
   const arbint_limb_t * np;
@@ -329,7 +329,7 @@ arbint_err_t arbint_tdiv_qr_u32_generic_impl(arbint_t q, arbint_t r,
 
 /*  Reduce x mod d in-place using precomputed Barrett parameters.
 
-    This is a remainder-only version of arbint_tdiv_qr_u32_generic_impl
+    This is a remainder-only version of arbint_div_qr_u32_generic_impl
     optimized for modular exponentiation, where the reciprocal is
     precomputed once and reused for many reductions. Skips quotient
     computation for efficiency.
