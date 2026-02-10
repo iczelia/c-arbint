@@ -654,7 +654,7 @@ arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {
     return arbint_mul_u32(rop, a, (uint32_t) b);
   }
 
-  mag = (uint32_t) (-(b + 1)) + 1u;
+  mag = arbint_i32_mag(b);
   rc = arbint_mul_u32(rop, a, mag);
   if (rc != ARBINT_OK)
     return rc;
@@ -663,7 +663,8 @@ arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {
   return ARBINT_OK;
 }
 
-/*  Fused multiply-accumulate: a += b * c.
+/*  Internal fused multiply-accumulate/subtract implementation.
+    sign_flip: 0 for addmul (a += b*c), 1 for submul (a -= b*c).
 
     Uses platform-dispatched multiplication (BMI2 when available) and
     selects Karatsuba/Toom-3 for large operands.
@@ -676,7 +677,8 @@ arbint_err_t arbint_mul_i32(arbint_t rop, const arbint_t a, int32_t b) {
 
     For different-sign operands, we always compute the product into a
     temporary (using the recursive multiplier) and subtract.  */
-arbint_err_t arbint_addmul(arbint_t a, const arbint_t b, const arbint_t c) {
+static arbint_err_t arbint_addsubmul_impl(arbint_t a, const arbint_t b,
+                                          const arbint_t c, int sign_flip) {
   int as;
   int bs;
   int cs;
@@ -705,15 +707,25 @@ arbint_err_t arbint_addmul(arbint_t a, const arbint_t b, const arbint_t c) {
   cs = (c[0]._sz > 0) - (c[0]._sz < 0);
   ps = bs * cs;
 
-  /*  b*c = 0, nothing to add.  */
+  /*  b*c = 0, nothing to add/subtract.  */
   if (ps == 0)
     return ARBINT_OK;
 
+  /*  For subtraction, flip the product sign.  */
+  if (sign_flip)
+    ps = -ps;
+
   as = (a[0]._sz > 0) - (a[0]._sz < 0);
 
-  /*  a = 0, result is just b*c.  */
-  if (as == 0)
-    return arbint_mul(a, b, c);
+  /*  a = 0: result is b*c (or -b*c for submul).  */
+  if (as == 0) {
+    rc = arbint_mul(a, b, c);
+    if (rc != ARBINT_OK)
+      return rc;
+    if (sign_flip)
+      a[0]._sz = -a[0]._sz;
+    return ARBINT_OK;
+  }
 
   an = arbint_abs_sz(a[0]._sz);
   bn = arbint_abs_sz(b[0]._sz);
@@ -836,180 +848,21 @@ cleanup:
   return rc;
 }
 
-/*  Fused multiply-subtract: a -= b * c.
-
-    Equivalent to arbint_addmul(a, b, c) with the product sign flipped.
-    Uses the same platform-dispatched Karatsuba/Toom-3 strategy as
-    arbint_addmul for large operands.  */
-arbint_err_t arbint_submul(arbint_t a, const arbint_t b, const arbint_t c) {
-  int as;
-  int bs;
-  int cs;
-  int ps;
-  size_t an;
-  size_t bn;
-  size_t cn;
-  size_t min_bc;
-  size_t cap;
-  size_t prod_n;
-  arbint_err_t rc;
-  const arbint_alloc_t * alloc;
-  arbint_limb_t * bp;
-  arbint_limb_t * cp;
-  arbint_limb_t * ap;
-  arbint_limb_t * b_copy = NULL;
-  arbint_limb_t * c_copy = NULL;
-  arbint_limb_t * prod = NULL;
-
-  if (a == NULL || b == NULL || c == NULL)
-    return ARBINT_EINVAL;
-
-  arbint_init_addmul_dispatch();
-
-  bs = (b[0]._sz > 0) - (b[0]._sz < 0);
-  cs = (c[0]._sz > 0) - (c[0]._sz < 0);
-  ps = bs * cs;
-
-  /*  b*c = 0, nothing to subtract.  */
-  if (ps == 0)
-    return ARBINT_OK;
-
-  /*  Flip sign to subtract: we want a - b*c = a + (-(b*c)).  */
-  ps = -ps;
-
-  as = (a[0]._sz > 0) - (a[0]._sz < 0);
-
-  /*  a = 0, result is -(b*c).  */
-  if (as == 0) {
-    rc = arbint_mul(a, b, c);
-    if (rc != ARBINT_OK)
-      return rc;
-    a[0]._sz = -a[0]._sz;
-    return ARBINT_OK;
-  }
-
-  an = arbint_abs_sz(a[0]._sz);
-  bn = arbint_abs_sz(b[0]._sz);
-  cn = arbint_abs_sz(c[0]._sz);
-
-  /*  Calculate capacity needed: max(an, bn+cn) + 1 for possible carry.  */
-  if (!arbint_mul_cap(bn, cn, &prod_n))
-    return ARBINT_EOVERFLOW;
-  cap = (prod_n > an) ? prod_n : an;
-  if (cap > SIZE_MAX - 1u)
-    return ARBINT_EOVERFLOW;
-  cap += 1u;
-
-  rc = arbint_resize(a, cap);
-  if (rc != ARBINT_OK)
-    return rc;
-  if (a[0]._ctx == NULL || a[0]._ctx->a.realloc == NULL)
-    return ARBINT_EINVAL;
-  alloc = &a[0]._ctx->a;
-
-  bp = (arbint_limb_t *) ARBINT_CLIMBS(b);
-  cp = (arbint_limb_t *) ARBINT_CLIMBS(c);
-
-  /*  Handle aliasing: copy b if a == b.  */
-  if (a == b) {
-    b_copy = arbint_alloc_limbs(alloc, bn);
-    if (b_copy == NULL)
-      return ARBINT_ENOMEM;
-    memcpy(b_copy, bp, bn * sizeof(arbint_limb_t));
-    bp = b_copy;
-  }
-
-  /*  Handle aliasing: copy c if a == c.  */
-  if (a == c) {
-    if (a == b) {
-      cp = bp;
-    } else {
-      c_copy = arbint_alloc_limbs(alloc, cn);
-      if (c_copy == NULL) {
-        arbint_free_limbs(alloc, b_copy);
-        return ARBINT_ENOMEM;
-      }
-      memcpy(c_copy, cp, cn * sizeof(arbint_limb_t));
-      cp = c_copy;
-    }
-  }
-
-  ap = ARBINT_LIMBS(a);
-  min_bc = (bn < cn) ? bn : cn;
-
-  if (as == ps) {
-    /*  Same sign: add magnitudes.  */
-    if (min_bc < ARBINT_KARATSUBA_THRESHOLD) {
-      size_t used = g_mulacc(ap, an, cap, bp, bn, cp, cn);
-      if (!arbint_set_signed_sz(a, used, as)) {
-        rc = ARBINT_EOVERFLOW;
-        goto cleanup;
-      }
-    } else {
-      size_t used;
-
-      prod = arbint_alloc_limbs(alloc, prod_n);
-      if (prod == NULL) {
-        rc = ARBINT_ENOMEM;
-        goto cleanup;
-      }
-
-      rc = g_mul_mag(prod, &prod_n, bp, bn, cp, cn, alloc);
-      if (rc != ARBINT_OK)
-        goto cleanup;
-
-      used = arbint__add_mag(ap, ap, an, prod, prod_n);
-      if (!arbint_set_signed_sz(a, used, as)) {
-        rc = ARBINT_EOVERFLOW;
-        goto cleanup;
-      }
-    }
-  } else {
-    /*  Different signs: compute product to temporary and subtract.  */
-    size_t used;
-    int cmp;
-
-    prod = arbint_alloc_limbs(alloc, prod_n);
-    if (prod == NULL) {
-      rc = ARBINT_ENOMEM;
-      goto cleanup;
-    }
-
-    rc = g_mul_mag(prod, &prod_n, bp, bn, cp, cn, alloc);
-    if (rc != ARBINT_OK)
-      goto cleanup;
-
-    cmp = arbint_cmp_mag_limbs(ap, an, prod, prod_n);
-
-    if (cmp >= 0) {
-      /*  |a| >= |product|: result = |a| - |product|, keep sign of a.  */
-      used = arbint__sub_mag(ap, ap, an, prod, prod_n);
-      if (!arbint_set_signed_sz(a, used, as)) {
-        rc = ARBINT_EOVERFLOW;
-        goto cleanup;
-      }
-    } else {
-      /*  |a| < |product|: result = |product| - |a|, use sign of product.  */
-      used = arbint__sub_mag(ap, prod, prod_n, ap, an);
-      if (!arbint_set_signed_sz(a, used, ps)) {
-        rc = ARBINT_EOVERFLOW;
-        goto cleanup;
-      }
-    }
-  }
-
-  rc = ARBINT_OK;
-
-cleanup:
-  arbint_free_limbs(alloc, prod);
-  arbint_free_limbs(alloc, c_copy);
-  arbint_free_limbs(alloc, b_copy);
-  return rc;
+/*  Fused multiply-accumulate: a += b * c.  */
+arbint_err_t arbint_addmul(arbint_t a, const arbint_t b, const arbint_t c) {
+  return arbint_addsubmul_impl(a, b, c, 0);
 }
 
-/*  Fused multiply-accumulate with u32 multiplier: a += b * c.
+/*  Fused multiply-subtract: a -= b * c.  */
+arbint_err_t arbint_submul(arbint_t a, const arbint_t b, const arbint_t c) {
+  return arbint_addsubmul_impl(a, b, c, 1);
+}
+
+/*  Internal fused multiply-accumulate/subtract with u32 multiplier.
+    sign_flip: 0 for addmul (a += b*c), 1 for submul (a -= b*c).
     Uses platform-dispatched single-limb multiply.  */
-arbint_err_t arbint_addmul_u32(arbint_t a, const arbint_t b, uint32_t c) {
+static arbint_err_t arbint_addsubmul_u32_impl(arbint_t a, const arbint_t b,
+                                              uint32_t c, int sign_flip) {
   int as;
   int bs;
   int ps;
@@ -1030,18 +883,27 @@ arbint_err_t arbint_addmul_u32(arbint_t a, const arbint_t b, uint32_t c) {
     return ARBINT_OK;
 
   if (c == 1u)
-    return arbint_add(a, a, b);
+    return sign_flip ? arbint_sub(a, a, b) : arbint_add(a, a, b);
 
   bs = (b[0]._sz > 0) - (b[0]._sz < 0);
-  ps = bs;
 
-  if (ps == 0)
+  if (bs == 0)
     return ARBINT_OK;
+
+  /*  For subtraction, flip the product sign.  */
+  ps = sign_flip ? -bs : bs;
 
   as = (a[0]._sz > 0) - (a[0]._sz < 0);
 
-  if (as == 0)
-    return arbint_mul_u32(a, b, c);
+  /*  a = 0: result is b*c (or -b*c for submul).  */
+  if (as == 0) {
+    rc = arbint_mul_u32(a, b, c);
+    if (rc != ARBINT_OK)
+      return rc;
+    if (sign_flip)
+      a[0]._sz = -a[0]._sz;
+    return ARBINT_OK;
+  }
 
   arbint_init_addmul_dispatch();
 
@@ -1117,125 +979,18 @@ cleanup:
   return rc;
 }
 
-/*  Fused multiply-subtract with u32 multiplier: a -= b * c.
-    Uses platform-dispatched single-limb multiply.  */
+/*  Fused multiply-accumulate with u32 multiplier: a += b * c.  */
+arbint_err_t arbint_addmul_u32(arbint_t a, const arbint_t b, uint32_t c) {
+  return arbint_addsubmul_u32_impl(a, b, c, 0);
+}
+
+/*  Fused multiply-subtract with u32 multiplier: a -= b * c.  */
 arbint_err_t arbint_submul_u32(arbint_t a, const arbint_t b, uint32_t c) {
-  int as;
-  int bs;
-  int ps;
-  size_t an;
-  size_t bn;
-  size_t cap;
-  arbint_err_t rc;
-  const arbint_alloc_t * alloc;
-  const arbint_limb_t * bp;
-  arbint_limb_t * ap;
-  arbint_limb_t * b_copy = NULL;
-  arbint_limb_t * prod = NULL;
-
-  if (a == NULL || b == NULL)
-    return ARBINT_EINVAL;
-
-  if (c == 0u)
-    return ARBINT_OK;
-
-  if (c == 1u)
-    return arbint_sub(a, a, b);
-
-  bs = (b[0]._sz > 0) - (b[0]._sz < 0);
-
-  if (bs == 0)
-    return ARBINT_OK;
-
-  /*  Flip sign for subtraction.  */
-  ps = -bs;
-
-  as = (a[0]._sz > 0) - (a[0]._sz < 0);
-
-  if (as == 0) {
-    rc = arbint_mul_u32(a, b, c);
-    if (rc != ARBINT_OK)
-      return rc;
-    a[0]._sz = -a[0]._sz;
-    return ARBINT_OK;
-  }
-
-  arbint_init_addmul_dispatch();
-
-  an = arbint_abs_sz(a[0]._sz);
-  bn = arbint_abs_sz(b[0]._sz);
-
-  cap = (bn + 1u > an) ? bn + 2u : an + 2u;
-
-  rc = arbint_resize(a, cap);
-  if (rc != ARBINT_OK)
-    return rc;
-  if (a[0]._ctx == NULL || a[0]._ctx->a.realloc == NULL)
-    return ARBINT_EINVAL;
-  alloc = &a[0]._ctx->a;
-
-  bp = ARBINT_CLIMBS(b);
-
-  if (a == b) {
-    b_copy = arbint_alloc_limbs(alloc, bn);
-    if (b_copy == NULL)
-      return ARBINT_ENOMEM;
-    memcpy(b_copy, bp, bn * sizeof(arbint_limb_t));
-    bp = b_copy;
-  }
-
-  ap = ARBINT_LIMBS(a);
-
-  if (as == ps) {
-    /*  Same sign: use fused mulacc.  */
-    size_t used = g_mulacc_1(ap, an, cap, bp, bn, (arbint_limb_t) c);
-    if (!arbint_set_signed_sz(a, used, as)) {
-      rc = ARBINT_EOVERFLOW;
-      goto cleanup;
-    }
-  } else {
-    /*  Different signs: compute product and subtract.  */
-    size_t prod_n;
-    size_t used;
-    int cmp;
-
-    prod = arbint_alloc_limbs(alloc, bn + 1u);
-    if (prod == NULL) {
-      rc = ARBINT_ENOMEM;
-      goto cleanup;
-    }
-
-    prod_n = g_mul_limb_1(prod, bp, bn, (arbint_limb_t) c);
-
-    cmp = arbint_cmp_mag_limbs(ap, an, prod, prod_n);
-
-    if (cmp >= 0) {
-      used = arbint__sub_mag(ap, ap, an, prod, prod_n);
-      if (!arbint_set_signed_sz(a, used, as)) {
-        rc = ARBINT_EOVERFLOW;
-        goto cleanup;
-      }
-    } else {
-      used = arbint__sub_mag(ap, prod, prod_n, ap, an);
-      if (!arbint_set_signed_sz(a, used, ps)) {
-        rc = ARBINT_EOVERFLOW;
-        goto cleanup;
-      }
-    }
-  }
-
-  rc = ARBINT_OK;
-
-cleanup:
-  arbint_free_limbs(alloc, prod);
-  arbint_free_limbs(alloc, b_copy);
-  return rc;
+  return arbint_addsubmul_u32_impl(a, b, c, 1);
 }
 
 /*  Fused multiply-accumulate with i32 multiplier: a += b * c.  */
 arbint_err_t arbint_addmul_i32(arbint_t a, const arbint_t b, int32_t c) {
-  uint32_t mag;
-
   if (c == 0)
     return ARBINT_OK;
 
@@ -1243,14 +998,11 @@ arbint_err_t arbint_addmul_i32(arbint_t a, const arbint_t b, int32_t c) {
     return arbint_addmul_u32(a, b, (uint32_t) c);
 
   /*  c < 0: a += b*c = a - b*|c|.  */
-  mag = (uint32_t) (-(c + 1)) + 1u;
-  return arbint_submul_u32(a, b, mag);
+  return arbint_submul_u32(a, b, arbint_i32_mag(c));
 }
 
 /*  Fused multiply-subtract with i32 multiplier: a -= b * c.  */
 arbint_err_t arbint_submul_i32(arbint_t a, const arbint_t b, int32_t c) {
-  uint32_t mag;
-
   if (c == 0)
     return ARBINT_OK;
 
@@ -1258,6 +1010,5 @@ arbint_err_t arbint_submul_i32(arbint_t a, const arbint_t b, int32_t c) {
     return arbint_submul_u32(a, b, (uint32_t) c);
 
   /*  c < 0: a -= b*c = a - b*c = a + b*|c|.  */
-  mag = (uint32_t) (-(c + 1)) + 1u;
-  return arbint_addmul_u32(a, b, mag);
+  return arbint_addmul_u32(a, b, arbint_i32_mag(c));
 }

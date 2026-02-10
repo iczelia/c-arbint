@@ -164,7 +164,7 @@ int arbint_cmp(const arbint_t a, const arbint_t b) {
 int arbint_cmp_i32(const arbint_t a, int32_t b) {
   int as = arbint_signum(a);
   int bs = (b > 0) - (b < 0);
-  uint32_t bmag = (b < 0) ? (uint32_t) (-(b + 1)) + 1u : (uint32_t) b;
+  uint32_t bmag = arbint_i32_mag(b);
   int c;
 
   if (as < bs)

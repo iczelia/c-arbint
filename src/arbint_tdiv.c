@@ -377,7 +377,6 @@ arbint_err_t arbint_tdiv_r_u32(arbint_t r, const arbint_t n, uint32_t d) {
 arbint_err_t arbint_tdiv_qr_i32(arbint_t q, arbint_t r, const arbint_t n,
                                 int32_t d) {
   static arbint_tdiv_qr_u32_impl_fn_t impl = NULL;
-  uint32_t mag;
 
   if (q == NULL || r == NULL)
     return ARBINT_EINVAL;
@@ -387,13 +386,11 @@ arbint_err_t arbint_tdiv_qr_i32(arbint_t q, arbint_t r, const arbint_t n,
   if (impl == NULL)
     impl = arbint_select_tdiv_qr_u32_impl();
 
-  mag = (d < 0) ? (uint32_t) (-(d + 1)) + 1u : (uint32_t) d;
-  return impl(q, r, n, mag, (d < 0) ? -1 : 1);
+  return impl(q, r, n, arbint_i32_mag(d), (d < 0) ? -1 : 1);
 }
 
 arbint_err_t arbint_tdiv_q_i32(arbint_t q, const arbint_t n, int32_t d) {
   static arbint_tdiv_qr_u32_impl_fn_t impl = NULL;
-  uint32_t mag;
 
   if (d == 0)
     return ARBINT_EZERO;
@@ -401,13 +398,11 @@ arbint_err_t arbint_tdiv_q_i32(arbint_t q, const arbint_t n, int32_t d) {
   if (impl == NULL)
     impl = arbint_select_tdiv_qr_u32_impl();
 
-  mag = (d < 0) ? (uint32_t) (-(d + 1)) + 1u : (uint32_t) d;
-  return impl(q, NULL, n, mag, (d < 0) ? -1 : 1);
+  return impl(q, NULL, n, arbint_i32_mag(d), (d < 0) ? -1 : 1);
 }
 
 arbint_err_t arbint_tdiv_r_i32(arbint_t r, const arbint_t n, int32_t d) {
   static arbint_tdiv_qr_u32_impl_fn_t impl = NULL;
-  uint32_t mag;
 
   if (d == 0)
     return ARBINT_EZERO;
@@ -415,6 +410,5 @@ arbint_err_t arbint_tdiv_r_i32(arbint_t r, const arbint_t n, int32_t d) {
   if (impl == NULL)
     impl = arbint_select_tdiv_qr_u32_impl();
 
-  mag = (d < 0) ? (uint32_t) (-(d + 1)) + 1u : (uint32_t) d;
-  return impl(NULL, r, n, mag, (d < 0) ? -1 : 1);
+  return impl(NULL, r, n, arbint_i32_mag(d), (d < 0) ? -1 : 1);
 }

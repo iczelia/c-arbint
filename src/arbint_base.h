@@ -85,6 +85,12 @@ static inline size_t arbint_abs_sz(ptrdiff_t sz) {
   return (size_t) (-(sz + 1)) + 1;
 }
 
+/*  Convert int32_t to its unsigned magnitude.
+    Handles INT32_MIN correctly by avoiding UB from negating it.  */
+static inline uint32_t arbint_i32_mag(int32_t v) {
+  return (v < 0) ? (uint32_t) (-(v + 1)) + 1u : (uint32_t) v;
+}
+
 /*  Internal function to count the number of leading zeros in a limb.
     Precondition: x != 0 (behavior is undefined for zero input).
     On GCC/Clang, __builtin_clz(0) is undefined. On MSVC, _BitScanReverse(0)

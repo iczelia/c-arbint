@@ -106,7 +106,7 @@ arbint_err_t arbint_set_i32(arbint_t rop, int32_t v) {
       return rc;
   }
 
-  mag = (v < 0) ? (uint32_t) (-(v + 1)) + 1u : (uint32_t) v;
+  mag = arbint_i32_mag(v);
   ARBINT_LIMBS(rop)[0] = (arbint_limb_t) mag;
   rop[0]._sz = (v < 0) ? -1 : 1;
   return ARBINT_OK;

@@ -609,17 +609,13 @@ arbint_err_t arbint_sub_u32(arbint_t rop, const arbint_t a, uint32_t b) {
 }
 
 arbint_err_t arbint_add_i32(arbint_t rop, const arbint_t a, int32_t b) {
-  uint32_t mag;
   if (b >= 0)
     return arbint_add_u32(rop, a, (uint32_t) b);
-  mag = (uint32_t) (-(b + 1)) + 1u;
-  return arbint_sub_u32(rop, a, mag);
+  return arbint_sub_u32(rop, a, arbint_i32_mag(b));
 }
 
 arbint_err_t arbint_sub_i32(arbint_t rop, const arbint_t a, int32_t b) {
-  uint32_t mag;
   if (b >= 0)
     return arbint_sub_u32(rop, a, (uint32_t) b);
-  mag = (uint32_t) (-(b + 1)) + 1u;
-  return arbint_add_u32(rop, a, mag);
+  return arbint_add_u32(rop, a, arbint_i32_mag(b));
 }
