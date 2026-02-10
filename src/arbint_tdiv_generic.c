@@ -327,6 +327,80 @@ arbint_err_t arbint_tdiv_qr_u32_generic_impl(arbint_t q, arbint_t r,
   return ARBINT_OK;
 }
 
+/*  Reduce x mod d in-place using precomputed Barrett parameters.
+
+    This is a remainder-only version of arbint_tdiv_qr_u32_generic_impl
+    optimized for modular exponentiation, where the reciprocal is
+    precomputed once and reused for many reductions. Skips quotient
+    computation for efficiency.
+
+    Parameters:
+      x      - Input/output: value to reduce in-place
+      d_norm - Normalized divisor: d << shift (MSB set)
+      di     - Precomputed reciprocal from arbint_prepare_barrett(d_norm)
+      shift  - Normalization shift: arbint_clz_limb(d)
+
+    Truncated division semantics: remainder sign matches dividend sign.  */
+arbint_err_t arbint_mod_u32_barrett_generic(arbint_t x, arbint_limb_t d_norm,
+                                             arbint_limb_t di, unsigned shift) {
+  const arbint_limb_t * xp;
+  size_t xn;
+  int xsign;
+  arbint_err_t rc;
+  arbint_limb_t rem;
+  size_t i;
+
+  if (x == NULL)
+    return ARBINT_EINVAL;
+
+  rc = arbint_get_mag_view(x, &xp, &xn, &xsign);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  if (xn == 0u) {
+    arbint_zero(x);
+    return ARBINT_OK;
+  }
+
+  /* Seed remainder with carry from top limb (on-the-fly shifting). */
+  rem = (shift != 0u) ? (xp[xn - 1u] >> (ARBINT_LIMB_BITS - shift)) : 0u;
+
+  /* Process limbs high-to-low, discard quotient digits. */
+  for (i = xn; i != 0u; --i) {
+    arbint_limb_t nl;
+    arbint_limb_t qi;
+
+    if (shift != 0u) {
+      nl = (xp[i - 1u] << shift);
+      if (i >= 2u)
+        nl |= (xp[i - 2u] >> (ARBINT_LIMB_BITS - shift));
+    } else {
+      nl = xp[i - 1u];
+    }
+
+    arbint_ubarrett(&qi, &rem, rem, nl, d_norm, di);
+    (void) qi; /* Quotient not needed. */
+  }
+
+  /* Un-normalize remainder. */
+  rem >>= shift;
+
+  /* Store result in x. */
+  if (rem == 0u) {
+    arbint_zero(x);
+  } else {
+    int rsign = (xsign == 0) ? 0 : xsign;
+    rc = arbint_resize(x, 1u);
+    if (rc != ARBINT_OK)
+      return rc;
+    ARBINT_LIMBS(x)[0] = rem;
+    if (!arbint_set_signed_sz(x, 1u, rsign))
+      return ARBINT_EOVERFLOW;
+  }
+
+  return ARBINT_OK;
+}
+
 /*  Single-limb division using reciprocal method.
     Divides n-limb dividend by single-limb divisor using precomputed
     reciprocal.  */

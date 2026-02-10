@@ -36,6 +36,25 @@ arbint_err_t arbint_div_mag_knuth(const arbint_limb_t * np, size_t nn,
                                   const arbint_limb_t * dp, size_t dn,
                                   arbint_limb_t * qp, arbint_limb_t * rp);
 
+/*  Reduce x mod d in-place using precomputed Barrett parameters.
+
+    This is a remainder-only reduction optimized for modular exponentiation,
+    where the reciprocal is precomputed once and reused for many reductions.
+
+    Parameters:
+      x      - Input/output: value to reduce in-place
+      d_norm - Normalized divisor: d << shift (MSB set)
+      di     - Precomputed reciprocal from arbint_prepare_barrett(d_norm)
+      shift  - Normalization shift: arbint_clz_limb(d)
+
+    Truncated division semantics: remainder sign matches dividend sign.  */
+arbint_err_t arbint_mod_u32_barrett_generic(arbint_t x, arbint_limb_t d_norm,
+                                             arbint_limb_t di, unsigned shift);
+
+/*  Dispatched wrapper for Barrett reduction (selects generic or BMI2).  */
+arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
+                                     arbint_limb_t di, unsigned shift);
+
 #if HAS_BMI2
 arbint_err_t arbint_tdiv_qr_u32_bmi2_impl(arbint_t q, arbint_t r,
                                           const arbint_t n, uint32_t dmag,
@@ -46,6 +65,9 @@ arbint_err_t arbint_div_mag_single_limb_bmi2(const arbint_limb_t * np,
                                              arbint_limb_t * qp,
                                              size_t * q_used,
                                              arbint_limb_t * rem_out);
+
+arbint_err_t arbint_mod_u32_barrett_bmi2(arbint_t x, arbint_limb_t d_norm,
+                                          arbint_limb_t di, unsigned shift);
 #endif /* HAS_BMI2 */
 
 #endif /* ARBINT_TDIV_H */

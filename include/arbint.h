@@ -17,7 +17,6 @@
 
 /*  The following features are currently unimplemented:
       - arbint_set_str, arbint_get_str
-      - arbint_addmul/arbint_submul and i32/u32 variants
       - fdiv/cdiv (all), arbint_divisible, arbint_divisible_u32
       - arbint_pow_mod, arbint_pow_u32_mod
       - arbint_gcd, arbint_lcm and immediate variants.
@@ -317,11 +316,17 @@ ARBINT_API arbint_err_t arbint_pow_u32(arbint_t rop, const arbint_t base,
                                        uint32_t exp);
 
 /*  Modular exponentiation: rop = base^exp mod mod.
-    Intended domain is exp >= 0 and mod != 0.  */
-ARBINT_API arbint_err_t arbint_pow_mod(arbint_t rop, const arbint_t base,
-                                       const arbint_t exp, const arbint_t mod);
-ARBINT_API arbint_err_t arbint_pow_u32_mod(arbint_t rop, const arbint_t base,
-                                           uint32_t exp, const arbint_t mod);
+    Truncated division semantics. exp >= 0 and mod != 0.  */
+ARBINT_API arbint_err_t arbint_pow_tmod(arbint_t rop, const arbint_t base,
+                                        const arbint_t exp, const arbint_t mod);
+ARBINT_API arbint_err_t arbint_pow_u32_tmod(arbint_t rop, const arbint_t base,
+                                            uint32_t exp, const arbint_t mod);
+
+/*  Modular exponentiation with u32 modulus: rop = base^exp mod mod.
+    Uses precomputed Barrett reduction for O(1) reciprocal overhead.
+    Truncated division semantics.  */
+ARBINT_API arbint_err_t arbint_pow_u32u32_tmod(arbint_t rop, const arbint_t base,
+                                           uint32_t exp, uint32_t mod);
 
 /* ---------------- Shifts ---------------- */
 ARBINT_API arbint_err_t arbint_shl(arbint_t rop, const arbint_t a,

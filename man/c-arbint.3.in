@@ -186,15 +186,88 @@ Three-way and predicate comparisons against big integers and 32-bit scalars.
 .BR arbint_sub_i32 (),
 .BR arbint_sub_u32 (),
 .BR arbint_mul_i32 (),
-.BR arbint_mul_u32 ()
+.BR arbint_mul_u32 (),
+.BR arbint_addmul (),
+.BR arbint_submul (),
+.BR arbint_addmul_u32 (),
+.BR arbint_submul_u32 (),
+.BR arbint_addmul_i32 (),
+.BR arbint_submul_i32 ()
 .PP
 Core signed arithmetic on arbitrary-size integers.
 Scalar multiplication variants
 .RB ( arbint_mul_i32 ", " arbint_mul_u32 )
 provide optimized fast paths for multiplication by 32-bit values with
 early-exit for special cases (0, +/\-1).
+.PP
+.BI "arbint_err_t arbint_addmul(arbint_t " a ", const arbint_t " b ", const arbint_t " c ")"
+.RS
+Set
+.I a
+to
+.IR a " + " b " * " c .
+.I a
+may alias
+.I b
+or
+.IR c .
+For small operands (below the Karatsuba threshold) a fused multiply-accumulate
+loop is used to avoid temporary allocation; for larger operands the product is
+computed via the full recursive multiplication pipeline (Karatsuba/Toom-3) and
+then added to
+.IR a .
+.RE
+.PP
+.BI "arbint_err_t arbint_submul(arbint_t " a ", const arbint_t " b ", const arbint_t " c ")"
+.RS
+Set
+.I a
+to
+.IR a " \- " b " * " c .
+.I a
+may alias
+.I b
+or
+.IR c .
+Uses the same algorithm selection strategy as
+.BR arbint_addmul ().
+.RE
+.PP
+.BI "arbint_err_t arbint_addmul_u32(arbint_t " a ", const arbint_t " b ", uint32_t " c ")"
+.br
+.BI "arbint_err_t arbint_addmul_i32(arbint_t " a ", const arbint_t " b ", int32_t " c ")"
+.RS
+Set
+.I a
+to
+.IR a " + " b " * " c
+where
+.I c
+is a 32-bit scalar.
+Uses a single-limb fused multiply-accumulate loop.
+.I a
+may alias
+.IR b .
+.RE
+.PP
+.BI "arbint_err_t arbint_submul_u32(arbint_t " a ", const arbint_t " b ", uint32_t " c ")"
+.br
+.BI "arbint_err_t arbint_submul_i32(arbint_t " a ", const arbint_t " b ", int32_t " c ")"
+.RS
+Set
+.I a
+to
+.IR a " \- " b " * " c
+where
+.I c
+is a 32-bit scalar.
+.I a
+may alias
+.IR b .
+.RE
 .SS Powers and Roots
 .BR arbint_pow_u32 (),
+.BR arbint_pow_u32u32_tmod (),
 .BR arbint_isqrt ()
 .PP
 .BI "arbint_err_t arbint_pow_u32(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ")"
@@ -209,6 +282,47 @@ O(log\ \fIexp\fP) multiplications.
 may alias
 .IR base .
 The convention 0^0\ =\ 1 is followed.
+.RE
+.PP
+.BI "arbint_err_t arbint_pow_u32u32_tmod(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ", uint32_t " mod ")"
+.RS
+Set
+.I rop
+to
+.IR base ^ exp
+mod
+.IR mod .
+Uses binary exponentiation with modular reduction at each step, keeping all
+intermediate values bounded by
+.IR mod .
+.PP
+Returns
+.B ARBINT_EZERO
+if
+.I mod
+is 0.
+If
+.I mod
+is 1, the result is always 0.
+If
+.I exp
+is 0, the result is 1 (including the case 0^0\ mod\ \fIm\fP\ =\ 1 for
+.I m
+>\ 1).
+.PP
+Uses precomputed Barrett reduction: the reciprocal for
+.I mod
+is computed once and reused for all modular reductions in the exponentiation
+loop.
+This is significantly faster than calling
+.BR arbint_tdiv_r_u32 ()
+for each reduction, which would recompute the reciprocal each time.
+.PP
+.I rop
+may alias
+.IR base .
+Truncated division semantics apply: the remainder sign matches the base sign
+for odd exponents.
 .RE
 .PP
 .BI "arbint_err_t arbint_isqrt(arbint_t " rop ", const arbint_t " a ")"
@@ -659,6 +773,20 @@ Scalar multiplication by a power of two is detected and delegated to
 .BR arbint_shl ()
 as a fast path.
 .PP
+.B Fused multiply-accumulate
+.RB ( arbint_addmul "(), " arbint_submul ())
+uses a two-tier strategy.
+When the smaller multiplicand is below the Karatsuba threshold (32 limbs),
+a fused O(n*m) schoolbook loop accumulates the product directly into the
+destination without allocating a temporary buffer.
+Above that threshold the full recursive multiplication pipeline is used
+(Karatsuba or Toom-Cook 3-way), producing the product in a temporary buffer
+which is then added to or subtracted from the accumulator.
+The scalar variants
+.RB ( _u32 ", " _i32 )
+always use a single-limb fused loop.
+All variants use runtime BMI2 dispatch when available.
+.PP
 .B Squaring
 .RB ( arbint_sqr ())
 dispatches to a specialized kernel rather than falling through to general
@@ -677,6 +805,23 @@ uses right-to-left binary exponentiation (repeated squaring).
 At each step the exponent is right-shifted by one bit; when the low bit is
 set the running accumulator is multiplied by the current power of the base.
 This requires at most 2\ *\ log2(\fIexp\fP) big-integer multiplications.
+.PP
+.B Modular exponentiation
+.RB ( arbint_pow_u32u32_tmod ())
+extends this with modular reduction after each multiplication and squaring.
+The key optimization is precomputing the Barrett reciprocal for the modulus
+once at the start: the normalization shift, normalized divisor, and reciprocal
+are computed once and reused for all modular reductions.
+For an exponent with
+.I k
+bits, this avoids
+.RI 2* k
+redundant reciprocal computations compared to calling
+.BR arbint_tdiv_r_u32 ()
+for each reduction.
+The Barrett reduction itself uses the Granlund-Montgomery reciprocal-based
+division algorithm, replacing expensive hardware DIV instructions with two
+multiplications per limb.
 .PP
 .B Integer square root
 .RB ( arbint_isqrt ())

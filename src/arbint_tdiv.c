@@ -58,6 +58,49 @@ arbint_select_div_mag_single_limb(void) {
 #endif /* HAS_BMI2_ALWAYS */
 }
 
+/*  Function pointer type for Barrett reduction with precomputed reciprocal.  */
+typedef arbint_err_t (*arbint_mod_u32_barrett_fn_t)(arbint_t x,
+                                                     arbint_limb_t d_norm,
+                                                     arbint_limb_t di,
+                                                     unsigned shift);
+
+/*  Select optimal Barrett reduction implementation.  */
+static arbint_mod_u32_barrett_fn_t arbint_select_mod_u32_barrett(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_mod_u32_barrett_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_mod_u32_barrett_bmi2
+             : arbint_mod_u32_barrett_generic;
+#else
+  return arbint_mod_u32_barrett_generic;
+#endif /* HAS_BMI2_ALWAYS */
+}
+
+/*  Dispatched Barrett reduction with precomputed reciprocal.
+
+    This wrapper selects the optimal implementation (generic or BMI2) at
+    runtime and caches the function pointer for subsequent calls. Designed
+    for modular exponentiation where the reciprocal is computed once and
+    reused for many reduction operations.
+
+    Parameters:
+      x      - Input/output: value to reduce in-place
+      d_norm - Normalized divisor: d << shift (MSB set)
+      di     - Precomputed reciprocal (arbint_prepare_barrett(d_norm))
+      shift  - Normalization shift: clz(d)
+
+    Returns ARBINT_OK on success, error code on failure.  */
+arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
+                                     arbint_limb_t di, unsigned shift) {
+  static arbint_mod_u32_barrett_fn_t impl = NULL;
+
+  if (impl == NULL)
+    impl = arbint_select_mod_u32_barrett();
+
+  return impl(x, d_norm, di, shift);
+}
+
 static const arbint_alloc_t * arbint_get_alloc_from(const arbint_t x) {
   if (x == NULL || x[0]._ctx == NULL || x[0]._ctx->a.realloc == NULL)
     return NULL;

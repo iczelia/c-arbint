@@ -930,6 +930,101 @@ static arbint_err_t arbint_sqr_mag_rec(arbint_limb_t * dst, size_t * out_used,
   }
 }
 
+/*  Fused multiply-accumulate for single limb multiplier.
+    Computes dst[0..dst_n-1] += a[0..an-1] * b in place.
+    dst must have capacity for at least max(dst_n, an) + 1 limbs.
+    Returns new normalized limb count.
+
+    The function accumulates the product directly into the destination,
+    avoiding a temporary allocation for the intermediate product.  */
+static size_t arbint_mulacc_1(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
+                               const arbint_limb_t * a, size_t an,
+                               arbint_limb_t b) {
+  size_t i;
+  arbint_limb_t carry = 0u;
+  size_t new_n;
+
+  if (an == 0u || b == 0u)
+    return dst_n;
+
+  /*  Zero-extend dst if the product may extend beyond current size.  */
+  for (i = dst_n; i < an + 1u && i < dst_cap; ++i)
+    dst[i] = 0u;
+
+  /*  Core loop: for each limb of a, accumulate a[i] * b into dst[i].  */
+  for (i = 0u; i < an; ++i) {
+    arbint_limb_t out;
+    arbint_limb_t d = (i < dst_cap) ? dst[i] : 0u;
+    carry = arbint_muladd_limb(a[i], b, d, carry, &out);
+    if (i < dst_cap)
+      dst[i] = out;
+  }
+
+  /*  Propagate remaining carry through higher limbs.  */
+  while (carry != 0u && i < dst_cap) {
+    arbint_limb_t sum = dst[i] + carry;
+    carry = (sum < dst[i]) ? 1u : 0u;
+    dst[i] = sum;
+    ++i;
+  }
+
+  new_n = (i > dst_n) ? i : dst_n;
+  return arbint_norm_used(dst, new_n);
+}
+
+/*  Fused multiply-accumulate for multi-limb multiplier.
+    Computes dst[0..] += a[0..an-1] * c[0..cn-1] in place.
+    dst must have capacity for at least max(dst_n, an + cn) + 1 limbs.
+    Returns new normalized limb count.
+
+    Uses schoolbook algorithm: for each limb c[j], multiply a by c[j]
+    and add at offset j. This is more efficient than computing the full
+    product and adding it afterward because we avoid an intermediate
+    allocation.  */
+static size_t arbint_mulacc(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
+                             const arbint_limb_t * a, size_t an,
+                             const arbint_limb_t * c, size_t cn) {
+  size_t j;
+  size_t new_n;
+
+  if (an == 0u || cn == 0u)
+    return dst_n;
+
+  /*  Zero-extend dst to accommodate the full product.  */
+  for (j = dst_n; j < dst_cap; ++j)
+    dst[j] = 0u;
+
+  /*  For each limb of c, accumulate a * c[j] at offset j.  */
+  for (j = 0u; j < cn; ++j) {
+    size_t i;
+    arbint_limb_t carry = 0u;
+
+    for (i = 0u; i < an; ++i) {
+      arbint_limb_t out;
+      size_t pos = i + j;
+      arbint_limb_t d = (pos < dst_cap) ? dst[pos] : 0u;
+      carry = arbint_muladd_limb(a[i], c[j], d, carry, &out);
+      if (pos < dst_cap)
+        dst[pos] = out;
+    }
+
+    /*  Propagate carry through higher limbs.  */
+    for (i = j + an; carry != 0u && i < dst_cap; ++i) {
+      arbint_limb_t sum = dst[i] + carry;
+      carry = (sum < dst[i]) ? 1u : 0u;
+      dst[i] = sum;
+    }
+  }
+
+  new_n = an + cn;
+  if (new_n < dst_n)
+    new_n = dst_n;
+  if (new_n > dst_cap)
+    new_n = dst_cap;
+
+  return arbint_norm_used(dst, new_n);
+}
+
 /*  Multiply multi-limb integer by single limb (dst = a * b).
     Specialized version of multiplication for single-limb multiplier.
     Returns normalized result limb count.  */
