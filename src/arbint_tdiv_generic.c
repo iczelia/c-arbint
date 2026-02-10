@@ -144,9 +144,9 @@ static inline arbint_limb_t arbint_prepare_barrett(arbint_limb_t d) {
 
     Divides the two-limb dividend (nh:nl) by the single-limb divisor d,
     producing quotient q and remainder r. Uses precomputed reciprocal di to
-    replace the expensive hardware DIV instruction with two multiplications plus
-    a few ALU operations (~5-10 cycles instead of ~40-80 cycles for hardware DIV
-    on x86-64).
+    replace the expensive hardware DIV instruction with two multiplications
+    plus a few ALU operations (~5-10 cycles instead of ~40-80 cycles for
+    hardware DIV on x86-64).
 
     This is the core primitive of the Granlund-Montgomery division algorithm.
     The reciprocal-based approach trades one expensive division (when computing
@@ -154,8 +154,8 @@ static inline arbint_limb_t arbint_prepare_barrett(arbint_limb_t d) {
     resulting in dramatic speedups for multi-limb division by a single limb.
 
     Algorithm: Estimates the quotient via qh = (nh * di + nh + 1 + carry) >>
-    BITS, then applies two correction steps to handle the +/-1 error inherent in
-    the reciprocal approximation. The first correction uses branchless
+    BITS, then applies two correction steps to handle the +/-1 error inherent
+    in the reciprocal approximation. The first correction uses branchless
     arithmetic (mask trick) for better performance; the second uses a simple
     conditional.
 
@@ -330,12 +330,10 @@ arbint_err_t arbint_tdiv_qr_u32_generic_impl(arbint_t q, arbint_t r,
 /*  Single-limb division using reciprocal method.
     Divides n-limb dividend by single-limb divisor using precomputed
     reciprocal.  */
-arbint_err_t arbint_div_mag_single_limb_generic(const arbint_limb_t * np,
-                                                size_t nn,
-                                                arbint_limb_t d_limb,
-                                                arbint_limb_t * qp,
-                                                size_t * q_used,
-                                                arbint_limb_t * rem_out) {
+arbint_err_t
+arbint_div_mag_single_limb_generic(const arbint_limb_t * np, size_t nn,
+                                   arbint_limb_t d_limb, arbint_limb_t * qp,
+                                   size_t * q_used, arbint_limb_t * rem_out) {
   arbint_limb_t d_norm;
   arbint_limb_t di;
   arbint_limb_t rem;

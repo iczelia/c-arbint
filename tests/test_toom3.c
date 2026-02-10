@@ -23,8 +23,8 @@ ARBINT_TEST_DECLARE_FAILURES();
 
 /*  Build a large value by repeated squaring: result = seed^(2^iters).
     On 64-bit limbs, 7 squarings of seed=3 gives ~6340 bits = ~100 limbs.  */
-static arbint_err_t build_large(arbint_t dst, arbint_ctx_t * ctx,
-                                int32_t seed, unsigned iters) {
+static arbint_err_t build_large(arbint_t dst, arbint_ctx_t * ctx, int32_t seed,
+                                unsigned iters) {
   unsigned i;
   arbint_err_t rc;
 
@@ -483,9 +483,9 @@ static void test_toom3_non_multiple_of_3(void) {
   arbint_t a, b, prod, q, r;
   static const uint32_t bit_counts[] = {
 #if ARBINT_LIMB_BITS == 64
-    94u * 64u, 95u * 64u, 97u * 64u, 98u * 64u, 99u * 64u
+      94u * 64u, 95u * 64u, 97u * 64u, 98u * 64u, 99u * 64u
 #else
-    94u * 32u, 95u * 32u, 97u * 32u, 98u * 32u, 99u * 32u
+      94u * 32u, 95u * 32u, 97u * 32u, 98u * 32u, 99u * 32u
 #endif
   };
   size_t i;
@@ -497,8 +497,8 @@ static void test_toom3_non_multiple_of_3(void) {
   CHECK_EQ_I(arbint_init(q, &ctx), ARBINT_OK);
   CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
 
-  for (i = 0u; i < sizeof(bit_counts) / sizeof(bit_counts[0]) &&
-                   g_failures == 0;
+  for (i = 0u;
+       i < sizeof(bit_counts) / sizeof(bit_counts[0]) && g_failures == 0;
        ++i) {
     CHECK_EQ_I(arbint_set_i32(a, 1), ARBINT_OK);
     CHECK_EQ_I(arbint_shl(a, a, bit_counts[i]), ARBINT_OK);

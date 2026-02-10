@@ -251,7 +251,7 @@ static void test_isqrt_large(void) {
   check_isqrt_invariant(r, a);
 
   /*  Non-perfect large square: isqrt(root^2 - 1) = root - 1.  */
-  CHECK_EQ_I(arbint_sub_i32(a, a, 2), ARBINT_OK);  /*  a = root^2 - 1  */
+  CHECK_EQ_I(arbint_sub_i32(a, a, 2), ARBINT_OK); /*  a = root^2 - 1  */
   CHECK_EQ_I(arbint_isqrt(r, a), ARBINT_OK);
   CHECK_EQ_I(arbint_sub_i32(root, root, 1), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(r, root), 0);

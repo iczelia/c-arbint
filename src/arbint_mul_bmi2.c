@@ -134,21 +134,21 @@ static inline void arbint_div3_barrett(arbint_limb_t * q, arbint_limb_t * r,
 /*  Exact division by 3, in-place, high-to-low reciprocal division.
     Precondition: x[0..n-1] must be exactly divisible by 3.
     Returns normalized result limb count.
-    
+
     Compile-time constants for divisor 3:
       64-bit: d_norm = 0xC000000000000000, di = 0x5555555555555555, shift = 62
-      32-bit: d_norm = 0xC0000000,         di = 0x55555555,         shift = 30  */
+      32-bit: d_norm = 0xC0000000, di = 0x55555555, shift = 30  */
 static size_t arbint_divexact3_bmi2(arbint_limb_t * x, size_t n) {
   arbint_limb_t rem;
   size_t i;
 
 #if ARBINT_LIMB_BITS == 64
   static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
-  static const arbint_limb_t di     = UINT64_C(0x5555555555555555);
+  static const arbint_limb_t di = UINT64_C(0x5555555555555555);
   static const unsigned shift = 62u;
 #elif ARBINT_LIMB_BITS == 32
   static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
-  static const arbint_limb_t di     = UINT32_C(0x55555555);
+  static const arbint_limb_t di = UINT32_C(0x55555555);
   static const unsigned shift = 30u;
 #else
   #error "Unsupported ARBINT_LIMB_BITS for divexact3"
@@ -159,7 +159,7 @@ static size_t arbint_divexact3_bmi2(arbint_limb_t * x, size_t n) {
 
   rem = x[n - 1u] >> (ARBINT_LIMB_BITS - shift);
 
-  for (i = n; i != 0u; ) {
+  for (i = n; i != 0u;) {
     arbint_limb_t nl;
     arbint_limb_t qi;
 

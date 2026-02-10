@@ -28,7 +28,7 @@
     provides faster wide multiplication on Haswell+ (latency 3-4 cycles vs
     4-5 for IMUL, throughput 0.5 vs 1.0). On 32-bit, falls back to uint64_t
     cast.
- 
+
     Algorithm complexity: O(1) with 1 wide multiplication (BMI2) or hardware
     multiply (32-bit).
 
@@ -121,7 +121,8 @@ static inline arbint_limb_t arbint_prepare_barrett(arbint_limb_t d) {
 
     BMI2-optimized variant of arbint_ubarrett from arbint_tdiv_generic.c.
     Uses _mulx_u64 for faster wide multiplication in the reciprocal-multiply
-    step. Expected speedup: 1.5-2x over generic implementation on Haswell+ CPUs.
+    step. Expected speedup: 1.5-2x over generic implementation on Haswell+
+    CPUs.
 
     Algorithm and mathematical properties identical to generic version.
     See arbint_tdiv_generic.c for detailed algorithm explanation.
@@ -172,10 +173,10 @@ static inline void arbint_utdiv_barrett(arbint_limb_t * q, arbint_limb_t * r,
 }
 
 /*  BMI2-optimized single-limb division using reciprocal method.
-    Uses _mulx_u64 for fast wide multiply in reciprocal-based division step.  */
+    Uses _mulx_u64 for fast wide multiply in reciprocal-based division
+    step.  */
 arbint_err_t arbint_div_mag_single_limb_bmi2(const arbint_limb_t * np,
-                                             size_t nn,
-                                             arbint_limb_t d_limb,
+                                             size_t nn, arbint_limb_t d_limb,
                                              arbint_limb_t * qp,
                                              size_t * q_used,
                                              arbint_limb_t * rem_out) {
