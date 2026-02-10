@@ -9,11 +9,20 @@
 test_path="$1"
 test_name=$(basename "$test_path")
 test_dir=$(cd "$(dirname "$test_path")" && pwd)
-js_file="$test_dir/.libs/$test_name"
 libs_dir="$test_dir/.libs"
 
-if [ ! -f "$js_file" ]; then
-  echo "run_wasm_test.sh: $js_file not found" >&2
+# emcc/libtool may name the output with or without .js extension.
+js_file=""
+for candidate in "$libs_dir/$test_name" "$libs_dir/${test_name}.js"; do
+  if [ -f "$candidate" ]; then
+    js_file="$candidate"
+    break
+  fi
+done
+
+if [ -z "$js_file" ]; then
+  echo "run_wasm_test.sh: no JS file found for $test_name in $libs_dir" >&2
+  ls -la "$libs_dir/" 2>/dev/null >&2
   exit 99
 fi
 
