@@ -21,7 +21,220 @@
 
 #include "arbint_cpu.h"
 
+#include <limits.h>
 #include <string.h>
+
+/* ------------------------------------------------------------------ */
+/*  Power-of-two detection helper.                                    */
+/* ------------------------------------------------------------------ */
+
+/*  Check if v is a power of two (v != 0 required).  */
+static inline int arbint_div_is_pow2(uint32_t v) {
+  return (v & (v - 1u)) == 0u;
+}
+
+/*  Count trailing zero bits in a magnitude.
+    Returns the total number of trailing zero bits, i.e., the largest k
+    such that the magnitude is divisible by 2^k.
+    For zero magnitude (nn == 0), returns SIZE_MAX.  */
+static size_t arbint_mag_ctz(const arbint_limb_t * np, size_t nn) {
+  size_t i;
+  size_t ctz = 0u;
+
+  if (nn == 0u)
+    return SIZE_MAX;
+
+  /*  Count full zero limbs.  */
+  for (i = 0u; i < nn && np[i] == 0u; ++i)
+    ctz += ARBINT_LIMB_BITS;
+
+  /*  Count trailing zeros in first nonzero limb.  */
+  if (i < nn)
+    ctz += arbint_ctz_limb(np[i]);
+
+  return ctz;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Power-of-two truncated division: q = n / 2^k, r = n % 2^k.        */
+/*                                                                    */
+/*  Truncated division semantics:                                     */
+/*    - Quotient: magnitude right-shift, sign preserved               */
+/*    - Remainder: low k bits of magnitude, sign of dividend          */
+/*                                                                    */
+/*  Examples:                                                         */
+/*     7 / 4 =  1,  7 % 4 =  3                                        */
+/*    -7 / 4 = -1, -7 % 4 = -3                                        */
+/* ------------------------------------------------------------------ */
+
+static arbint_err_t arbint_tdiv_qr_pow2(arbint_t q, arbint_t r,
+                                         const arbint_t n, unsigned k,
+                                         int dsign) {
+  size_t nn;
+  const arbint_limb_t * np;
+  size_t n_ctz;
+  int nsign;
+  int qsign;
+  arbint_err_t rc;
+
+  if ((q == NULL && r == NULL) || n == NULL)
+    return ARBINT_EINVAL;
+
+  nsign = arbint_signum(n);
+
+  /*  n == 0: q = 0, r = 0.  */
+  if (nsign == 0) {
+    if (q != NULL)
+      arbint_zero(q);
+    if (r != NULL)
+      arbint_zero(r);
+    return ARBINT_OK;
+  }
+
+  nn = arbint_abs_sz(n[0]._sz);
+  np = ARBINT_CLIMBS(n);
+
+  /*  Quotient sign: same sign if signs match, opposite if differ.  */
+  qsign = (nsign == dsign) ? 1 : -1;
+
+  /*  Optimization: count trailing zeros in dividend.
+      If n has >= k trailing zero bits, the remainder is 0.  */
+  n_ctz = arbint_mag_ctz(np, nn);
+
+  if (n_ctz >= (size_t) k) {
+    /*  Dividend is divisible by 2^k: remainder is 0.  */
+    if (r != NULL)
+      arbint_zero(r);
+
+    /*  Quotient: n >> k.
+        Since n is divisible by 2^k, we can skip the low zero limbs.  */
+    if (q != NULL) {
+      size_t limb_skip = (size_t) (k / ARBINT_LIMB_BITS);
+      unsigned bit_shift = (unsigned) (k % ARBINT_LIMB_BITS);
+      size_t src_limbs = nn - limb_skip;
+      size_t q_used;
+
+      if (src_limbs == 0u) {
+        arbint_zero(q);
+      } else {
+        arbint_limb_t * qp;
+        size_t i;
+
+        rc = arbint_resize(q, src_limbs);
+        if (rc != ARBINT_OK)
+          return rc;
+
+        qp = ARBINT_LIMBS(q);
+
+        if (bit_shift == 0u) {
+          /*  Pure limb shift: just copy.  */
+          for (i = 0u; i < src_limbs; ++i)
+            qp[i] = np[limb_skip + i];
+        } else {
+          /*  Shift within limbs.  */
+          for (i = 0u; i < src_limbs - 1u; ++i)
+            qp[i] = (np[limb_skip + i] >> bit_shift) |
+                    (np[limb_skip + i + 1u] << (ARBINT_LIMB_BITS - bit_shift));
+          qp[src_limbs - 1u] = np[nn - 1u] >> bit_shift;
+        }
+
+        q_used = arbint_norm_used(qp, src_limbs);
+        if (q_used == 0u) {
+          arbint_zero(q);
+        } else {
+          if (!arbint_set_signed_sz(q, q_used, qsign))
+            return ARBINT_EOVERFLOW;
+        }
+      }
+    }
+    return ARBINT_OK;
+  }
+
+  /*  General case: n has fewer than k trailing zeros.
+
+      Aliasing considerations:
+      - If q == n: arbint_shr handles this internally (shifts in place)
+      - If r == n: writing r destroys n, so compute q first
+      - If q == r: per aliasing contract, last write wins (r); compute q first
+
+      Strategy: compute q first whenever r might overwrite something q needs,
+      or when q == r (so r is written last).  */
+
+  if (q != NULL && (r == n || q == r)) {
+    /*  Compute q first:
+        - r == n: prevents r from destroying n before we read it
+        - q == r: ensures r (written later) wins per aliasing contract  */
+    rc = arbint_shr(q, n, (uint32_t) k);
+    if (rc != ARBINT_OK)
+      return rc;
+    if (!arbint_is_zero(q) && nsign != qsign)
+      q[0]._sz = -q[0]._sz;
+  }
+
+  /*  Compute remainder: low k bits of magnitude with n's sign.  */
+  if (r != NULL) {
+    size_t limb_idx = (size_t) (k / ARBINT_LIMB_BITS);
+    unsigned bit_idx = (unsigned) (k % ARBINT_LIMB_BITS);
+
+    if (limb_idx >= nn) {
+      /*  k >= total bits: remainder is n itself (magnitude).  */
+      rc = arbint_set(r, n);
+      if (rc != ARBINT_OK)
+        return rc;
+      /*  Sign of remainder = sign of dividend (already set by arbint_set).  */
+    } else {
+      /*  Extract low k bits into r.  */
+      size_t i;
+      size_t r_limbs = limb_idx + (bit_idx != 0u ? 1u : 0u);
+      size_t used;
+
+      if (r_limbs == 0u) {
+        /*  k == 0: remainder is 0 (division by 1).  */
+        arbint_zero(r);
+      } else {
+        rc = arbint_resize(r, r_limbs);
+        if (rc != ARBINT_OK)
+          return rc;
+
+        arbint_limb_t * rp = ARBINT_LIMBS(r);
+
+        /*  Copy full limbs.  */
+        for (i = 0u; i < limb_idx && i < nn; ++i)
+          rp[i] = np[i];
+
+        /*  Mask partial top limb if needed.  */
+        if (bit_idx != 0u && limb_idx < nn) {
+          arbint_limb_t mask = ((arbint_limb_t) 1u << bit_idx) - 1u;
+          rp[limb_idx] = np[limb_idx] & mask;
+        }
+
+        used = arbint_norm_used(rp, r_limbs);
+        if (used == 0u) {
+          arbint_zero(r);
+        } else {
+          /*  Remainder sign = dividend sign.  */
+          if (!arbint_set_signed_sz(r, used, nsign))
+            return ARBINT_EOVERFLOW;
+        }
+      }
+    }
+  }
+
+  /*  Compute quotient if we haven't already.
+      Skip if: r == n (computed above) or q == r (computed above).  */
+  if (q != NULL && r != n && q != r) {
+    rc = arbint_shr(q, n, (uint32_t) k);
+    if (rc != ARBINT_OK)
+      return rc;
+
+    /*  arbint_shr preserves n's sign, but we need qsign.
+        If nsign != qsign, flip the sign.  */
+    if (!arbint_is_zero(q) && nsign != qsign)
+      q[0]._sz = -q[0]._sz;
+  }
+
+  return ARBINT_OK;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Function pointer types for runtime dispatch.                      */
@@ -102,6 +315,10 @@ arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,
                                         const arbint_t n, uint32_t dmag,
                                         int dsign) {
   static arbint_div_qr_u32_impl_fn_t impl = NULL;
+
+  /*  Power-of-two fast path: use shift/mask instead of reciprocal.  */
+  if (arbint_div_is_pow2(dmag))
+    return arbint_tdiv_qr_pow2(q, r, n, (unsigned) arbint_ctz_limb(dmag), dsign);
 
   if (impl == NULL)
     impl = arbint_select_div_qr_u32_impl();
@@ -309,6 +526,36 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
 /*  Truncated division implementation (arbint / arbint).              */
 /* ------------------------------------------------------------------ */
 
+/*  Check if magnitude limbs represent a power of two.
+    If so, return the bit position (0 for 1, 1 for 2, etc.).
+    Otherwise return SIZE_MAX.
+
+    A power of two has exactly one set bit: all limbs except one are zero,
+    and that one limb has popcount == 1.  */
+static size_t arbint_mag_pow2_bit(const arbint_limb_t * dp, size_t dn) {
+  size_t i;
+  size_t nonzero_idx = SIZE_MAX;
+
+  for (i = 0u; i < dn; ++i) {
+    if (dp[i] != 0u) {
+      if (nonzero_idx != SIZE_MAX)
+        return SIZE_MAX; /* More than one nonzero limb. */
+      nonzero_idx = i;
+    }
+  }
+
+  if (nonzero_idx == SIZE_MAX)
+    return SIZE_MAX; /* All zeros (should not happen for normalized). */
+
+  /*  Check if the nonzero limb is a power of two.  */
+  arbint_limb_t limb = dp[nonzero_idx];
+  if ((limb & (limb - 1u)) != 0u)
+    return SIZE_MAX; /* Not a power of two. */
+
+  /*  Compute bit position: limb_idx * LIMB_BITS + ctz(limb).  */
+  return nonzero_idx * ARBINT_LIMB_BITS + arbint_ctz_limb(limb);
+}
+
 arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
                                  const arbint_t d) {
   const arbint_limb_t * np;
@@ -319,6 +566,7 @@ arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
   int dsign;
   const arbint_alloc_t * alloc;
   arbint_err_t rc;
+  size_t pow2_bit;
 
   if ((q == NULL && r == NULL) || n == NULL || d == NULL)
     return ARBINT_EINVAL;
@@ -333,11 +581,230 @@ arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
   if (dn == 0u)
     return ARBINT_EZERO;
 
+  /*  Power-of-two fast path: divisor is 2^k for some k.  */
+  pow2_bit = arbint_mag_pow2_bit(dp, dn);
+  if (pow2_bit != SIZE_MAX) {
+    /*  k may exceed 32 bits for large divisors (2^64, 2^128, etc.).
+        arbint_tdiv_qr_pow2 takes unsigned k, which may truncate.
+        For k > UINT_MAX, we need to handle differently: the quotient
+        is 0 unless n has more than k bits.
+
+        For practical purposes, k fits in unsigned for divisors up to
+        2^(UINT_MAX), which is astronomically large. We cast carefully.  */
+    if (pow2_bit <= (size_t) UINT_MAX) {
+      return arbint_tdiv_qr_pow2(q, r, n, (unsigned) pow2_bit, dsign);
+    } else {
+      return ARBINT_EOVERFLOW; /* Too large to handle! */
+    }
+  }
+
   alloc = arbint_pick_alloc(q, r, n, d);
   if (alloc == NULL)
     return ARBINT_EINVAL;
 
   return arbint_tdiv_qr_mag_impl(q, r, np, nn, nsign, dp, dn, dsign, alloc);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Divisibility testing: arbint_divisible_u32.                       */
+/*                                                                    */
+/*  Tests if n is divisible by d without computing the full quotient. */
+/*  Uses Barrett reduction for O(n) time with no division in the      */
+/*  inner loop.                                                       */
+/* ------------------------------------------------------------------ */
+
+arbint_err_t arbint_divisible_u32(const arbint_t n, uint32_t d, int * out) {
+  size_t nn;
+  const arbint_limb_t * np;
+  uint64_t rem;
+  uint64_t m;
+  size_t i;
+
+  if (n == NULL || out == NULL)
+    return ARBINT_EINVAL;
+  if (d == 0u)
+    return ARBINT_EZERO;
+
+  *out = 0;
+
+  /* Zero is divisible by any nonzero number. */
+  if (n[0]._sz == 0) {
+    *out = 1;
+    return ARBINT_OK;
+  }
+
+  nn = arbint_abs_sz(n[0]._sz);
+  np = ARBINT_CLIMBS(n);
+
+  /* Power of 2: O(1) - check if low bits are zero. */
+  if (arbint_div_is_pow2(d)) {
+    uint32_t mask = d - 1u;
+#if ARBINT_LIMB_BITS == 64
+    *out = ((uint32_t) np[0] & mask) == 0u;
+#else
+    *out = (np[0] & mask) == 0u;
+#endif
+    return ARBINT_OK;
+  }
+
+  /* Barrett reduction: precompute reciprocal m = floor((2^64 - 1) / d).
+     For each 32-bit chunk, compute rem = (rem * 2^32 + chunk) mod d
+     using q_approx = floor(rem * m / 2^64), then rem -= q_approx * d.
+     The approximation may be off by 1, so we apply a single correction.
+
+     Note: We use UINT64_MAX / d instead of the canonical 2^64 / d. This
+     underestimates by at most 1 when d divides 2^64 exactly (i.e., d is
+     a power of 2), but those cases are already handled by the fast path
+     above, so this is safe.  */
+  m = UINT64_MAX / (uint64_t) d;
+  rem = 0u;
+
+  /* Process limbs from high to low, 32-bit chunks at a time. */
+  for (i = nn; i != 0u; --i) {
+    arbint_limb_t limb = np[i - 1u];
+#if ARBINT_LIMB_BITS == 64
+    /* High 32 bits. */
+    {
+      uint64_t x = (rem << 32) | (uint32_t) (limb >> 32);
+      /* Compute (x * m) >> 64 using half-word arithmetic.
+         x and m are both 64-bit, so we decompose:
+         x = x_hi * 2^32 + x_lo, m = m_hi * 2^32 + m_lo
+         (x * m) >> 64 = x_hi * m_hi + ((x_hi * m_lo + x_lo * m_hi) >> 32)
+         The x_lo * m_lo term contributes at most 1 to the high word. */
+      uint64_t x_lo = x & 0xFFFFFFFFu;
+      uint64_t x_hi = x >> 32;
+      uint64_t m_lo = m & 0xFFFFFFFFu;
+      uint64_t m_hi = m >> 32;
+      uint64_t mid = x_hi * m_lo + x_lo * m_hi;
+      uint64_t q_hi = x_hi * m_hi + (mid >> 32);
+      rem = x - q_hi * (uint64_t) d;
+      if (rem >= (uint64_t) d)
+        rem -= (uint64_t) d;
+    }
+    /* Low 32 bits. */
+    {
+      uint64_t x = (rem << 32) | (uint32_t) limb;
+      uint64_t x_lo = x & 0xFFFFFFFFu;
+      uint64_t x_hi = x >> 32;
+      uint64_t m_lo = m & 0xFFFFFFFFu;
+      uint64_t m_hi = m >> 32;
+      uint64_t mid = x_hi * m_lo + x_lo * m_hi;
+      uint64_t q_hi = x_hi * m_hi + (mid >> 32);
+      rem = x - q_hi * (uint64_t) d;
+      if (rem >= (uint64_t) d)
+        rem -= (uint64_t) d;
+    }
+#else
+    /* 32-bit limb: single chunk. */
+    {
+      uint64_t x = (rem << 32) | (uint64_t) limb;
+      uint64_t x_lo = x & 0xFFFFFFFFu;
+      uint64_t x_hi = x >> 32;
+      uint64_t m_lo = m & 0xFFFFFFFFu;
+      uint64_t m_hi = m >> 32;
+      uint64_t mid = x_hi * m_lo + x_lo * m_hi;
+      uint64_t q_hi = x_hi * m_hi + (mid >> 32);
+      rem = x - q_hi * (uint64_t) d;
+      if (rem >= (uint64_t) d)
+        rem -= (uint64_t) d;
+    }
+#endif
+  }
+
+  *out = (rem == 0u);
+  return ARBINT_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Divisibility testing: arbint_divisible (multi-limb divisor).      */
+/*                                                                    */
+/*  Tests if n is divisible by d.                                     */
+/*                                                                    */
+/*  Key optimizations:                                                */
+/*    1. Power of 2: O(1) - check trailing zeros                      */
+/*    2. Single-limb divisor: delegate to arbint_divisible_u32        */
+/*    3. General: compute remainder via tdiv and check if zero        */
+/* ------------------------------------------------------------------ */
+
+arbint_err_t arbint_divisible(const arbint_t n, const arbint_t d, int * out) {
+  size_t nn;
+  size_t dn;
+  const arbint_limb_t * np;
+  const arbint_limb_t * dp;
+  int nsign;
+  int dsign;
+  arbint_err_t rc;
+  size_t pow2_bit;
+
+  if (n == NULL || d == NULL || out == NULL)
+    return ARBINT_EINVAL;
+
+  *out = 0;
+
+  rc = arbint_get_mag_view(d, &dp, &dn, &dsign);
+  if (rc != ARBINT_OK)
+    return rc;
+  if (dn == 0u)
+    return ARBINT_EZERO;
+
+  /* Zero is divisible by any nonzero number. */
+  if (n[0]._sz == 0) {
+    *out = 1;
+    return ARBINT_OK;
+  }
+
+  rc = arbint_get_mag_view(n, &np, &nn, &nsign);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  /* Quick check: if |n| < |d|, n is not divisible (and n != 0). */
+  if (nn < dn) {
+    *out = 0;
+    return ARBINT_OK;
+  }
+
+  /* Power of 2: check if n has enough trailing zeros. */
+  pow2_bit = arbint_mag_pow2_bit(dp, dn);
+  if (pow2_bit != SIZE_MAX) {
+    /* d = 2^pow2_bit. n is divisible iff n has >= pow2_bit trailing zeros. */
+    *out = (arbint_mag_ctz(np, nn) >= pow2_bit);
+    return ARBINT_OK;
+  }
+
+  /* Single-limb divisor: use optimized u32/u64 path. */
+  if (dn == 1u) {
+#if ARBINT_LIMB_BITS == 64
+    /* For 64-bit limbs, d may exceed uint32_t. */
+    arbint_limb_t d_limb = dp[0];
+    if (d_limb <= (arbint_limb_t) UINT32_MAX) {
+      return arbint_divisible_u32(n, (uint32_t) d_limb, out);
+    }
+    /* 64-bit single-limb divisor: use full remainder computation.
+       Fall through to the general multi-limb path below. */
+#else
+    /* 32-bit limbs: delegate to u32 path. */
+    return arbint_divisible_u32(n, (uint32_t) dp[0], out);
+#endif
+  }
+
+  /* Multi-limb divisor (or large single-limb on 64-bit):
+     compute remainder and check if zero. */
+  {
+    arbint_t rem;
+    rc = arbint_init(rem, n[0]._ctx);
+    if (rc != ARBINT_OK)
+      return rc;
+
+    rc = arbint_tdiv_r(rem, n, d);
+    if (rc != ARBINT_OK) {
+      arbint_clear(rem);
+      return rc;
+    }
+
+    *out = arbint_is_zero(rem);
+    arbint_clear(rem);
+    return ARBINT_OK;
+  }
 }
 
 /* ------------------------------------------------------------------ */

@@ -481,6 +481,38 @@ Single-limb division uses reciprocal-based algorithms (Granlund-Montgomery
 technique) for significantly faster performance than hardware DIV.
 .RE
 .\" -------------------------------------------------------------------------
+.SS Divisibility Testing
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_divisible(const arbint_t " n ", const arbint_t " d ", int *" out ")"
+.br
+.BI "arbint_err_t arbint_divisible_u32(const arbint_t " n ", uint32_t " d ", int *" out ")"
+.RS 4
+.PP
+Test whether
+.I d
+divides
+.I n
+exactly.
+On success, sets
+.I *out
+to 1 if divisible (remainder is zero), 0 otherwise.
+Divisibility is tested on magnitudes; signs are ignored.
+Zero is divisible by any nonzero divisor.
+Returns
+.B ARBINT_EZERO
+if
+.I d
+is zero.
+.PP
+These functions avoid computing the full quotient when possible.
+For power-of-two divisors, divisibility is checked in O(1) time by
+examining trailing zero bits.
+For general divisors,
+.BR arbint_divisible_u32 ()
+uses Barrett reduction to compute the remainder without division instructions.
+.RE
+.\" -------------------------------------------------------------------------
 .SS Bit Shifts
 .\" -------------------------------------------------------------------------
 .PP
@@ -769,6 +801,14 @@ requires only three half-size squarings instead of four multiplications.
 .\" -------------------------------------------------------------------------
 .SS Division
 .\" -------------------------------------------------------------------------
+.PP
+.B Power-of-two:
+When the divisor is a power of two (2^k), division is performed via
+bit shifts and masks instead of full division:
+quotient = n >> k,
+remainder = n & (2^k - 1).
+This optimization applies to all division modes (truncated, floor, ceiling)
+and handles both single-limb and multi-limb power-of-two divisors.
 .PP
 .B Multi-limb:
 Knuth's Algorithm D (TAOCP Vol 2, Section 4.3.1) with reciprocal-based
