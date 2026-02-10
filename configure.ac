@@ -19,7 +19,26 @@ AS_CASE([$host_cpu],
 AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
 AM_PROG_AR
+
+dnl Save the user's explicit --enable-shared / --disable-shared choice
+dnl before LT_INIT, which may override it based on platform detection.
+arbint_user_enable_shared="$enable_shared"
+
 LT_INIT
+
+dnl Emscripten: libtool's ld_shlibs detection may fail because the default
+dnl case checks for ELF targets and emcc does not always advertise ELF in
+dnl its --help output.  When ld_shlibs=no, libtool forces can_build_shared
+dnl and enable_shared to "no", disabling shared libraries entirely.
+dnl Override here unless the user explicitly passed --disable-shared.
+AS_CASE([$host_os],
+  [emscripten*], [
+    AS_IF([test "x$enable_shared" = "xno" && test "x$arbint_user_enable_shared" != "xno"], [
+      enable_shared=yes
+      can_build_shared=yes
+      AC_MSG_NOTICE([emscripten detected: forcing enable_shared=yes (libtool platform detection failed)])
+    ])
+  ])
 
 AC_C_INLINE
 AC_C_RESTRICT
@@ -496,6 +515,28 @@ AS_CASE([$host_os],
   [emscripten*], [arbint_host_windows=no; arbint_host_emscripten=yes],
   [arbint_host_windows=no; arbint_host_emscripten=no])
 
+dnl -Wl,-Bsymbolic tells the dynamic linker to bind references to global
+dnl symbols within the shared library to the definitions inside it.  This is
+dnl the linker-side complement of -fno-semantic-interposition (which only
+dnl affects the compiler).  Skip on Windows (PE/COFF has no interposition)
+dnl and Emscripten (Wasm linker does not support it).
+ARBINT_BSYMBOLIC_LDFLAGS=""
+AS_IF([test "x$arbint_host_windows" != "xyes" && test "x$arbint_host_emscripten" != "xyes" && test "x$arbint_cc_msvc_cl" != "xyes"], [
+  AC_CACHE_CHECK([whether the linker supports -Wl,-Bsymbolic],
+    [arbint_cv_ld_bsymbolic], [
+    arbint_saved_ldflags="$LDFLAGS"
+    LDFLAGS="$LDFLAGS -Wl,-Bsymbolic"
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[return 0;]])],
+      [arbint_cv_ld_bsymbolic=yes],
+      [arbint_cv_ld_bsymbolic=no])
+    LDFLAGS="$arbint_saved_ldflags"
+  ])
+  AS_IF([test "x$arbint_cv_ld_bsymbolic" = "xyes"], [
+    ARBINT_BSYMBOLIC_LDFLAGS="-Wl,-Bsymbolic"
+  ])
+])
+AC_SUBST([ARBINT_BSYMBOLIC_LDFLAGS])
+
 ARBINT_LIB_API_CPPFLAGS=""
 AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$enable_shared" = "xyes"], [
   ARBINT_LIB_API_CPPFLAGS="$ARBINT_LIB_API_CPPFLAGS -DARBINT_BUILD_DLL"
@@ -515,6 +556,19 @@ AS_IF([test "x$arbint_host_windows" = "xyes"], [
 ])
 AC_SUBST([ARBINT_PC_API_CFLAGS])
 
+# Emscripten test flags.
+# Tests are MAIN_MODULE executables that dynamically load the library
+# (side module).  NODERAWFS gives tests real filesystem access under
+# node.js so reference data files (pi10k.txt, e10k.txt) can be read.
+ARBINT_EMSCRIPTEN_TEST_LDFLAGS=""
+ARBINT_EMSCRIPTEN_TEST_CFLAGS=""
+AS_IF([test "x$arbint_host_emscripten" = "xyes"], [
+  ARBINT_EMSCRIPTEN_TEST_LDFLAGS="-sMAIN_MODULE=2 -sNODERAWFS"
+  ARBINT_EMSCRIPTEN_TEST_CFLAGS="-sMAIN_MODULE=2"
+])
+AC_SUBST([ARBINT_EMSCRIPTEN_TEST_LDFLAGS])
+AC_SUBST([ARBINT_EMSCRIPTEN_TEST_CFLAGS])
+
 # Detect platform entropy sources for RNG seeding
 AC_CHECK_HEADERS([unistd.h fcntl.h sys/stat.h])  # Linux /dev/urandom
 
@@ -524,11 +578,12 @@ AS_IF([test "x$arbint_host_windows" = "xyes"], [
   # then RtlGenRandom (XP+, only needs windows.h)
 ])
 
-AC_CHECK_HEADERS([sys/random.h])  # macOS/BSD arc4random_buf
+AC_CHECK_HEADERS([sys/random.h])  # getentropy + arc4random_buf on macOS/BSD
 AC_CHECK_FUNCS([arc4random_buf])
 
-# getentropy: available on Emscripten (via crypto.getRandomValues),
-# modern Linux (glibc 2.25+), FreeBSD 12+, OpenBSD, macOS 10.12+
+# getentropy: we only use it on Emscripten (routes to crypto.getRandomValues).
+# It exists on native platforms too, but arc4random_buf / /dev/urandom / WinAPI
+# are better and avoid header portability hassles.
 AC_CHECK_FUNCS([getentropy])
 
 # Secure memory zeroing: prefer explicit_bzero, then memset_s
@@ -549,9 +604,13 @@ arbint_has_urandom=no
 arbint_has_winapi_entropy=no
 arbint_has_arc4random=no
 AS_IF([test "x$enable_entropy" = "xyes"], [
-  AS_IF([test "x$ac_cv_func_getentropy" = "xyes"], [
+  # getentropy: only used on Emscripten (routes to crypto.getRandomValues).
+  # On native platforms arc4random_buf, /dev/urandom, or WinAPI are better
+  # and avoid header portability issues (macOS wants sys/random.h, Linux
+  # wants unistd.h, etc.).
+  AS_IF([test "x$arbint_host_emscripten" = "xyes" && test "x$ac_cv_func_getentropy" = "xyes"], [
     AC_DEFINE([ARBINT_HAS_GETENTROPY], [1],
-              [Define if getentropy() is available (Emscripten, modern Linux, BSD, macOS).])
+              [Define if getentropy() is available (Emscripten only).])
     arbint_has_getentropy=yes
   ])
   # ARBINT_HAS_URANDOM: only on non-Windows, non-Emscripten POSIX with unistd.h.
@@ -586,6 +645,8 @@ AM_CONDITIONAL([ARBINT_HAS_WINAPI_ENTROPY],
                [test "x$arbint_has_winapi_entropy" = "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_ARC4RANDOM],
                [test "x$arbint_has_arc4random" = "xyes"])
+AM_CONDITIONAL([ARBINT_HOST_EMSCRIPTEN],
+               [test "x$arbint_host_emscripten" = "xyes"])
 
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
@@ -597,4 +658,5 @@ AC_CONFIG_FILES([
   tests/Makefile
   c-arbint.pc
 ])
+
 AC_OUTPUT

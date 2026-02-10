@@ -33,6 +33,7 @@ autom4te.cache/
 *.a
 *.so
 *.so.*
+*.wasm
 *.tar.gz
 *.tar.xz
 build-aux/

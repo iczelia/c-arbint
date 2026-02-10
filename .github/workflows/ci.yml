@@ -992,9 +992,99 @@ jobs:
           path: artifacts/*
           if-no-files-found: warn
 
+  build-wasm:
+    runs-on: ubuntu-24.04
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [wasm32, wasm64]
+        lto: ['on', 'off']
+    name: build-wasm (${{ matrix.mode }}, lto-${{ matrix.lto }})
+
+    steps:
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # wasm64 (MEMORY64) requires memory64+table64 support in V8.
+          # These proposals are unflagged starting in Node 24 (V8 13.6+).
+          node-version: '24'
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Extract, build, and test
+        run: |
+          tarball="$(ls dist/*.tar.xz | head -n1)"
+          srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+          tar -xf "$tarball" -C dist
+          cd "dist/$srcdir"
+
+          echo "=== Toolchain versions ==="
+          emcc --version | head -1
+          node --version
+
+          # Build shared only; configure detects emscripten and sets up
+          # libtool patches (SIDE_MODULE), test flags (MAIN_MODULE +
+          # NODERAWFS), and test runner (run_wasm_test.sh).
+          configure_args="--enable-shared --disable-static"
+          if [ "${{ matrix.lto }}" = "on" ]; then
+            configure_args="$configure_args --enable-lto=yes"
+          else
+            configure_args="$configure_args --enable-lto=no"
+          fi
+
+          em_cflags=""
+          em_ldflags=""
+          host_triple="wasm32-unknown-emscripten"
+          if [ "${{ matrix.mode }}" = "wasm64" ]; then
+            host_triple="wasm64-unknown-emscripten"
+            em_cflags="-sMEMORY64"
+            em_ldflags="-sMEMORY64"
+          fi
+          configure_args="$configure_args --host=$host_triple"
+
+          emconfigure ./configure $configure_args \
+            CFLAGS="${CFLAGS:-} $em_cflags" \
+            LDFLAGS="${LDFLAGS:-} $em_ldflags"
+          emmake make -j"$(nproc)"
+
+          echo "=== Library ==="
+          file src/libarbint.wasm || true
+          ls -la src/libarbint.wasm || true
+
+          echo "=== Running tests ==="
+          emmake make check || {
+            echo "=== Test suite log ==="
+            cat tests/test-suite.log 2>/dev/null || true
+            exit 1
+          }
+
+      - name: Copy artifacts to upload directory
+        run: |
+          mkdir -p artifacts
+          # The libtool-bypass build places the side module in src/.
+          find dist -path "*/src/libarbint.wasm" -type f \
+            -exec cp -v {} artifacts/ \;
+          echo "=== Artifacts to upload ==="
+          ls -la artifacts/ || echo "(empty)"
+
+      - name: Upload library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-wasm-${{ matrix.mode }}-lto${{ matrix.lto }}
+          path: artifacts/*
+          if-no-files-found: warn
+
   repack-artifacts:
     runs-on: ubuntu-24.04
-    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-macos]
+    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-macos, build-wasm]
     if: always()
 
     steps:
@@ -1019,7 +1109,7 @@ jobs:
             local file="$2"
             local filename=$(basename "$file")
 
-            # Determine file extension (handle .so, .so.*, .dylib, .dll)
+            # Determine file extension (handle .so, .so.*, .dylib, .dll, .wasm)
             local ext=""
             if [[ "$filename" =~ \.so(\.[0-9]+)*$ ]]; then
               ext="so"
@@ -1027,6 +1117,8 @@ jobs:
               ext="dylib"
             elif [[ "$filename" =~ \.dll$ ]]; then
               ext="dll"
+            elif [[ "$filename" =~ \.wasm$ ]]; then
+              ext="wasm"
             else
               echo "Warning: Unknown file extension: $filename"
               return 1
@@ -1088,6 +1180,10 @@ jobs:
               tuple="i386-windows"
               compiler="msvc"
               lto="${BASH_REMATCH[1]}"
+            elif [[ "$artifact_name" =~ ^build-wasm-(wasm32|wasm64)-lto(on|off)$ ]]; then
+              tuple="${BASH_REMATCH[1]}-emscripten"
+              compiler="emcc"
+              lto="${BASH_REMATCH[2]}"
             else
               echo "Warning: Unable to parse artifact name: $artifact_name"
               return 1
@@ -1098,6 +1194,7 @@ jobs:
               gcc) compiler="g" ;;
               clang) compiler="c" ;;
               msvc) compiler="m" ;;
+              emcc) compiler="e" ;;
               *) echo "Warning: Unknown compiler: $compiler"; return 1 ;;
             esac
 
@@ -1122,7 +1219,7 @@ jobs:
                 if [ -f "$file" ]; then
                   # Only process library files
                   case "$file" in
-                    *.so|*.so.*|*.dylib|*.dll)
+                    *.so|*.so.*|*.dylib|*.dll|*.wasm)
                       new_name=$(rename_binary "$artifact_name" "$file")
                       if [ $? -eq 0 ] && [ -n "$new_name" ]; then
                         checksum=$(sha256sum "$file" | awk '{print $1}')

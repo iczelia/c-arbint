@@ -47,12 +47,44 @@ sudo make install
 cc your_file.c $(pkg-config --cflags --libs c-arbint)
 ```
 
+## WebAssembly / Emscripten
+
+c-arbint builds as a wasm side module for use in browser and Node.js environments.
+Both wasm32 and wasm64 (Memory64) are supported.
+
+### Build
+
+```sh
+./bootstrap
+emconfigure ./configure --enable-shared --disable-static \
+  --host=wasm32-unknown-emscripten
+emmake make -j"$(nproc)"
+emmake make check    # requires Node.js (24+ for wasm64)
+```
+
+For wasm64, use `--host=wasm64-unknown-emscripten` and pass
+`CFLAGS="-sMEMORY64" LDFLAGS="-sMEMORY64"` to configure.
+
+### Output
+
+The build produces `src/libarbint.wasm`, a SIDE_MODULE that can be loaded at
+runtime by an emscripten MAIN_MODULE application.  Symbol visibility matches the
+native shared library (`-fvisibility=hidden` + `ARBINT_API` exports).
+
+### Link a test program
+
+```sh
+emcc -sMAIN_MODULE=2 your_file.c src/libarbint.wasm -I include -o your_file.js
+node your_file.js
+```
+
 ## Supported platforms
 
 The platforms that the code has been verified to compile and pass tests on include:
 - Linux: x86-64 (Ubuntu, Fedora, Alpine; gcc/clang/tcc), arm64 (Ubuntu; gcc/clang/tcc), i386 (Debian; gcc/clang/tcc), riscv64 (Ubuntu; gcc/clang), s390x (Ubuntu; gcc/clang), ppc64le (Ubuntu; clang).
 - macOS: x86-64, arm64 (clang).
 - Windows: x86-64, i686 (via MinGW-GCC and TCC and MSVC).
+- WebAssembly: wasm32, wasm64 (via Emscripten; with and without LTO).
 
 Note: The following configurations are disabled in CI due to compiler segfaults/internal errors:
 - ppc64le/s390x with GCC (all LTO settings)
