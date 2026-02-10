@@ -35,6 +35,10 @@ typedef int (*arbint_entropy_fn_t)(uint8_t * dst, size_t len);
 arbint_entropy_fn_t arbint_select_entropy_source(void);
 
 /*  Platform-specific entropy implementations  */
+#if defined(ARBINT_HAS_GETENTROPY)
+int arbint_entropy_getentropy(uint8_t * dst, size_t len);
+#endif /* defined(ARBINT_HAS_GETENTROPY) */
+
 #if defined(ARBINT_HAS_URANDOM)
 int arbint_entropy_urandom(uint8_t * dst, size_t len);
 #endif /* defined(ARBINT_HAS_URANDOM) */

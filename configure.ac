@@ -492,8 +492,9 @@ AS_IF([test "x$arbint_cv_cc_visibility_hidden" = "xyes"], [
 AC_SUBST([ARBINT_VISIBILITY_CFLAGS])
 
 AS_CASE([$host_os],
-  [mingw*|msys*|cygwin*], [arbint_host_windows=yes],
-  [arbint_host_windows=no])
+  [mingw*|msys*|cygwin*], [arbint_host_windows=yes; arbint_host_emscripten=no],
+  [emscripten*], [arbint_host_windows=no; arbint_host_emscripten=yes],
+  [arbint_host_windows=no; arbint_host_emscripten=no])
 
 ARBINT_LIB_API_CPPFLAGS=""
 AS_IF([test "x$arbint_host_windows" = "xyes" && test "x$enable_shared" = "xyes"], [
@@ -526,6 +527,10 @@ AS_IF([test "x$arbint_host_windows" = "xyes"], [
 AC_CHECK_HEADERS([sys/random.h])  # macOS/BSD arc4random_buf
 AC_CHECK_FUNCS([arc4random_buf])
 
+# getentropy: available on Emscripten (via crypto.getRandomValues),
+# modern Linux (glibc 2.25+), FreeBSD 12+, OpenBSD, macOS 10.12+
+AC_CHECK_FUNCS([getentropy])
+
 # Secure memory zeroing: prefer explicit_bzero, then memset_s
 AC_CHECK_FUNCS([explicit_bzero])
 AC_CHECK_FUNCS([memset_s])
@@ -539,12 +544,20 @@ AC_ARG_ENABLE([entropy],
   [enable_entropy=yes])
 
 # Define config.h macros (only when entropy is enabled)
+arbint_has_getentropy=no
 arbint_has_urandom=no
 arbint_has_winapi_entropy=no
 arbint_has_arc4random=no
 AS_IF([test "x$enable_entropy" = "xyes"], [
-  # ARBINT_HAS_URANDOM: only on non-Windows POSIX with unistd.h
-  AS_IF([test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes"], [
+  AS_IF([test "x$ac_cv_func_getentropy" = "xyes"], [
+    AC_DEFINE([ARBINT_HAS_GETENTROPY], [1],
+              [Define if getentropy() is available (Emscripten, modern Linux, BSD, macOS).])
+    arbint_has_getentropy=yes
+  ])
+  # ARBINT_HAS_URANDOM: only on non-Windows, non-Emscripten POSIX with unistd.h.
+  # Emscripten has unistd.h but /dev/urandom is slow JS FS emulation;
+  # getentropy is the preferred path there.
+  AS_IF([test "x$ac_cv_header_unistd_h" = "xyes" && test "x$arbint_host_windows" != "xyes" && test "x$arbint_host_emscripten" != "xyes"], [
     AC_DEFINE([ARBINT_HAS_URANDOM], [1],
               [Define if /dev/urandom is likely available (non-Windows POSIX).])
     arbint_has_urandom=yes
@@ -554,7 +567,10 @@ AS_IF([test "x$enable_entropy" = "xyes"], [
               [Define if Windows entropy APIs are available])
     arbint_has_winapi_entropy=yes
   ])
-  AS_IF([test "x$ac_cv_func_arc4random_buf" = "xyes"], [
+  # Emscripten's arc4random_buf passes link tests but the declaration is
+  # not visible from <stdlib.h>, so skip it on emscripten (getentropy is
+  # the preferred path there anyway).
+  AS_IF([test "x$ac_cv_func_arc4random_buf" = "xyes" && test "x$arbint_host_emscripten" != "xyes"], [
     AC_DEFINE([ARBINT_HAS_ARC4RANDOM], [1],
               [Define if arc4random_buf is available])
     arbint_has_arc4random=yes
@@ -562,6 +578,8 @@ AS_IF([test "x$enable_entropy" = "xyes"], [
 ])
 
 # Define conditionals for Makefile.am
+AM_CONDITIONAL([ARBINT_HAS_GETENTROPY],
+               [test "x$arbint_has_getentropy" = "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_URANDOM],
                [test "x$arbint_has_urandom" = "xyes"])
 AM_CONDITIONAL([ARBINT_HAS_WINAPI_ENTROPY],

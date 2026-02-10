@@ -142,7 +142,9 @@ static uint32_t arbint_mt19937_u32(arbint_rng_t * rng) {
       2. macOS/BSD: arc4random_buf
       3. Linux/POSIX: /dev/urandom  */
 arbint_entropy_fn_t arbint_select_entropy_source(void) {
-#if defined(ARBINT_HAS_WINAPI_ENTROPY)
+#if defined(ARBINT_HAS_GETENTROPY)
+  return arbint_entropy_getentropy;
+#elif defined(ARBINT_HAS_WINAPI_ENTROPY)
   return arbint_entropy_winapi;
 #elif defined(ARBINT_HAS_ARC4RANDOM)
   return arbint_entropy_arc4;
@@ -150,7 +152,7 @@ arbint_entropy_fn_t arbint_select_entropy_source(void) {
   return arbint_entropy_urandom;
 #else
   return NULL;
-#endif /* ARBINT_HAS_WINAPI_ENTROPY */
+#endif /* ARBINT_HAS_GETENTROPY */
 }
 
 /* ========== Public API ========== */

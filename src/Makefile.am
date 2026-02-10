@@ -19,7 +19,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libarbint.la
 libarbint_la_SOURCES = arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c arbint_tdiv.c arbint_iex.c arbint_cpu.c arbint_mul.c arbint_mul_generic.c arbint_tdiv_generic.c arbint_bitops.c arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c
-EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_bitops_popcnt.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c arbint_hash_shani.c arbint_hash_sha2_neon.c arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
+EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_bitops_popcnt.c arbint_random_getentropy.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c arbint_hash_shani.c arbint_hash_sha2_neon.c arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
 libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
@@ -40,6 +40,10 @@ endif
 
 if ARBINT_BUILD_POPCNT
 libarbint_la_LIBADD += libarbint_la-arbint_bitops_popcnt.lo
+endif
+
+if ARBINT_HAS_GETENTROPY
+libarbint_la_LIBADD += libarbint_la-arbint_random_getentropy.lo
 endif
 
 if ARBINT_HAS_URANDOM
@@ -81,6 +85,9 @@ libarbint_la-arbint_addsub_avx2.lo: arbint_addsub_avx2.c
 
 libarbint_la-arbint_bitops_popcnt.lo: arbint_bitops_popcnt.c
 	$(LTCOMPILE) $(ARBINT_POPCNT_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+
+libarbint_la-arbint_random_getentropy.lo: arbint_random_getentropy.c
+	$(LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
 
 libarbint_la-arbint_random_urandom.lo: arbint_random_urandom.c
 	$(LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
