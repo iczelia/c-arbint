@@ -30,6 +30,15 @@ noinst_HEADERS = \
   arbint_mul_core.inc arbint_bitops.h arbint_shift.h arbint_random.h \
   arbint_hash.h
 
+# Platform-specific sources: distributed but compiled only via custom rules
+# (not EXTRA_*_SOURCES, which triggers broken automake 1.18 auto-rules).
+EXTRA_DIST = \
+  arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c \
+  arbint_bitops_popcnt.c arbint_random_getentropy.c \
+  arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c \
+  arbint_hash_shani.c arbint_hash_sha2_neon.c \
+  arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
+
 # -----------------------------------------------------------------------
 #  Emscripten: bypass libtool's broken link mode.
 #
@@ -43,7 +52,6 @@ if ARBINT_HOST_EMSCRIPTEN
 
 noinst_LTLIBRARIES = libarbint_objs.la
 libarbint_objs_la_SOURCES = $(ARBINT_CORE_SOURCES)
-EXTRA_libarbint_objs_la_SOURCES = arbint_random_getentropy.c
 libarbint_objs_la_LIBADD =
 libarbint_objs_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_objs_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
@@ -85,7 +93,6 @@ else
 
 lib_LTLIBRARIES = libarbint.la
 libarbint_la_SOURCES = $(ARBINT_CORE_SOURCES)
-EXTRA_libarbint_la_SOURCES = arbint_mul_bmi2.c arbint_tdiv_bmi2.c arbint_addsub_avx2.c arbint_bitops_popcnt.c arbint_random_getentropy.c arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c arbint_hash_shani.c arbint_hash_sha2_neon.c arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
 libarbint_la_LIBADD =
 libarbint_la_CPPFLAGS = $(AM_CPPFLAGS) $(ARBINT_LIB_API_CPPFLAGS)
 libarbint_la_CFLAGS = $(ARBINT_VISIBILITY_CFLAGS) $(ARBINT_LTO_CFLAGS)
