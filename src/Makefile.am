@@ -72,7 +72,7 @@ libarbint_objs_la-arbint_random_getentropy.lo: arbint_random_getentropy.c
 # Link the convenience archive into a wasm side module directly with emcc,
 # bypassing libtool's broken --mode=link for emscripten.
 libarbint.wasm: libarbint_objs.la
-	$(AM_V_CCLD)$(CC) -sSIDE_MODULE $(ARBINT_LTO_LDFLAGS) \
+	$(AM_V_CCLD)$(CC) -sSIDE_MODULE $(ARBINT_LTO_LDFLAGS) $(LDFLAGS) \
 	  -o $@ .libs/libarbint_objs.a
 
 all-local: libarbint.wasm
