@@ -1,301 +1,410 @@
+.\" =========================================================================
+.\"  c-arbint -- Portable Arbitrary-Precision Integer Library
+.\" =========================================================================
 .TH C-ARBINT 3 "@MAN_DATE@" "c-arbint @PACKAGE_VERSION@" "Library Functions Manual"
+.\" -------------------------------------------------------------------------
 .SH NAME
+.\" -------------------------------------------------------------------------
 c-arbint \- portable arbitrary-precision integer library for C
+.\" -------------------------------------------------------------------------
 .SH SYNOPSIS
+.\" -------------------------------------------------------------------------
 .nf
 .B #include <arbint.h>
 .fi
 .PP
 Link with:
 .PP
+.RS 4
 .nf
-.B cc ... $(pkg-config --cflags --libs c-arbint)
+.B cc program.c $(pkg-config --cflags --libs c-arbint)
 .fi
+.RE
+.\" -------------------------------------------------------------------------
 .SH DESCRIPTION
+.\" -------------------------------------------------------------------------
 .B c-arbint
-provides signed arbitrary-precision integer arithmetic with explicit
+is a signed arbitrary-precision integer library providing explicit
 allocator-aware object management and runtime performance optimization.
 .PP
-This page documents the functions currently exported by
-.BR libarbint
-(version 0.0.1).
-Additional declarations may exist in
-.BR arbint.h
-for future releases.
+The library automatically dispatches to optimized code paths based on
+detected CPU features:
 .PP
-The library includes optimized code paths for x86 processors supporting
-BMI2 (multiplication), AVX2 (doubling), POPCNT (bit counting), SHA-NI
-(hashing), and SSE4.2 (CRC32C hashing) instructions, and for AArch64
-processors supporting
-CRC32 and PMULL instructions (CRC32C hashing), with automatic runtime
-dispatch based on CPU feature detection.
+.RS 4
+.TS
+tab(|);
+lb lb
+l l.
+Platform|Accelerated Operations
+_
+x86/x86-64|BMI2 (multiply), AVX2 (doubling), POPCNT, SHA-NI, SSE4.2
+AArch64|CRC32, PMULL (hashing)
+.TE
+.RE
+.\" =========================================================================
+.\"                              TYPES
+.\" =========================================================================
 .SH TYPES
-.TP
+.\" -------------------------------------------------------------------------
+.SS Core Types
+.\" -------------------------------------------------------------------------
+.TP 18
 .B arbint_t
-Opaque integer object type (single-object array form). Initialize with
+Arbitrary-precision integer.
+Declare as a local variable; initialize with
 .BR arbint_init ()
-and release with
-.BR arbint_clear ().
+before use and release with
+.BR arbint_clear ()
+when done.
+Uses the single-object array idiom for pass-by-reference semantics.
 .TP
 .B arbint_ctx_t
-Execution/allocation context. A context carries the allocator used for object
-storage and for exported buffers.
+Allocation context.
+Carries the memory allocator used for all object storage and exported buffers.
+Multiple integers can share a single context.
 .TP
 .B arbint_err_t
-Error code enum used by mutating/extracting APIs.
+Error code enumeration returned by all fallible operations.
+See
+.B ERROR CODES
+below.
 .TP
 .B arbint_rng_t
-Mersenne Twister (MT19937) PRNG state. Initialize with
+Mersenne Twister (MT19937) pseudo-random number generator state.
+Initialize with
 .BR arbint_rng_init ()
 and release with
 .BR arbint_rng_clear ().
-.SH RETURN VALUES
+.\" =========================================================================
+.\"                           ERROR CODES
+.\" =========================================================================
+.SH ERROR CODES
 .PP
 Functions returning
 .B arbint_err_t
-use
+yield
 .B ARBINT_OK
-on success and a nonzero error code on failure.
+(zero) on success.
+Nonzero values indicate failure:
 .PP
-Predicate/comparison helpers return
-.B int
-(typically boolean-style 0/1 or three-way compare \-1/0/+1).
-.SH ERROR CODES
-.TP
-.B ARBINT_EINVAL
-Invalid argument (for example NULL where not accepted, or invalid object state).
-.TP
-.B ARBINT_ENOMEM
-Allocation failure.
-.TP
-.B ARBINT_EOVERFLOW
-Value/capacity overflow for the requested conversion or operation.
-.TP
-.B ARBINT_ESIGN
-Unsigned extraction requested from a negative value.
-.TP
-.B ARBINT_EDOM
-Domain error (e.g.\& platform entropy source failed, or
-.BR arbint_urandomm ()
-bound is not positive).
-.TP
-.B ARBINT_EZERO
+.TS
+tab(|);
+lb lbw(50)
+l l.
+Code|Meaning
+_
+ARBINT_EINVAL|T{
+Invalid argument: NULL pointer, invalid object state, or malformed input.
+T}
+ARBINT_ENOMEM|T{
+Memory allocation failed.
+T}
+ARBINT_EOVERFLOW|T{
+Numeric overflow or capacity exceeded for the requested operation.
+T}
+ARBINT_ESIGN|T{
+Attempted unsigned extraction from a negative value.
+T}
+ARBINT_EDOM|T{
+Domain error: e.g., square root of negative, entropy source failure,
+or non-positive bound for random generation.
+T}
+ARBINT_EZERO|T{
 Division by zero.
-.SH IMPLEMENTED API
-.SS Context and Object Lifetime
-.BR arbint_ctx_init_default (),
-.BR arbint_ctx_init (),
-.BR arbint_ctx_clear (),
-.BR arbint_init (),
-.BR arbint_init_all (),
-.BR arbint_clear (),
-.BR arbint_clear_all (),
-.BR arbint_get_ctx (),
-.BR arbint_set_ctx (),
-.BR arbint_zero (),
-.BR arbint_resize (),
-.BR arbint_swap ()
+T}
+.TE
 .PP
-These APIs initialize/destroy contexts and integer objects, rebind objects to a
-new context, zero values, reserve limb capacity, and swap complete object state.
+Comparison and predicate functions return
+.B int
+values: boolean 0/1 for predicates, or three-way \-1/0/+1 for comparisons.
+.\" =========================================================================
+.\"                         API REFERENCE
+.\" =========================================================================
+.SH API REFERENCE
+.\" -------------------------------------------------------------------------
+.SS Initialization and Cleanup
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_ctx_init_default(arbint_ctx_t *" ctx ")"
+.br
+.BI "arbint_err_t arbint_ctx_init(arbint_ctx_t *" ctx ", arbint_alloc_t " alloc ")"
+.br
+.BI "void arbint_ctx_clear(arbint_ctx_t *" ctx ")"
+.RS 4
+.PP
+Initialize or destroy an allocation context.
+.BR arbint_ctx_init_default ()
+uses the standard C allocator (malloc/realloc/free).
+.BR arbint_ctx_init ()
+accepts a custom allocator.
+.RE
+.PP
+.BI "arbint_err_t arbint_init(arbint_t " x ", arbint_ctx_t *" ctx ")"
+.br
+.BI "void arbint_clear(arbint_t " x ")"
+.RS 4
+.PP
+Initialize a single integer to zero, or release its storage.
+Every
+.BR arbint_init ()
+must be paired with exactly one
+.BR arbint_clear ().
+.RE
 .PP
 .BI "arbint_err_t arbint_init_all(arbint_ctx_t *" ctx ", arbint_t " a ", ...)"
-.RS
-Initialize a NULL-terminated list of
-.B arbint_t
-values with the same context. If any initialization fails, all previously
-initialized values in the list are cleared and the error is returned.
-The argument list must be terminated with a
-.B (arbint_t *) NULL
+.RS 4
+.PP
+Initialize multiple integers with the same context.
+The variadic list must end with a
+.B "(arbint_t *) NULL"
 sentinel.
+On failure, all previously initialized values are cleared automatically.
 .RE
 .PP
 .BI "void arbint_clear_all(arbint_t " a ", ...)"
-.RS
-Clear a NULL-terminated list of
-.B arbint_t
-values. Each value is passed to
-.BR arbint_clear ().
-The argument list must be terminated with a
-.B (arbint_t *) NULL
+.RS 4
+.PP
+Clear multiple integers.
+The variadic list must end with a
+.B "(arbint_t *) NULL"
 sentinel.
 .RE
-.SS Assignment and Extraction
-.BR arbint_set (),
-.BR arbint_set_i32 (),
-.BR arbint_set_u32 (),
-.BR arbint_get_i32 (),
-.BR arbint_get_u32 ()
 .PP
-Assign from another integer or a 32-bit scalar; extract into 32-bit scalar
-forms with range/sign checking.
-.SS Fit Checks
-.BR arbint_fits_u8 (),
-.BR arbint_fits_u16 (),
-.BR arbint_fits_u32 (),
-.BR arbint_fits_u64 (),
-.BR arbint_fits_i8 (),
-.BR arbint_fits_i16 (),
-.BR arbint_fits_i32 (),
-.BR arbint_fits_i64 ()
+.BI "arbint_ctx_t * arbint_get_ctx(const arbint_t " x ")"
+.br
+.BI "void arbint_set_ctx(arbint_t " x ", arbint_ctx_t *" ctx ")"
+.RS 4
 .PP
-Non-allocating representability predicates.
-.SS Sign and Basic Predicates
-.BR arbint_signum (),
-.BR arbint_is_zero (),
-.BR arbint_is_one (),
-.BR arbint_is_neg (),
-.BR arbint_is_odd (),
-.BR arbint_is_even (),
-.BR arbint_abs (),
-.BR arbint_neg ()
-.PP
-Sign/shape queries and sign transforms.
-.SS Comparison
-.BR arbint_cmp (),
-.BR arbint_cmpabs (),
-.BR arbint_cmp_i32 (),
-.BR arbint_cmp_u32 (),
-.BR arbint_eq (),
-.BR arbint_ne (),
-.BR arbint_lt (),
-.BR arbint_le (),
-.BR arbint_gt (),
-.BR arbint_ge (),
-.BR arbint_eq_i32 (),
-.BR arbint_ne_i32 (),
-.BR arbint_lt_i32 (),
-.BR arbint_le_i32 (),
-.BR arbint_gt_i32 (),
-.BR arbint_ge_i32 (),
-.BR arbint_eq_u32 (),
-.BR arbint_ne_u32 (),
-.BR arbint_lt_u32 (),
-.BR arbint_le_u32 (),
-.BR arbint_gt_u32 (),
-.BR arbint_ge_u32 ()
-.PP
-Three-way and predicate comparisons against big integers and 32-bit scalars.
-.SS Arithmetic
-.BR arbint_add (),
-.BR arbint_sub (),
-.BR arbint_mul (),
-.BR arbint_sqr (),
-.BR arbint_add_i32 (),
-.BR arbint_add_u32 (),
-.BR arbint_sub_i32 (),
-.BR arbint_sub_u32 (),
-.BR arbint_mul_i32 (),
-.BR arbint_mul_u32 (),
-.BR arbint_addmul (),
-.BR arbint_submul (),
-.BR arbint_addmul_u32 (),
-.BR arbint_submul_u32 (),
-.BR arbint_addmul_i32 (),
-.BR arbint_submul_i32 ()
-.PP
-Core signed arithmetic on arbitrary-size integers.
-Scalar multiplication variants
-.RB ( arbint_mul_i32 ", " arbint_mul_u32 )
-provide optimized fast paths for multiplication by 32-bit values with
-early-exit for special cases (0, +/\-1).
-.PP
-.BI "arbint_err_t arbint_addmul(arbint_t " a ", const arbint_t " b ", const arbint_t " c ")"
-.RS
-Set
-.I a
-to
-.IR a " + " b " * " c .
-.I a
-may alias
-.I b
-or
-.IR c .
-For small operands (below the Karatsuba threshold) a fused multiply-accumulate
-loop is used to avoid temporary allocation; for larger operands the product is
-computed via the full recursive multiplication pipeline (Karatsuba/Toom-3) and
-then added to
-.IR a .
+Query or rebind an integer's allocation context.
 .RE
 .PP
-.BI "arbint_err_t arbint_submul(arbint_t " a ", const arbint_t " b ", const arbint_t " c ")"
-.RS
+.BI "void arbint_zero(arbint_t " x ")"
+.br
+.BI "arbint_err_t arbint_resize(arbint_t " x ", size_t " cap ")"
+.br
+.BI "void arbint_swap(arbint_t " a ", arbint_t " b ")"
+.RS 4
+.PP
+Reset to zero, reserve limb capacity, or exchange two integers' state.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Assignment
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_set(arbint_t " rop ", const arbint_t " op ")"
+.br
+.BI "arbint_err_t arbint_set_i32(arbint_t " rop ", int32_t " val ")"
+.br
+.BI "arbint_err_t arbint_set_u32(arbint_t " rop ", uint32_t " val ")"
+.RS 4
+.PP
 Set
-.I a
-to
-.IR a " \- " b " * " c .
+.I rop
+from another integer or a 32-bit scalar.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Extraction
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_get_i32(const arbint_t " op ", int32_t *" out ")"
+.br
+.BI "arbint_err_t arbint_get_u32(const arbint_t " op ", uint32_t *" out ")"
+.RS 4
+.PP
+Extract to a 32-bit scalar.
+Returns
+.B ARBINT_EOVERFLOW
+if the value does not fit, or
+.B ARBINT_ESIGN
+for unsigned extraction of a negative value.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Representability Predicates
+.\" -------------------------------------------------------------------------
+.PP
+.nf
+.BI "int arbint_fits_u8(const arbint_t " x ")"
+.BI "int arbint_fits_u16(const arbint_t " x ")"
+.BI "int arbint_fits_u32(const arbint_t " x ")"
+.BI "int arbint_fits_u64(const arbint_t " x ")"
+.BI "int arbint_fits_i8(const arbint_t " x ")"
+.BI "int arbint_fits_i16(const arbint_t " x ")"
+.BI "int arbint_fits_i32(const arbint_t " x ")"
+.BI "int arbint_fits_i64(const arbint_t " x ")"
+.fi
+.RS 4
+.PP
+Return 1 if
+.I x
+fits in the indicated type without truncation or sign error, 0 otherwise.
+Non-allocating.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Sign and Shape Predicates
+.\" -------------------------------------------------------------------------
+.PP
+.nf
+.BI "int arbint_signum(const arbint_t " x ")"
+.BI "int arbint_is_zero(const arbint_t " x ")"
+.BI "int arbint_is_one(const arbint_t " x ")"
+.BI "int arbint_is_neg(const arbint_t " x ")"
+.BI "int arbint_is_odd(const arbint_t " x ")"
+.BI "int arbint_is_even(const arbint_t " x ")"
+.fi
+.RS 4
+.PP
+Query sign and basic shape.
+.BR arbint_signum ()
+returns \-1, 0, or +1.
+Others return boolean 0/1.
+.RE
+.PP
+.BI "arbint_err_t arbint_abs(arbint_t " rop ", const arbint_t " op ")"
+.br
+.BI "arbint_err_t arbint_neg(arbint_t " rop ", const arbint_t " op ")"
+.RS 4
+.PP
+Set
+.I rop
+to the absolute value or negation of
+.IR op .
+.I rop
+may alias
+.IR op .
+.RE
+.\" -------------------------------------------------------------------------
+.SS Comparison
+.\" -------------------------------------------------------------------------
+.PP
+.B Three-way comparisons
+return \-1 if
+.I a < b,
+0 if
+.I a == b,
+or +1 if
+.I a > b.
+.PP
+.nf
+.BI "int arbint_cmp(const arbint_t " a ", const arbint_t " b ")"
+.BI "int arbint_cmpabs(const arbint_t " a ", const arbint_t " b ")"
+.BI "int arbint_cmp_i32(const arbint_t " a ", int32_t " b ")"
+.BI "int arbint_cmp_u32(const arbint_t " a ", uint32_t " b ")"
+.fi
+.PP
+.B Relational predicates
+return 1 if the relation holds, 0 otherwise.
+.PP
+.TS
+tab(|);
+lb lb lb
+l l l.
+Big x Big|Big x i32|Big x u32
+_
+arbint_eq|arbint_eq_i32|arbint_eq_u32
+arbint_ne|arbint_ne_i32|arbint_ne_u32
+arbint_lt|arbint_lt_i32|arbint_lt_u32
+arbint_le|arbint_le_i32|arbint_le_u32
+arbint_gt|arbint_gt_i32|arbint_gt_u32
+arbint_ge|arbint_ge_i32|arbint_ge_u32
+.TE
+.\" -------------------------------------------------------------------------
+.SS Basic Arithmetic
+.\" -------------------------------------------------------------------------
+.PP
+All arithmetic operations allow
+.I rop
+to alias any input operand.
+.PP
+.BI "arbint_err_t arbint_add(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.br
+.BI "arbint_err_t arbint_sub(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.br
+.BI "arbint_err_t arbint_mul(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.br
+.BI "arbint_err_t arbint_sqr(arbint_t " rop ", const arbint_t " a ")"
+.RS 4
+.PP
+Compute
+.IR rop " = " a " + " b ,
+.IR rop " = " a " - " b ,
+.IR rop " = " a " * " b ,
+or
+.IR rop " = " a "^2" .
+.RE
+.PP
+.B Scalar variants
+provide optimized paths for 32-bit operands:
+.PP
+.TS
+tab(|);
+lb lb
+l l.
+Signed (i32)|Unsigned (u32)
+_
+arbint_add_i32|arbint_add_u32
+arbint_sub_i32|arbint_sub_u32
+arbint_mul_i32|arbint_mul_u32
+.TE
+.\" -------------------------------------------------------------------------
+.SS Fused Multiply-Accumulate
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_addmul(arbint_t " a ", const arbint_t " b ", const arbint_t " c ")"
+.br
+.BI "arbint_err_t arbint_submul(arbint_t " a ", const arbint_t " b ", const arbint_t " c ")"
+.RS 4
+.PP
+Compute
+.IR a " += " b " * " c
+or
+.IR a " -= " b " * " c .
 .I a
 may alias
 .I b
 or
 .IR c .
-Uses the same algorithm selection strategy as
-.BR arbint_addmul ().
+.PP
+For small operands (below Karatsuba threshold), a fused schoolbook loop
+avoids temporary allocation.
+Larger operands use the full recursive multiplication pipeline.
 .RE
 .PP
 .BI "arbint_err_t arbint_addmul_u32(arbint_t " a ", const arbint_t " b ", uint32_t " c ")"
 .br
 .BI "arbint_err_t arbint_addmul_i32(arbint_t " a ", const arbint_t " b ", int32_t " c ")"
-.RS
-Set
-.I a
-to
-.IR a " + " b " * " c
-where
-.I c
-is a 32-bit scalar.
-Uses a single-limb fused multiply-accumulate loop.
-.I a
-may alias
-.IR b .
-.RE
-.PP
+.br
 .BI "arbint_err_t arbint_submul_u32(arbint_t " a ", const arbint_t " b ", uint32_t " c ")"
 .br
 .BI "arbint_err_t arbint_submul_i32(arbint_t " a ", const arbint_t " b ", int32_t " c ")"
-.RS
-Set
-.I a
-to
-.IR a " \- " b " * " c
-where
-.I c
-is a 32-bit scalar.
-.I a
-may alias
-.IR b .
+.RS 4
+.PP
+Scalar variants using a single-limb fused loop.
 .RE
-.SS Powers and Roots
-.BR arbint_pow_u32 (),
-.BR arbint_pow_u32u32_tmod (),
-.BR arbint_isqrt ()
+.\" -------------------------------------------------------------------------
+.SS Exponentiation
+.\" -------------------------------------------------------------------------
 .PP
 .BI "arbint_err_t arbint_pow_u32(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ")"
-.RS
-Set
-.I rop
-to
-.IR base ^ exp .
-Uses binary exponentiation (repeated squaring), requiring
-O(log\ \fIexp\fP) multiplications.
+.RS 4
+.PP
+Compute
+.IR rop " = " base "^" exp
+using binary exponentiation (repeated squaring).
+Requires O(log
+.IR exp )
+multiplications.
 .I rop
 may alias
 .IR base .
-The convention 0^0\ =\ 1 is followed.
+The convention 0^0 = 1 is followed.
 .RE
 .PP
 .BI "arbint_err_t arbint_pow_u32u32_tmod(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ", uint32_t " mod ")"
-.RS
-Set
-.I rop
-to
-.IR base ^ exp
-mod
-.IR mod .
-Uses binary exponentiation with modular reduction at each step, keeping all
-intermediate values bounded by
-.IR mod .
+.RS 4
 .PP
+Compute
+.IR rop " = " base "^" exp " mod " mod .
+Uses precomputed Barrett reduction for efficiency.
 Returns
 .B ARBINT_EZERO
 if
@@ -303,33 +412,20 @@ if
 is 0.
 If
 .I mod
-is 1, the result is always 0.
-If
-.I exp
-is 0, the result is 1 (including the case 0^0\ mod\ \fIm\fP\ =\ 1 for
-.I m
->\ 1).
-.PP
-Uses precomputed Barrett reduction: the reciprocal for
-.I mod
-is computed once and reused for all modular reductions in the exponentiation
-loop.
-This is significantly faster than calling
-.BR arbint_tdiv_r_u32 ()
-for each reduction, which would recompute the reciprocal each time.
-.PP
+is 1, result is always 0.
 .I rop
 may alias
 .IR base .
-Truncated division semantics apply: the remainder sign matches the base sign
-for odd exponents.
 .RE
+.\" -------------------------------------------------------------------------
+.SS Integer Square Root
+.\" -------------------------------------------------------------------------
 .PP
 .BI "arbint_err_t arbint_isqrt(arbint_t " rop ", const arbint_t " a ")"
-.RS
-Set
-.I rop
-to floor(sqrt(\fIa\fP)).
+.RS 4
+.PP
+Compute
+.IR rop " = floor(sqrt(" a "))."
 Returns
 .B ARBINT_EDOM
 if
@@ -338,129 +434,61 @@ is negative.
 .I rop
 may alias
 .IR a .
-Uses Newton's method (integer Heron iteration) with quadratic convergence,
-requiring O(log\ \fInbits\fP) iterations each dominated by one
-big-integer division.
+Uses Newton's method with quadratic convergence.
 .RE
-.SS Truncated Division and Remainder
-.BR arbint_tdiv_qr (),
-.BR arbint_tdiv_q (),
-.BR arbint_tdiv_r (),
-.BR arbint_tdiv_qr_u32 (),
-.BR arbint_tdiv_q_u32 (),
-.BR arbint_tdiv_r_u32 (),
-.BR arbint_tdiv_qr_i32 (),
-.BR arbint_tdiv_q_i32 (),
-.BR arbint_tdiv_r_i32 ()
+.\" -------------------------------------------------------------------------
+.SS Division
+.\" -------------------------------------------------------------------------
 .PP
-Truncated division obeys:
+All division operations use
+.B truncated division
+semantics:
 .PP
+.RS 4
 .nf
 q = trunc(n / d)
-r = n - q*d
+r = n - q * d
+.fi
+.RE
+.PP
+The remainder
+.I r
+satisfies |r| < |d| and has the same sign as the dividend
+.I n
+(or is zero).
+.PP
+.B Full-precision division:
+.PP
+.nf
+.BI "arbint_err_t arbint_tdiv_qr(arbint_t " q ", arbint_t " r ", const arbint_t " n ", const arbint_t " d ")"
+.BI "arbint_err_t arbint_tdiv_q(arbint_t " q ", const arbint_t " n ", const arbint_t " d ")"
+.BI "arbint_err_t arbint_tdiv_r(arbint_t " r ", const arbint_t " n ", const arbint_t " d ")"
 .fi
 .PP
-with
-.I |r| < |d|
-and remainder sign matching the dividend (or zero).
-.SS Binary Import and Export
-.BR arbint_import (),
-.BR arbint_export ()
+.B 32-bit divisor variants:
 .PP
-Convert between
-.B arbint_t
-and a little-endian magnitude byte buffer.
-.B arbint_export ()
-exports magnitude only (no sign encoding).
-.SS Hashing
-.BR arbint_hash_slow (),
-.BR arbint_hash_fast ()
+.nf
+.BI "arbint_err_t arbint_tdiv_qr_u32(arbint_t " q ", uint32_t *" r ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_tdiv_q_u32(arbint_t " q ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_tdiv_r_u32(uint32_t *" r ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_tdiv_qr_i32(arbint_t " q ", int32_t *" r ", const arbint_t " n ", int32_t " d ")"
+.BI "arbint_err_t arbint_tdiv_q_i32(arbint_t " q ", const arbint_t " n ", int32_t " d ")"
+.BI "arbint_err_t arbint_tdiv_r_i32(int32_t *" r ", const arbint_t " n ", int32_t " d ")"
+.fi
+.RS 4
 .PP
-.BI "arbint_err_t arbint_hash_slow(const arbint_t " op ", uint8_t *" out_hash ", size_t " hash_len ")"
-.RS
-Hash the canonical value of
-.I op
-into
-.I hash_len
-bytes at
-.IR out_hash .
-Uses SHA-256 internally; for
-.I hash_len
-\(<= 32 the output is a (possibly truncated) SHA-256 digest.
-For
-.I hash_len
-> 32 a counter-mode construction is used:
-SHA-256(\fIcanonical\fP || LE32(\fIcounter\fP)) for
-.I counter
-= 0, 1, 2, \&... producing 32 bytes each, concatenated and truncated to
-.IR hash_len .
-.PP
-On x86 processors with SHA-NI support, the SHA-256 compression function
-is hardware-accelerated via
-.BR _mm_sha256rnds2_epu32 ()
-and related intrinsics.
-.PP
-Returns
-.B ARBINT_EINVAL
-if
-.I op
-or
-.I out_hash
-is NULL.
-If
-.I hash_len
-is 0, returns
-.B ARBINT_OK
-without writing.
+Single-limb division uses reciprocal-based algorithms (Granlund-Montgomery
+technique) for significantly faster performance than hardware DIV.
 .RE
-.PP
-.BI "arbint_err_t arbint_hash_fast(const arbint_t " op ", uint32_t *" out_hash ")"
-.RS
-Hash the canonical value of
-.I op
-into a 32-bit CRC32C (Castagnoli) checksum at
-.IR out_hash .
-.PP
-On x86 processors with SSE4.2 support, the CRC32C computation is
-hardware-accelerated via
-.BR _mm_crc32_u8 (),
-.BR _mm_crc32_u32 (),
-and
-.BR _mm_crc32_u64 ()
-intrinsics.
-On AArch64 processors with CRC32 and PMULL support, the computation
-uses
-.BR __crc32cb ()
-and
-.BR __crc32cd ()
-instructions with PMULL-based parallel stream folding.
-A portable table-based fallback is used on other platforms.
-.PP
-Returns
-.B ARBINT_EINVAL
-if
-.I op
-or
-.I out_hash
-is NULL.
-.RE
-.PP
-Both hash functions are intended for hash-table use only.
-The algorithm and output are intentionally unstable across library versions
-and may vary across process runs.
-The canonical input is a sign byte (0x00 for zero, 0x01 for positive,
-0xff for negative) followed by the magnitude in little-endian byte order
-with no leading zero bytes.
-.SS Shifts
-.BR arbint_shl (),
-.BR arbint_shr ()
+.\" -------------------------------------------------------------------------
+.SS Bit Shifts
+.\" -------------------------------------------------------------------------
 .PP
 .BI "arbint_err_t arbint_shl(arbint_t " rop ", const arbint_t " a ", uint32_t " k ")"
-.RS
-Set
-.I rop
-to
-.IR a " * 2^" k .
+.RS 4
+.PP
+Compute
+.IR rop " = " a " * 2^" k .
 Sign is preserved.
 .I rop
 may alias
@@ -468,251 +496,136 @@ may alias
 .RE
 .PP
 .BI "arbint_err_t arbint_shr(arbint_t " rop ", const arbint_t " a ", uint32_t " k ")"
-.RS
-Set
-.I rop
-to
-.I a
-with the low
-.I k
-bits discarded (truncation toward zero).
+.RS 4
+.PP
+Compute
+.IR rop " = " a " / 2^" k
+(truncated toward zero).
 Sign is preserved.
 .I rop
 may alias
 .IR a .
 .RE
+.\" -------------------------------------------------------------------------
 .SS Bit Queries
-.BR arbint_sizeinbase (),
-.BR arbint_nbits (),
-.BR arbint_testbit (),
-.BR arbint_setbit (),
-.BR arbint_clrbit (),
-.BR arbint_ctz (),
-.BR arbint_clz (),
-.BR arbint_popcount (),
-.BR arbint_hammingdist ()
+.\" -------------------------------------------------------------------------
 .PP
 .BI "size_t arbint_sizeinbase(const arbint_t " x ", int " base ")"
-.RS
-Return the number of digits needed to represent
+.RS 4
+.PP
+Return digits needed to represent
 .I x
 in the given
-.IR base ,
-which must be in the range [2,\ 62].
-Returns 1 if
-.I x
-is zero.
+.I base
+(2-62).
+Returns 1 for zero.
 .RE
 .PP
 .BI "size_t arbint_nbits(const arbint_t " x ")"
-.RS
-Return the number of significant bits in
-.IR x ,
-i.e.\& the position of the highest set bit plus one.
-Returns 0 if
-.I x
-is zero.
+.RS 4
+.PP
+Return the number of significant bits (position of highest set bit + 1).
+Returns 0 for zero.
 .RE
 .PP
-All remaining bit operations in this section use two's-complement semantics:
-they behave as if operating on infinite sign-extended two's-complement
-representations, then normalize the result back to the sign-magnitude
-.B arbint_t
-form.
-Define the
-.I canonical width
-.RI W( x )
-as the smallest positive multiple of the implementation limb width that can
-represent
-.I x
-in two's-complement form.
+.B Two's-complement operations:
 .PP
-.BI "arbint_err_t arbint_testbit(const arbint_t " x ", size_t " bit_index ", int *" out ")"
-.RS
-Set
-.RI * out
-to 1 if bit
-.I bit_index
-(zero-indexed from the LSB) is set in the two's-complement representation
-of
-.IR x ,
-or to 0 otherwise.
-.RE
+The following functions operate on infinite sign-extended two's-complement
+representations, then normalize results back to sign-magnitude form.
 .PP
-.BI "arbint_err_t arbint_setbit(arbint_t " x ", size_t " bit_index ")"
-.RS
-Set bit
-.I bit_index
-in the two's-complement representation of
-.IR x .
-The value is modified in place.
-.RE
+.BI "arbint_err_t arbint_testbit(const arbint_t " x ", size_t " idx ", int *" out ")"
+.br
+.BI "arbint_err_t arbint_setbit(arbint_t " x ", size_t " idx ")"
+.br
+.BI "arbint_err_t arbint_clrbit(arbint_t " x ", size_t " idx ")"
+.RS 4
 .PP
-.BI "arbint_err_t arbint_clrbit(arbint_t " x ", size_t " bit_index ")"
-.RS
-Clear bit
-.I bit_index
-in the two's-complement representation of
-.IR x .
-The value is modified in place.
+Test, set, or clear bit
+.I idx
+(zero-indexed from LSB).
 .RE
 .PP
 .BI "arbint_err_t arbint_ctz(const arbint_t " x ", size_t *" out ")"
-.RS
-Count the number of trailing zero bits in
-.IR x .
-Returns
-.B ARBINT_EDOM
-if
-.I x
-is zero.
-.RE
-.PP
+.br
 .BI "arbint_err_t arbint_clz(const arbint_t " x ", size_t *" out ")"
-.RS
-Count the number of leading zero bits within the canonical width
-.RI W( x ).
-For negative values the most significant bit is always set, so
-.RI * out
-is 0.
+.RS 4
+.PP
+Count trailing or leading zero bits.
 Returns
 .B ARBINT_EDOM
-if
-.I x
-is zero.
+for zero input.
+For negative values,
+.BR arbint_clz ()
+returns 0 (MSB is always set).
 .RE
 .PP
 .BI "arbint_err_t arbint_popcount(const arbint_t " x ", size_t *" out ")"
-.RS
-Count the number of set bits in the low
-.RI W( x )
-bits of
-.IR x .
-.PP
-On x86 processors with POPCNT support, the inner loop is
-hardware-accelerated via
-.BR _mm_popcnt_u64 ()
-intrinsics when the operand exceeds the dispatch threshold (8 limbs).
-.RE
-.PP
+.br
 .BI "arbint_err_t arbint_hammingdist(const arbint_t " a ", const arbint_t " b ", size_t *" out ")"
-.RS
-Count the number of bit positions where
-.I a
-and
-.I b
-differ within the low
-.RI max(W( a ),\ W( b ))
-bits.
+.RS 4
 .PP
-Hardware POPCNT acceleration is used when available, as with
-.BR arbint_popcount ().
+Population count and Hamming distance.
+Hardware POPCNT is used when available (threshold: 8 limbs).
 .RE
+.\" -------------------------------------------------------------------------
 .SS Bitwise Logic
-.BR arbint_or (),
-.BR arbint_and (),
-.BR arbint_xor (),
-.BR arbint_not (),
-.BR arbint_and_u32 (),
-.BR arbint_and_i32 (),
-.BR arbint_or_u32 (),
-.BR arbint_or_i32 (),
-.BR arbint_xor_u32 (),
-.BR arbint_xor_i32 ()
+.\" -------------------------------------------------------------------------
 .PP
-All bitwise logic operations use two's-complement semantics as described
-in
-.BR "Bit Queries" .
-.PP
-.BI "arbint_err_t arbint_or(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
-.RS
-Set
-.I rop
-to
-.IR a " | " b
-(bitwise OR).
-.I rop
-may alias either input.
-.RE
+All bitwise operations use two's-complement semantics.
 .PP
 .BI "arbint_err_t arbint_and(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
-.RS
-Set
-.I rop
-to
-.IR a " & " b
-(bitwise AND).
-.I rop
-may alias either input.
-.RE
-.PP
+.br
+.BI "arbint_err_t arbint_or(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
+.br
 .BI "arbint_err_t arbint_xor(arbint_t " rop ", const arbint_t " a ", const arbint_t " b ")"
-.RS
-Set
-.I rop
-to
-.IR a " ^ " b
-(bitwise exclusive OR).
-.I rop
-may alias either input.
-.RE
-.PP
+.br
 .BI "arbint_err_t arbint_not(arbint_t " rop ", const arbint_t " a ")"
-.RS
-Set
+.RS 4
+.PP
+Bitwise AND, OR, XOR, and NOT.
+.BR arbint_not ()
+computes two's-complement NOT, equivalent to \-(\fIa\fP + 1).
 .I rop
-to the two's-complement bitwise NOT of
-.IR a ,
-which is equivalent to
-.RI \-( a +1).
-.I rop
-may alias
-.IR a .
+may alias inputs.
 .RE
 .PP
-The immediate-operand variants perform the same operation with a 32-bit
-scalar second operand.
-Signed
-.RB ( _i32 )
-variants sign-extend the scalar to match the width of
-.IR a ;
-unsigned
-.RB ( _u32 )
-variants zero-extend.
+.B Scalar variants:
 .PP
-.BI "arbint_err_t arbint_and_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " b ")"
-.br
-.BI "arbint_err_t arbint_and_i32(arbint_t " rop ", const arbint_t " a ", int32_t " b ")"
-.br
-.BI "arbint_err_t arbint_or_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " b ")"
-.br
-.BI "arbint_err_t arbint_or_i32(arbint_t " rop ", const arbint_t " a ", int32_t " b ")"
-.br
-.BI "arbint_err_t arbint_xor_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " b ")"
-.br
-.BI "arbint_err_t arbint_xor_i32(arbint_t " rop ", const arbint_t " a ", int32_t " b ")"
+.TS
+tab(|);
+lb lb lb
+l l l.
+Operation|Signed (i32)|Unsigned (u32)
+_
+AND|arbint_and_i32|arbint_and_u32
+OR|arbint_or_i32|arbint_or_u32
+XOR|arbint_xor_i32|arbint_xor_u32
+.TE
+.PP
+Signed variants sign-extend the scalar; unsigned variants zero-extend.
+.\" -------------------------------------------------------------------------
 .SS Random Number Generation
-.BR arbint_rng_init (),
-.BR arbint_rng_clear (),
-.BR arbint_urandomb (),
-.BR arbint_urandomm ()
+.\" -------------------------------------------------------------------------
 .PP
 .BI "arbint_err_t arbint_rng_init(arbint_rng_t *" rng ", const void *" seed ", size_t " seed_len ")"
-.RS
-Initialize an MT19937 PRNG state. If
+.RS 4
+.PP
+Initialize MT19937 PRNG state.
+If
 .I seed
-is NULL, the state is seeded from a platform entropy source (see
-.B ENTROPY SOURCES
-below). If
+is NULL, uses platform entropy (see
+.BR "ENTROPY SOURCES" ).
+Otherwise,
 .I seed
-is non-NULL, it must point to a buffer of
+must point to
 .I seed_len
-bytes, where
+bytes where
 .I seed_len
 is a positive multiple of 4.
+.PP
 Returns
 .B ARBINT_EINVAL
-if no platform entropy source is available (when
+if no entropy source is available (when
 .I seed
 is NULL) or if
 .I seed_len
@@ -723,22 +636,26 @@ if the platform entropy source fails at runtime.
 .RE
 .PP
 .BI "void arbint_rng_clear(arbint_rng_t *" rng ")"
-.RS
-Securely zero the PRNG state to prevent leaking generated sequences.
+.RS 4
+.PP
+Securely zero the PRNG state to prevent leakage.
 .RE
 .PP
 .BI "arbint_err_t arbint_urandomb(arbint_t " rop ", arbint_rng_t *" rng ", size_t " k ")"
-.RS
+.RS 4
+.PP
 Set
 .I rop
-to a uniformly random non-negative integer in [0,\ 2^\fIk\fP).
+to a uniform random integer in [0, 2^\fIk\fP).
 .RE
 .PP
 .BI "arbint_err_t arbint_urandomm(arbint_t " rop ", arbint_rng_t *" rng ", const arbint_t " bound ")"
-.RS
+.RS 4
+.PP
 Set
 .I rop
-to a uniformly random non-negative integer in [0,\ \fIbound\fP).
+to a uniform random integer in [0,
+.IR bound ).
 Uses rejection sampling to eliminate modulo bias.
 .I rop
 may alias
@@ -747,207 +664,215 @@ Returns
 .B ARBINT_EDOM
 if
 .I bound
-\(<= 0 or if rejection sampling exhausts 256 attempts.
+<= 0.
 .RE
+.\" -------------------------------------------------------------------------
+.SS Hashing
+.\" -------------------------------------------------------------------------
+.PP
+Both hash functions are designed for hash-table use.
+.B The algorithm and output are intentionally unstable
+across library versions and process runs.
+.PP
+.BI "arbint_err_t arbint_hash_slow(const arbint_t " op ", uint8_t *" out ", size_t " len ")"
+.RS 4
+.PP
+Cryptographic-quality hash using SHA-256.
+For
+.I len
+<= 32, output is a (possibly truncated) SHA-256 digest.
+For
+.I len
+> 32, counter-mode extension is used.
+Hardware SHA-NI acceleration when available.
+.RE
+.PP
+.BI "arbint_err_t arbint_hash_fast(const arbint_t " op ", uint32_t *" out ")"
+.RS 4
+.PP
+Fast non-cryptographic hash using CRC32C (Castagnoli polynomial).
+Hardware SSE4.2 (x86) or CRC32/PMULL (AArch64) acceleration when available.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Binary Import/Export
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_import(arbint_t " rop ", const void *" buf ", size_t " len ", int " sign ")"
+.RS 4
+.PP
+Set
+.I rop
+from a little-endian magnitude byte buffer with explicit
+.I sign
+(\-1, 0, or +1).
+.RE
+.PP
+.BI "arbint_err_t arbint_export(void **" buf ", size_t *" len ", const arbint_t " op ")"
+.RS 4
+.PP
+Export magnitude to a little-endian byte buffer (no sign encoding).
+The buffer is allocated using the source object's context allocator;
+the caller must free it with the same allocator.
+.RE
+.\" =========================================================================
+.\"                          ALIASING RULES
+.\" =========================================================================
 .SH ALIASING RULES
 .PP
-For single-output operations, destination may alias an input.
+.B Single-output operations:
+The destination may alias any input operand.
+The library handles internal copying when necessary.
 .PP
-For two-output division APIs, output aliases are accepted; if both outputs are
-the same object, the last-written output value remains in that object.
-.SH MEMORY NOTES
+.B Two-output division:
+Both
+.I q
+and
+.I r
+may alias inputs or each other.
+If both outputs are the same object, the value of the last-written
+output (the remainder) remains.
+.\" =========================================================================
+.\"                        ALGORITHMS
+.\" =========================================================================
+.SH ALGORITHMS
+.\" -------------------------------------------------------------------------
+.SS Multiplication
+.\" -------------------------------------------------------------------------
+Three algorithms are selected based on operand size:
 .PP
-.B arbint_export ()
-allocates the output buffer using the allocator in the source object's context.
-The caller owns that buffer and must free it with the same allocator contract.
-.SH ALGORITHMIC NOTES
+.RS 4
+.TS
+tab(|);
+lb lb lb
+l l l.
+Algorithm|Threshold|Complexity
+_
+Schoolbook|< 32 limbs|O(n^2)
+Karatsuba|>= 32 limbs|O(n^1.585)
+Toom-Cook 3|>= 96 limbs|O(n^1.465)
+.TE
+.RE
 .PP
-.B Multiplication
-dispatches between a generic implementation and an optimized
-BMI2 path on supported x86 targets (using runtime CPU detection).
-The implementation selects among three algorithms based on operand size:
-schoolbook (O(n^2)) for small operands,
-Karatsuba (O(n^log2(3))) above 32 limbs, and
-Toom-Cook 3-way (O(n^log3(5))) above 96 limbs.
 Scalar multiplication by a power of two is detected and delegated to
 .BR arbint_shl ()
 as a fast path.
+.\" -------------------------------------------------------------------------
+.SS Squaring
+.\" -------------------------------------------------------------------------
 .PP
-.B Fused multiply-accumulate
-.RB ( arbint_addmul "(), " arbint_submul ())
-uses a two-tier strategy.
-When the smaller multiplicand is below the Karatsuba threshold (32 limbs),
-a fused O(n*m) schoolbook loop accumulates the product directly into the
-destination without allocating a temporary buffer.
-Above that threshold the full recursive multiplication pipeline is used
-(Karatsuba or Toom-Cook 3-way), producing the product in a temporary buffer
-which is then added to or subtracted from the accumulator.
-The scalar variants
-.RB ( _u32 ", " _i32 )
-always use a single-limb fused loop.
-All variants use runtime BMI2 dispatch when available.
+Exploits the symmetry
+.IR a[i]*a[j] " == " a[j]*a[i]
+to halve cross-product multiplications.
+For large operands, the recursive identity
+.IR a "^2 = " a1 "^2*B^(2k) + ((" a0 "+" a1 ")^2 - " a0 "^2 - " a1 "^2)*B^k + " a0 "^2"
+requires only three half-size squarings instead of four multiplications.
+.\" -------------------------------------------------------------------------
+.SS Division
+.\" -------------------------------------------------------------------------
 .PP
-.B Squaring
-.RB ( arbint_sqr ())
-dispatches to a specialized kernel rather than falling through to general
-multiplication.
-The schoolbook squarer exploits the symmetry a[i]*a[j] == a[j]*a[i] to
-halve the number of cross-product multiplications, then doubles the
-accumulated off-diagonal terms and adds the diagonal squares.
-For operands at or above the Karatsuba threshold the identity
-a^2 = a1^2*B^(2k) + ((a0+a1)^2 \- a0^2 \- a1^2)*B^k + a0^2
-is applied recursively, requiring three half-size squarings per level
-instead of four half-size multiplications in general Karatsuba.
+.B Multi-limb:
+Knuth's Algorithm D (TAOCP Vol 2, Section 4.3.1) with reciprocal-based
+quotient estimation.
+Complexity is O(n*m) for n-limb dividend and m-limb divisor.
 .PP
-.B Exponentiation
-.RB ( arbint_pow_u32 ())
-uses right-to-left binary exponentiation (repeated squaring).
-At each step the exponent is right-shifted by one bit; when the low bit is
-set the running accumulator is multiplied by the current power of the base.
-This requires at most 2\ *\ log2(\fIexp\fP) big-integer multiplications.
+.B Single-limb:
+Granlund-Montgomery reciprocal technique replaces expensive hardware DIV
+with two multiplications per limb.
+.\" -------------------------------------------------------------------------
+.SS Exponentiation
+.\" -------------------------------------------------------------------------
 .PP
-.B Modular exponentiation
-.RB ( arbint_pow_u32u32_tmod ())
-extends this with modular reduction after each multiplication and squaring.
-The key optimization is precomputing the Barrett reciprocal for the modulus
-once at the start: the normalization shift, normalized divisor, and reciprocal
-are computed once and reused for all modular reductions.
-For an exponent with
-.I k
-bits, this avoids
-.RI 2* k
-redundant reciprocal computations compared to calling
-.BR arbint_tdiv_r_u32 ()
-for each reduction.
-The Barrett reduction itself uses the Granlund-Montgomery reciprocal-based
-division algorithm, replacing expensive hardware DIV instructions with two
-multiplications per limb.
+Binary exponentiation (right-to-left repeated squaring) requiring at most
+2 * log2(\fIexp\fP) multiplications.
 .PP
-.B Integer square root
-.RB ( arbint_isqrt ())
-uses Newton's method on the integer iteration
-x_{n+1}\ =\ floor((x_n\ +\ floor(\fIa\fP\ /\ x_n))\ /\ 2),
-starting from the overestimate x_0\ =\ 2^(ceil(nbits(\fIa\fP)/2)).
-The sequence is monotonically decreasing and bounded below by
-floor(sqrt(\fIa\fP)); convergence is detected when x_{n+1}\ >=\ x_n.
-Quadratic convergence yields O(log\ nbits(\fIa\fP)) iterations, each
-dominated by one truncated division.
+Modular exponentiation precomputes the Barrett reciprocal once and reuses
+it for all reductions, avoiding 2k redundant reciprocal computations for
+a k-bit exponent.
+.\" -------------------------------------------------------------------------
+.SS Integer Square Root
+.\" -------------------------------------------------------------------------
 .PP
-.B Division
-by multi-limb divisors uses Knuth's Algorithm D (TAOCP Vol 2, Section 4.3.1).
-The dividend and divisor are normalized so the divisor's most significant bit is
-set, then quotient digits are estimated via a precomputed reciprocal of the top
-divisor limb and refined with a correction step.
-This gives O(n*m) complexity for an n-limb dividend and m-limb divisor.
-Division by single-limb divisors (u32/i32 variants) uses a reciprocal-based
-algorithm (Granlund-Montgomery technique) that replaces expensive hardware
-DIV instructions with two multiplications per limb plus minimal ALU operations.
-This provides significant speedup for the common case of dividing large
-integers by small constants.
-.PP
-.B Doubling
-operations automatically select an AVX2-optimized SIMD implementation when
-available and operand size exceeds the threshold (16 limbs), providing
-1.5-2.5x speedup on modern x86-64 processors.
-.PP
-All division variants apply appropriate sign rules for truncation semantics
-after magnitude computation.
-.PP
-.B Hashing
-uses a self-contained SHA-256 implementation (FIPS 180-4) for
-.BR arbint_hash_slow ()
-and CRC32C (Castagnoli polynomial) for
-.BR arbint_hash_fast ().
-Both dispatch to hardware-accelerated implementations when available:
-SHA-NI extensions for SHA-256 compression and SSE4.2 intrinsics for CRC32C.
-Canonical data is fed through a streaming interface with O(1) auxiliary memory.
-.PP
-.B Bitwise operations
-use two's-complement sign decomposition: each binary operation branches on the
-four possible sign combinations of its operands, converts negative magnitudes
-to two's-complement form, performs the limb-wise operation, and re-normalizes.
-.BR arbint_popcount ()
-and
-.BR arbint_hammingdist ()
-dispatch between a portable scalar loop and a POPCNT-accelerated
-implementation on x86 processors with hardware POPCNT support
-(dispatch threshold: 8 limbs).
-.PP
-.B arbint_sizeinbase ()
-uses a fixed-point reciprocal lookup table to avoid floating-point arithmetic,
-computing
-.RI ceil( nbits " * " recip )
-where
-.I recip
-approximates 1/log2(\fIbase\fP).
+Newton's method on the iteration
+x_{n+1} = floor((x_n + floor(a / x_n)) / 2),
+starting from x_0 = 2^ceil(nbits(a)/2).
+Quadratic convergence yields O(log nbits(a)) iterations, each dominated
+by one truncated division.
+.\" =========================================================================
+.\"                       ENTROPY SOURCES
+.\" =========================================================================
 .SH ENTROPY SOURCES
 .PP
 When
 .BR arbint_rng_init ()
-is called with a NULL seed, it reads entropy from the best available
-platform source. Sources are selected at compile time in the following
-priority order:
+is called with a NULL seed, entropy is obtained from the best
+available platform source (selected at compile time):
 .PP
-.TP
-.B Windows
-.BR BCryptGenRandom ()
-(requires
-.IR bcrypt.h ,
-Vista+), then
-.BR CryptGenRandom ()
-(requires
-.IR wincrypt.h ,
-XP+), then
-.B RtlGenRandom
-(loaded dynamically from
-.IR advapi32.dll ,
-XP+; needs only
-.IR windows.h ).
-.TP
-.B macOS/BSD
-.BR arc4random_buf ()
-(kernel-seeded, cannot fail).
-.TP
-.B Linux/POSIX
-.I /dev/urandom
-(opened, read, and closed on each call).
+.TS
+tab(|);
+lb lb
+l l.
+Platform|Source
+_
+Windows|T{
+BCryptGenRandom (Vista+), CryptGenRandom (XP+),
+or RtlGenRandom (XP+, via advapi32.dll)
+T}
+macOS/BSD|arc4random_buf (kernel-seeded, cannot fail)
+Linux/POSIX|/dev/urandom (opened/read/closed per call)
+.TE
 .PP
-If no platform entropy source was detected at configure time, or if entropy
-support was disabled with
+If no entropy source was detected at configure time or was disabled with
 .BR \-\-disable-entropy ,
-then NULL-seed initialization returns
+NULL-seed initialization returns
 .BR ARBINT_EINVAL .
-Callers must then supply their own seed buffer.
+.\" =========================================================================
+.\"                      CONFIGURE OPTIONS
+.\" =========================================================================
 .SH CONFIGURE OPTIONS
 .TP
 .B \-\-disable\-entropy
 Do not compile any platform entropy source.
 .BR arbint_rng_init ()
-with a NULL seed will always return
+with NULL seed will return
 .BR ARBINT_EINVAL ;
-callers must provide their own seed.
-The PRNG itself
-.RB ( arbint_urandomb ", " arbint_urandomm )
-is unaffected.
+callers must provide their own seed buffer.
+.\" =========================================================================
+.\"                         EXAMPLE
+.\" =========================================================================
 .SH EXAMPLE
+.PP
 .nf
+.in +4
 #include <arbint.h>
 
-arbint_ctx_t ctx;
-arbint_t a, b, q, r;
+int main(void) {
+    arbint_ctx_t ctx;
+    arbint_t a, b, q, r;
 
-arbint_ctx_init_default(&ctx);
-arbint_init_all(&ctx, a, b, q, r, (arbint_t *) NULL);
+    arbint_ctx_init_default(&ctx);
+    arbint_init_all(&ctx, a, b, q, r, (arbint_t *) NULL);
 
-arbint_set_i32(a, -17);
-arbint_set_i32(b, 5);
-arbint_tdiv_qr(q, r, a, b); /* q = -3, r = -2 */
+    arbint_set_i32(a, -17);
+    arbint_set_i32(b, 5);
+    arbint_tdiv_qr(q, r, a, b);  /* q = -3, r = -2 */
 
-arbint_clear_all(a, b, q, r, (arbint_t *) NULL);
+    arbint_clear_all(a, b, q, r, (arbint_t *) NULL);
+    return 0;
+}
+.in -4
 .fi
+.\" =========================================================================
+.\"                        SEE ALSO
+.\" =========================================================================
 .SH SEE ALSO
 .BR pkg-config (1)
+.\" =========================================================================
+.\"                         AUTHOR
+.\" =========================================================================
 .SH AUTHOR
 Kamila Szewczyk <k@iczelia.net>
+.\" =========================================================================
+.\"                        LICENSE
+.\" =========================================================================
 .SH LICENSE
 GNU Affero General Public License version 3 or later.
