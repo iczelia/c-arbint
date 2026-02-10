@@ -1078,6 +1078,7 @@ jobs:
       - name: Copy artifacts to upload directory
         run: |
           mkdir -p artifacts
+          find dist -path "*/src/.libs/*" -type f
           find dist -name "*.wasm" -path "*/src/.libs/*" | xargs -I {} cp {} artifacts/ || true
           find dist -name "*.so" -path "*/src/.libs/*" -type f | xargs -I {} cp {} artifacts/ || true
           ls -la artifacts/
