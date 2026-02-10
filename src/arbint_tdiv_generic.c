@@ -205,7 +205,7 @@ static inline void arbint_ubarrett(arbint_limb_t * q, arbint_limb_t * r,
   _r = nl - qh * d;
 
   /* First correction: if the estimate was 1 too high. */
-  mask = -(arbint_limb_t) (_r > ql);
+  mask = (arbint_limb_t) 0u - (arbint_limb_t) (_r > ql);
   qh += mask;
   _r += mask & d;
 

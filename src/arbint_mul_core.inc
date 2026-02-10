@@ -393,7 +393,7 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
   arbint_limb_t * r2;
   arbint_limb_t * r3;
   arbint_limb_t * scr;
-  arbint_limb_t * scr2;
+  arbint_limb_t * scr_b;
   size_t w0n;
   size_t w1n;
   size_t wm1n;
@@ -478,14 +478,14 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
       product buffers: 2k+7 limbs (product of two (k+3)-limb values).
       w0/winf: 2k+2 limbs (products of k-limb pieces).
       r1/r2/r3: 2k+3 limbs each.
-      scr/scr2: 2k+7 limbs each (scratch for scalar multiplies).  */
+      scr/scr_b: 2k+7 limbs each (scratch for scalar multiplies).  */
   prod_cap = 2u * k + 7u;
   r_cap = 2u * k + 3u;
   scr_cap = 2u * k + 7u;
 
-  /*  Layout: w0 + w1 + wm1 + w2 + winf + r1 + r2 + r3 + scr + scr2.
+  /*  Layout: w0 + w1 + wm1 + w2 + winf + r1 + r2 + r3 + scr + scr_b.
       w0 = 2k+2, w1 = 2k+7, wm1 = 2k+7, w2 = 2k+7, winf = 2k+2,
-      r1 = 2k+3, r2 = 2k+3, r3 = 2k+3, scr = 2k+7, scr2 = 2k+7.
+      r1 = 2k+3, r2 = 2k+3, r3 = 2k+3, scr = 2k+7, scr_b = 2k+7.
       Total = 20k + 48.  */
   total = 20u * k + 48u;
 
@@ -502,7 +502,7 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
   r2   = r1   + r_cap;
   r3   = r2   + r_cap;
   scr  = r3   + r_cap;
-  scr2 = scr  + scr_cap;
+  scr_b = scr  + scr_cap;
 
   /*  No memset: all buffers are written before being read.  */
 
@@ -523,14 +523,14 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
   va1n = arbint__add_mag(scr, a0, a0n, a2, a2n);
   va1n = arbint__add_mag(scr, scr, va1n, a1, a1n);
 
-  vb1n = arbint__add_mag(scr2, b0, b0n, b2, b2n);
-  vb1n = arbint__add_mag(scr2, scr2, vb1n, b1, b1n);
+  vb1n = arbint__add_mag(scr_b, b0, b0n, b2, b2n);
+  vb1n = arbint__add_mag(scr_b, scr_b, vb1n, b1, b1n);
 
   /*  w1 = a(1) * b(1). Skip if either eval is zero.  */
   if (va1n == 0u || vb1n == 0u) {
     w1n = 0u;
   } else {
-    rc = arbint_mul_mag_rec(w1, &w1n, scr, va1n, scr2, vb1n, alloc);
+    rc = arbint_mul_mag_rec(w1, &w1n, scr, va1n, scr_b, vb1n, alloc);
     if (rc != ARBINT_OK)
       goto cleanup;
   }
@@ -548,12 +548,12 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
   if (va_neg1n == 0u)
     a_neg1_sign = 0;
 
-  tn = arbint__add_mag(scr2, b0, b0n, b2, b2n);
-  if (arbint_cmp_mag_limbs(scr2, tn, b1, b1n) >= 0) {
-    vb_neg1n = arbint__sub_mag(scr2, scr2, tn, b1, b1n);
+  tn = arbint__add_mag(scr_b, b0, b0n, b2, b2n);
+  if (arbint_cmp_mag_limbs(scr_b, tn, b1, b1n) >= 0) {
+    vb_neg1n = arbint__sub_mag(scr_b, scr_b, tn, b1, b1n);
     b_neg1_sign = 0;
   } else {
-    vb_neg1n = arbint__sub_mag(scr2, b1, b1n, scr2, tn);
+    vb_neg1n = arbint__sub_mag(scr_b, b1, b1n, scr_b, tn);
     b_neg1_sign = 1;
   }
   if (vb_neg1n == 0u)
@@ -565,7 +565,7 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
     wm1n = 0u;
     wm1_neg = 0;
   } else {
-    rc = arbint_mul_mag_rec(wm1, &wm1n, scr, va_neg1n, scr2, vb_neg1n,
+    rc = arbint_mul_mag_rec(wm1, &wm1n, scr, va_neg1n, scr_b, vb_neg1n,
                             alloc);
     if (rc != ARBINT_OK)
       goto cleanup;
@@ -579,16 +579,16 @@ static arbint_err_t arbint_toom3_mul(arbint_limb_t * dst, size_t * out_used,
   tn = arbint__dbl_mag(scr, scr, tn);
   va2n = arbint__add_mag(scr, scr, tn, a0, a0n);
 
-  tn = arbint__dbl_mag(scr2, b2, b2n);
-  tn = arbint__add_mag(scr2, scr2, tn, b1, b1n);
-  tn = arbint__dbl_mag(scr2, scr2, tn);
-  vb2n = arbint__add_mag(scr2, scr2, tn, b0, b0n);
+  tn = arbint__dbl_mag(scr_b, b2, b2n);
+  tn = arbint__add_mag(scr_b, scr_b, tn, b1, b1n);
+  tn = arbint__dbl_mag(scr_b, scr_b, tn);
+  vb2n = arbint__add_mag(scr_b, scr_b, tn, b0, b0n);
 
   /*  w2 = a(2) * b(2). Skip if either eval is zero.  */
   if (va2n == 0u || vb2n == 0u) {
     w2n = 0u;
   } else {
-    rc = arbint_mul_mag_rec(w2, &w2n, scr, va2n, scr2, vb2n, alloc);
+    rc = arbint_mul_mag_rec(w2, &w2n, scr, va2n, scr_b, vb2n, alloc);
     if (rc != ARBINT_OK)
       goto cleanup;
   }

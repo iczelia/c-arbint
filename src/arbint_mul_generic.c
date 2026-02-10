@@ -114,7 +114,7 @@ static inline void arbint_div3_barrett(arbint_limb_t * q, arbint_limb_t * r,
 
   _r = nl - qh * d;
 
-  mask = -(arbint_limb_t) (_r > ql);
+  mask = (arbint_limb_t) 0u - (arbint_limb_t) (_r > ql);
   qh += mask;
   _r += mask & d;
 
