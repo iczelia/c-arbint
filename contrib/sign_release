@@ -103,6 +103,6 @@ echo
 echo "Done."
 echo "Signature archives created:"
 echo "  - $tar_xz"
-echo "  - $tar_gz"
+echo "  - $tar_bz3"
 echo "  - $zip_file"
 echo "Individual .sig files and SHA512SUMS.txt remain in $workdir/"
