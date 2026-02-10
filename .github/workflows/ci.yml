@@ -1036,9 +1036,6 @@ jobs:
             host_triple="wasm64-unknown-emscripten"
             em_cflags="-sMEMORY64"
             em_ldflags="-sMEMORY64"
-          elif [ "${{ matrix.mode }}" = "asmjs" ]; then
-            em_cflags="-sWASM=0"
-            em_ldflags="-sWASM=0"
           fi
           configure_args="$configure_args --host=$host_triple"
 
@@ -1170,7 +1167,7 @@ jobs:
               tuple="i386-windows"
               compiler="msvc"
               lto="${BASH_REMATCH[1]}"
-            elif [[ "$artifact_name" =~ ^build-wasm-(wasm32|wasm64|asmjs)-lto(on|off)$ ]]; then
+            elif [[ "$artifact_name" =~ ^build-wasm-(wasm32|wasm64)-lto(on|off)$ ]]; then
               tuple="${BASH_REMATCH[1]}-emscripten"
               compiler="emcc"
               lto="${BASH_REMATCH[2]}"
