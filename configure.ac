@@ -659,24 +659,4 @@ AC_CONFIG_FILES([
   c-arbint.pc
 ])
 
-# Emscripten: patch the generated libtool script for two issues:
-# 1. archive_cmds uses -sSIDE_MODULE=2 which only exports explicitly
-#    listed symbols.  Patch to -sSIDE_MODULE (level 1) so that all
-#    non-hidden symbols are exported by the side module.
-# 2. build_libtool_libs may be "no" if libtool's platform detection
-#    failed to recognise emscripten as a shared-library-capable target.
-#    Force it to "yes" so shared libraries are actually built.
-AS_IF([test "x$arbint_host_emscripten" = "xyes"], [
-  AC_CONFIG_COMMANDS([libtool-emscripten-patch], [
-    if grep -q 'sSIDE_MODULE=2' libtool 2>/dev/null; then
-      sed -i 's/-sSIDE_MODULE=2/-sSIDE_MODULE/g' libtool
-      AC_MSG_NOTICE([patched libtool: -sSIDE_MODULE=2 -> -sSIDE_MODULE])
-    fi
-    if grep -q '^build_libtool_libs=no$' libtool 2>/dev/null; then
-      sed -i 's/^build_libtool_libs=no$/build_libtool_libs=yes/' libtool
-      AC_MSG_NOTICE([patched libtool: build_libtool_libs=no -> yes])
-    fi
-  ])
-])
-
 AC_OUTPUT

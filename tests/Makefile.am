@@ -42,9 +42,15 @@ check_PROGRAMS = \
 TESTS = $(check_PROGRAMS)
 TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH"
 
-# Default linking for all test programs
-# Automake automatically detects test_name.c as source for test_name binary
+# Default linking for all test programs.
+# Automake automatically detects test_name.c as source for test_name binary.
+# On emscripten the library is a wasm side module (no .la file); tests link
+# against it directly with emcc -sMAIN_MODULE=2.
+if ARBINT_HOST_EMSCRIPTEN
+LDADD = $(top_builddir)/src/libarbint.wasm
+else
 LDADD = $(top_builddir)/src/libarbint.la
+endif
 
 # Emscripten: libtool wrappers cannot exec wasm binaries directly.
 # Copy the side module into .libs/ so the emscripten runtime can find it,

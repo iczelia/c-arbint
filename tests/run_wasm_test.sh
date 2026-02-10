@@ -45,13 +45,20 @@ if [ -z "$js_file" ]; then
   exit 99
 fi
 
-# Ensure the side module (.so = wasm side module) is next to the JS
-# file so the emscripten runtime can find it via neededDynlibs.
+# Ensure the side module (wasm) is next to the JS file so the
+# emscripten runtime can find it via neededDynlibs.
+# The libtool-bypass build places libarbint.wasm in src/;
+# the legacy libtool build places libarbint.so in src/.libs/.
 js_dir=$(dirname "$js_file")
-src_lib="$test_dir/../src/.libs/libarbint.so"
-if [ -f "$src_lib" ] && [ ! -f "$js_dir/libarbint.so" ]; then
-  cp -f "$src_lib" "$js_dir/"
-fi
+for lib_name in libarbint.wasm libarbint.so; do
+  src_lib="$test_dir/../src/$lib_name"
+  if [ ! -f "$src_lib" ]; then
+    src_lib="$test_dir/../src/.libs/$lib_name"
+  fi
+  if [ -f "$src_lib" ] && [ ! -f "$js_dir/$lib_name" ]; then
+    cp -f "$src_lib" "$js_dir/"
+  fi
+done
 
 # Also ensure the .wasm companion file is next to the JS if the JS
 # lives outside .libs/ (e.g. tests/test_name.js alongside tests/test_name.wasm).

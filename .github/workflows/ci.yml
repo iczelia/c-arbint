@@ -1056,17 +1056,8 @@ jobs:
           emmake make -j"$(nproc)"
 
           echo "=== Library ==="
-          file src/.libs/libarbint.so || true
-          ls -la src/.libs/libarbint.so || true
-
-          # Build test executables first so we can inspect the output
-          # before the test harness runs.
-          emmake make -C tests -j"$(nproc)" 2>&1 || true
-          echo "=== Test build output ==="
-          echo "-- tests/ directory --"
-          ls -la tests/test_basic* tests/compute_pi* 2>/dev/null || true
-          echo "-- tests/.libs/ directory --"
-          ls -la tests/.libs/ 2>/dev/null || echo "(does not exist)"
+          file src/libarbint.wasm || true
+          ls -la src/libarbint.wasm || true
 
           echo "=== Running tests ==="
           emmake make check || {
@@ -1078,11 +1069,8 @@ jobs:
       - name: Copy artifacts to upload directory
         run: |
           mkdir -p artifacts
-          echo "=== All files in src/.libs ==="
-          find dist -path "*/src/.libs/*" -type f -ls || true
-          # Copy the wasm side-module library (.so is a wasm binary under emscripten)
-          find dist -path "*/src/.libs/*" -type f \
-            \( -name "*.wasm" -o -name "*.so" -o -name "*.so.*" \) \
+          # The libtool-bypass build places the side module in src/.
+          find dist -path "*/src/libarbint.wasm" -type f \
             -exec cp -v {} artifacts/ \;
           echo "=== Artifacts to upload ==="
           ls -la artifacts/ || echo "(empty)"
