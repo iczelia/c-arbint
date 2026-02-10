@@ -16,8 +16,8 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src -I$(top_builddir)
-AM_CFLAGS = $(ARBINT_LTO_CFLAGS)
-AM_LDFLAGS = $(ARBINT_LTO_LDFLAGS)
+AM_CFLAGS = $(ARBINT_LTO_CFLAGS) $(ARBINT_EMSCRIPTEN_TEST_CFLAGS)
+AM_LDFLAGS = $(ARBINT_LTO_LDFLAGS) $(ARBINT_EMSCRIPTEN_TEST_LDFLAGS)
 
 check_PROGRAMS = \
   test_basic \
@@ -46,5 +46,13 @@ TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH
 # Automake automatically detects test_name.c as source for test_name binary
 LDADD = $(top_builddir)/src/libarbint.la
 
+# Emscripten: libtool wrappers cannot exec wasm binaries directly.
+# Copy the side module into .libs/ so the emscripten runtime can find it,
+# then run tests via node on the .js files in .libs/.
+if ARBINT_HOST_EMSCRIPTEN
+LOG_COMPILER = $(SHELL)
+AM_LOG_FLAGS = $(srcdir)/run_wasm_test.sh
+endif
+
 noinst_HEADERS = test_framework.h
-EXTRA_DIST = test_framework.h pi10k.txt e10k.txt
+EXTRA_DIST = test_framework.h pi10k.txt e10k.txt run_wasm_test.sh
