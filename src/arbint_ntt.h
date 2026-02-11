@@ -88,11 +88,25 @@ typedef struct arbint_ntt_prime {
 } arbint_ntt_prime_t;
 
 /*  Precomputed twiddle factors (roots of unity) for one prime.
-    Stored in Montgomery form for fast modular multiply.  */
+    Stored in Montgomery form for fast modular multiply.
+
+    Two storage modes:
+    1. Compact: omega[s] = primitive 2^(s+1)-th root (O(log n) space)
+    2. Full: omega_full[s] = table of omega^j for j=0..2^s-1 (O(n) space)
+
+    Full tables are lazily allocated on demand for AVX2 optimization.  */
 typedef struct arbint_ntt_roots {
   uint64_t * omega;     /* omega[k] = g^((p-1)/2^(k+1)) mod p (Montgomery) */
   uint64_t * omega_inv; /* Inverses for INTT (Montgomery) */
-  unsigned max_log2;    /* Allocated table size */
+  unsigned max_log2;    /* Allocated compact table size */
+
+  /*  Full omega tables for stages [0, full_max_log2).
+      omega_full[s] points to 2^s entries: omega_m^0, omega_m^1, ..., omega_m^(2^s-1)
+      where omega_m = omega[s] is the primitive 2^(s+1)-th root.
+      NULL if not allocated.  */
+  uint64_t ** omega_full;
+  uint64_t ** omega_inv_full;
+  unsigned full_max_log2; /* Stages with full tables allocated */
 } arbint_ntt_roots_t;
 
 /*  CRT constants for 3-prime reconstruction via Garner's algorithm.  */

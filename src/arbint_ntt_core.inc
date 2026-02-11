@@ -335,6 +335,9 @@ static arbint_err_t arbint_ntt_ctx_init_internal(void) {
     g_ntt_ctx.roots[i].omega = NULL;
     g_ntt_ctx.roots[i].omega_inv = NULL;
     g_ntt_ctx.roots[i].max_log2 = 0u;
+    g_ntt_ctx.roots[i].omega_full = NULL;
+    g_ntt_ctx.roots[i].omega_inv_full = NULL;
+    g_ntt_ctx.roots[i].full_max_log2 = 0u;
   }
 
   /*  Compute CRT constants.  */
@@ -465,6 +468,105 @@ static arbint_err_t ensure_roots(size_t log2_n, const arbint_alloc_t * alloc) {
 
   return ARBINT_OK;
 }
+
+/*  Minimum stage size for which full omega tables are beneficial.
+    Below this, the overhead of table lookup isn't worth it.
+    Stage s has m_half = 2^s elements, so s >= 4 means >= 16 elements.  */
+#ifndef NTT_FULL_OMEGA_MIN_STAGE
+  #define NTT_FULL_OMEGA_MIN_STAGE 4u
+#endif
+
+/*  Ensure full omega tables are allocated for stages [min_stage, log2_n).
+    This trades O(n) memory for eliminating omega accumulation in butterflies.
+
+    For stage s, we store omega_m^j for j = 0, 1, ..., 2^s - 1
+    where omega_m = omega[s] is the primitive 2^(s+1)-th root of unity.  */
+#ifdef NTT_USE_FULL_OMEGA_TABLES
+static arbint_err_t ensure_full_roots(size_t log2_n,
+                                      const arbint_alloc_t * alloc) {
+  if (log2_n > ARBINT_NTT_MAX_LOG2)
+    return ARBINT_EOVERFLOW;
+
+  /*  First ensure compact roots exist.  */
+  arbint_err_t rc = ensure_roots(log2_n, alloc);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  for (int i = 0; i < 3; ++i) {
+    arbint_ntt_roots_t * r = &g_ntt_ctx.roots[i];
+    const arbint_mont_params_t * m = &g_ntt_ctx.primes[i].mont;
+
+    if (r->full_max_log2 >= log2_n)
+      continue;
+
+    /*  Allocate array of pointers for full tables if needed.  */
+    if (r->omega_full == NULL) {
+      r->omega_full =
+          (uint64_t **) alloc->realloc(alloc->ud, NULL,
+                                       ARBINT_NTT_MAX_LOG2 * sizeof(uint64_t *));
+      if (r->omega_full == NULL)
+        return ARBINT_ENOMEM;
+      for (size_t s = 0u; s < ARBINT_NTT_MAX_LOG2; ++s)
+        r->omega_full[s] = NULL;
+    }
+    if (r->omega_inv_full == NULL) {
+      r->omega_inv_full =
+          (uint64_t **) alloc->realloc(alloc->ud, NULL,
+                                       ARBINT_NTT_MAX_LOG2 * sizeof(uint64_t *));
+      if (r->omega_inv_full == NULL)
+        return ARBINT_ENOMEM;
+      for (size_t s = 0u; s < ARBINT_NTT_MAX_LOG2; ++s)
+        r->omega_inv_full[s] = NULL;
+    }
+
+    /*  Allocate and fill full tables for new stages.  */
+    for (size_t s = r->full_max_log2; s < log2_n; ++s) {
+      /*  Skip small stages where full tables aren't beneficial.  */
+      if (s < NTT_FULL_OMEGA_MIN_STAGE)
+        continue;
+
+      size_t table_size = (size_t) 1u << s;  /* 2^s entries */
+
+      /*  Allocate omega_full[s].  */
+      if (r->omega_full[s] == NULL) {
+        r->omega_full[s] =
+            (uint64_t *) alloc->realloc(alloc->ud, NULL,
+                                        table_size * sizeof(uint64_t));
+        if (r->omega_full[s] == NULL)
+          return ARBINT_ENOMEM;
+
+        /*  Fill with omega_m^0, omega_m^1, ..., omega_m^(2^s - 1).  */
+        uint64_t omega_m = r->omega[s];
+        r->omega_full[s][0] = to_mont(1u, m);  /* omega_m^0 = 1 */
+        for (size_t j = 1u; j < table_size; ++j) {
+          r->omega_full[s][j] = mont_mul(r->omega_full[s][j - 1], omega_m, m);
+        }
+      }
+
+      /*  Allocate omega_inv_full[s].  */
+      if (r->omega_inv_full[s] == NULL) {
+        r->omega_inv_full[s] =
+            (uint64_t *) alloc->realloc(alloc->ud, NULL,
+                                        table_size * sizeof(uint64_t));
+        if (r->omega_inv_full[s] == NULL)
+          return ARBINT_ENOMEM;
+
+        /*  Fill with omega_m_inv^0, omega_m_inv^1, ..., omega_m_inv^(2^s - 1).  */
+        uint64_t omega_m_inv = r->omega_inv[s];
+        r->omega_inv_full[s][0] = to_mont(1u, m);  /* omega_m_inv^0 = 1 */
+        for (size_t j = 1u; j < table_size; ++j) {
+          r->omega_inv_full[s][j] =
+              mont_mul(r->omega_inv_full[s][j - 1], omega_m_inv, m);
+        }
+      }
+    }
+
+    r->full_max_log2 = (unsigned) log2_n;
+  }
+
+  return ARBINT_OK;
+}
+#endif /* NTT_USE_FULL_OMEGA_TABLES */
 
 /* ========== NTT Transforms ========== */
 
@@ -763,6 +865,13 @@ arbint_err_t ARBINT_NTT_MUL_MAG_FN(arbint_limb_t * dst, size_t * out_used,
   rc = ensure_roots(log2_n, alloc);
   if (rc != ARBINT_OK)
     return rc;
+
+#ifdef NTT_USE_FULL_OMEGA_TABLES
+  /*  Ensure full omega tables are allocated for AVX2 table-based butterflies.  */
+  rc = ensure_full_roots(log2_n, alloc);
+  if (rc != ARBINT_OK)
+    return rc;
+#endif
 
   /*  Allocate workspace.
       Layout: work_a[ntt_size], work_b[ntt_size],
