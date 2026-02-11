@@ -478,6 +478,11 @@ static inline size_t bit_reverse(size_t x, size_t log2_n) {
   return result;
 }
 
+/*  If ARBINT_NTT_CUSTOM_TRANSFORMS is defined, the including file provides
+    its own ntt_forward and ntt_inverse implementations (e.g., AVX2-optimized).
+    Otherwise, use the generic scalar implementations below.  */
+#ifndef ARBINT_NTT_CUSTOM_TRANSFORMS
+
 /*  Forward NTT: Cooley-Tukey decimation-in-time.
     x must be in Montgomery form on entry; remains in Montgomery form on exit.
     Uses iterative algorithm with implicit bit-reversal.  */
@@ -557,6 +562,8 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
     }
   }
 }
+
+#endif /* ARBINT_NTT_CUSTOM_TRANSFORMS */
 
 /* ========== CRT Reconstruction ========== */
 

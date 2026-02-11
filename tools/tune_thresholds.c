@@ -19,9 +19,9 @@
 
     This tool measures the performance of multiplication and squaring
     operations at various operand sizes to help determine optimal threshold
-    values for algorithm selection (schoolbook -> Karatsuba -> Toom-3).
+    values for algorithm selection (schoolbook -> Karatsuba -> Toom-3 -> NTT).
 
-    Usage: tune_thresholds [--mul] [--sqr] [--csv]
+    Usage: tune_thresholds [--mul] [--sqr] [--ntt] [--csv]
 
     The tool uses only the public API and measures wall-clock time for
     operations. It outputs recommended threshold values based on observed
@@ -56,6 +56,13 @@
 #define SIZE_STEP_SMALL 2  /* step for sizes < 50 */
 #define SIZE_STEP_MEDIUM 4 /* step for sizes 50-150 */
 #define SIZE_STEP_LARGE 8  /* step for sizes > 150 */
+
+/*  NTT-specific size ranges (larger operands).  */
+#define NTT_MIN_SIZE 128
+#define NTT_MAX_SIZE 8192
+#define NTT_SIZE_STEP_SMALL 64   /* step for sizes < 512 */
+#define NTT_SIZE_STEP_MEDIUM 128 /* step for sizes 512-2048 */
+#define NTT_SIZE_STEP_LARGE 256  /* step for sizes > 2048 */
 
 /*  Output format.  */
 static int g_csv_mode = 0;
@@ -374,14 +381,124 @@ static void tune_squaring(void) {
   arbint_ctx_clear(&ctx);
 }
 
+/*  Compute normalized time for NTT comparison.
+    For NTT, expect O(n log n) complexity, so normalize by n * log2(n).  */
+static double normalize_time_ntt(double ns, size_t n) {
+  double log2_n = 0.0;
+  size_t tmp = n;
+  while (tmp > 1) {
+    log2_n += 1.0;
+    tmp >>= 1;
+  }
+  if (log2_n < 1.0)
+    log2_n = 1.0;
+  return ns / ((double) n * log2_n);
+}
+
+/*  Find NTT crossover point.
+    Looks for where normalized time (by n*log(n)) starts decreasing,
+    indicating NTT has become more efficient than Toom-3.  */
+static size_t find_ntt_crossover(double * times, size_t * sizes, size_t count) {
+  size_t i;
+  double prev_norm = 0.0;
+  int decreasing_count = 0;
+
+  for (i = 1; i < count; ++i) {
+    double curr_norm = normalize_time_ntt(times[i], sizes[i]);
+
+    if (prev_norm > 0.0 && curr_norm < prev_norm * 0.95) {
+      /*  Significant decrease in normalized time.  */
+      ++decreasing_count;
+      if (decreasing_count >= 3) {
+        /*  Found sustained decrease - return first point.  */
+        return sizes[i - decreasing_count + 1];
+      }
+    } else {
+      decreasing_count = 0;
+    }
+
+    prev_norm = curr_norm;
+  }
+
+  return 0;
+}
+
+static void tune_ntt(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t b;
+  arbint_t r;
+  double times[500];
+  size_t sizes[500];
+  size_t count = 0;
+  size_t n;
+  size_t step;
+  size_t ntt_crossover = 0;
+
+  if (arbint_ctx_init_default(&ctx) != ARBINT_OK) {
+    fprintf(stderr, "Failed to init context\n");
+    exit(1);
+  }
+
+  arbint_init(a, &ctx);
+  arbint_init(b, &ctx);
+  arbint_init(r, &ctx);
+
+  print_header("NTT Multiplication");
+
+  for (n = NTT_MIN_SIZE; n <= NTT_MAX_SIZE;) {
+    double ns = measure_mul(a, b, r, n);
+    print_row(n, ns);
+
+    if (count < 500) {
+      times[count] = ns;
+      sizes[count] = n;
+      ++count;
+    }
+
+    /*  Variable step size for NTT range.  */
+    if (n < 512)
+      step = NTT_SIZE_STEP_SMALL;
+    else if (n < 2048)
+      step = NTT_SIZE_STEP_MEDIUM;
+    else
+      step = NTT_SIZE_STEP_LARGE;
+    n += step;
+  }
+
+  if (!g_csv_mode) {
+    ntt_crossover = find_ntt_crossover(times, sizes, count);
+
+    printf("\n--- NTT Analysis ---\n");
+    printf("Testing range: %d to %d limbs\n", NTT_MIN_SIZE, NTT_MAX_SIZE);
+    printf("Current NTT threshold: " ARBINT_STR(ARBINT_NTT_THRESHOLD) "\n");
+
+    if (ntt_crossover > 0)
+      printf("Estimated NTT crossover: ~%zu limbs\n", ntt_crossover);
+    else
+      printf("NTT crossover: not detected (Toom-3 may still be faster)\n");
+
+    printf("\nRecommendations:\n");
+    printf("  ARBINT_NTT_THRESHOLD: %zu (current: " ARBINT_STR(
+               ARBINT_NTT_THRESHOLD) ")\n",
+           ntt_crossover > 0 ? ntt_crossover : ARBINT_NTT_THRESHOLD);
+  }
+
+  arbint_clear(r);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
 static void print_usage(const char * prog) {
   printf("Usage: %s [OPTIONS]\n", prog);
   printf("\nOptions:\n");
   printf("  --mul   Tune multiplication thresholds only\n");
   printf("  --sqr   Tune squaring thresholds only\n");
+  printf("  --ntt   Tune NTT threshold only (tests larger operand sizes)\n");
   printf("  --csv   Output in CSV format (for plotting)\n");
   printf("  --help  Show this help message\n");
-  printf("\nBy default, tunes both multiplication and squaring.\n");
+  printf("\nBy default, tunes multiplication, squaring, and NTT.\n");
   printf("\nThe tool measures operation times at various operand sizes and\n");
   printf("attempts to identify where algorithm transitions occur. Use the\n");
   printf("recommendations to update thresholds in src/arbint_mul.h.\n");
@@ -390,6 +507,7 @@ static void print_usage(const char * prog) {
 int main(int argc, char ** argv) {
   int do_mul = 0;
   int do_sqr = 0;
+  int do_ntt = 0;
   int i;
   arbint_err_t rc;
 
@@ -405,6 +523,8 @@ int main(int argc, char ** argv) {
       do_mul = 1;
     } else if (strcmp(argv[i], "--sqr") == 0) {
       do_sqr = 1;
+    } else if (strcmp(argv[i], "--ntt") == 0) {
+      do_ntt = 1;
     } else if (strcmp(argv[i], "--csv") == 0) {
       g_csv_mode = 1;
     } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -417,10 +537,11 @@ int main(int argc, char ** argv) {
     }
   }
 
-  /*  Default: tune both.  */
-  if (!do_mul && !do_sqr) {
+  /*  Default: tune all.  */
+  if (!do_mul && !do_sqr && !do_ntt) {
     do_mul = 1;
     do_sqr = 1;
+    do_ntt = 1;
   }
 
   if (!g_csv_mode) {
@@ -435,6 +556,9 @@ int main(int argc, char ** argv) {
 
   if (do_sqr)
     tune_squaring();
+
+  if (do_ntt)
+    tune_ntt();
 
   if (!g_csv_mode) {
     printf("\n============================\n");
