@@ -64,6 +64,102 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
                         const arbint_ntt_roots_t * roots,
                         const arbint_mont_params_t * mont);
 
+/* ========== AVX2 Optimized Loop Macros ========== */
+
+/*  Threshold for using AVX2 loops. Below this, scalar loops have less overhead.
+    16 elements = 4 AVX2 vectors = 128 bytes = 2 cache lines.  */
+#define NTT_AVX2_LOOP_THRESHOLD 16u
+
+/*  AVX2-optimized to_mont conversion loop.
+    Uses vectorized loads/stores with scalar Montgomery multiply.
+    The to_mont function is defined in the include, so we inline the loop body.  */
+#define NTT_TO_MONT_LOOP(dst, src, n, mont)                                    \
+  do {                                                                         \
+    size_t _i = 0u;                                                            \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                      \
+      for (; _i + 4u <= (n); _i += 4u) {                                       \
+        if (_i + 16u < (n))                                                    \
+          _mm_prefetch((const char *) &(src)[_i + 16u], _MM_HINT_T0);          \
+        __m256i _v = _mm256_loadu_si256((const __m256i *) &(src)[_i]);         \
+        uint64_t _s0 = (uint64_t) _mm256_extract_epi64(_v, 0);                 \
+        uint64_t _s1 = (uint64_t) _mm256_extract_epi64(_v, 1);                 \
+        uint64_t _s2 = (uint64_t) _mm256_extract_epi64(_v, 2);                 \
+        uint64_t _s3 = (uint64_t) _mm256_extract_epi64(_v, 3);                 \
+        uint64_t _r0 = to_mont(_s0, mont);                                     \
+        uint64_t _r1 = to_mont(_s1, mont);                                     \
+        uint64_t _r2 = to_mont(_s2, mont);                                     \
+        uint64_t _r3 = to_mont(_s3, mont);                                     \
+        __m256i _result = _mm256_set_epi64x(                                   \
+            (long long) _r3, (long long) _r2, (long long) _r1, (long long) _r0); \
+        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                  \
+      }                                                                        \
+    }                                                                          \
+    for (; _i < (n); ++_i) {                                                   \
+      (dst)[_i] = to_mont((src)[_i], mont);                                    \
+    }                                                                          \
+  } while (0)
+
+/*  AVX2-optimized pointwise multiplication loop.  */
+#define NTT_POINTWISE_MUL(dst, a, b, n, mont)                                  \
+  do {                                                                         \
+    size_t _i = 0u;                                                            \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                      \
+      for (; _i + 4u <= (n); _i += 4u) {                                       \
+        if (_i + 16u < (n)) {                                                  \
+          _mm_prefetch((const char *) &(a)[_i + 16u], _MM_HINT_T0);            \
+          _mm_prefetch((const char *) &(b)[_i + 16u], _MM_HINT_T0);            \
+        }                                                                      \
+        __m256i _va = _mm256_loadu_si256((const __m256i *) &(a)[_i]);          \
+        __m256i _vb = _mm256_loadu_si256((const __m256i *) &(b)[_i]);          \
+        uint64_t _a0 = (uint64_t) _mm256_extract_epi64(_va, 0);                \
+        uint64_t _a1 = (uint64_t) _mm256_extract_epi64(_va, 1);                \
+        uint64_t _a2 = (uint64_t) _mm256_extract_epi64(_va, 2);                \
+        uint64_t _a3 = (uint64_t) _mm256_extract_epi64(_va, 3);                \
+        uint64_t _b0 = (uint64_t) _mm256_extract_epi64(_vb, 0);                \
+        uint64_t _b1 = (uint64_t) _mm256_extract_epi64(_vb, 1);                \
+        uint64_t _b2 = (uint64_t) _mm256_extract_epi64(_vb, 2);                \
+        uint64_t _b3 = (uint64_t) _mm256_extract_epi64(_vb, 3);                \
+        uint64_t _r0 = mont_mul(_a0, _b0, mont);                               \
+        uint64_t _r1 = mont_mul(_a1, _b1, mont);                               \
+        uint64_t _r2 = mont_mul(_a2, _b2, mont);                               \
+        uint64_t _r3 = mont_mul(_a3, _b3, mont);                               \
+        __m256i _result = _mm256_set_epi64x(                                   \
+            (long long) _r3, (long long) _r2, (long long) _r1, (long long) _r0); \
+        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                  \
+      }                                                                        \
+    }                                                                          \
+    for (; _i < (n); ++_i) {                                                   \
+      (dst)[_i] = mont_mul((a)[_i], (b)[_i], mont);                            \
+    }                                                                          \
+  } while (0)
+
+/*  AVX2-optimized scale and from_mont conversion loop.  */
+#define NTT_SCALE_FROM_MONT(x, n, scale, mont)                                 \
+  do {                                                                         \
+    size_t _i = 0u;                                                            \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                      \
+      for (; _i + 4u <= (n); _i += 4u) {                                       \
+        if (_i + 16u < (n))                                                    \
+          _mm_prefetch((const char *) &(x)[_i + 16u], _MM_HINT_T0);            \
+        __m256i _v = _mm256_loadu_si256((const __m256i *) &(x)[_i]);           \
+        uint64_t _v0 = (uint64_t) _mm256_extract_epi64(_v, 0);                 \
+        uint64_t _v1 = (uint64_t) _mm256_extract_epi64(_v, 1);                 \
+        uint64_t _v2 = (uint64_t) _mm256_extract_epi64(_v, 2);                 \
+        uint64_t _v3 = (uint64_t) _mm256_extract_epi64(_v, 3);                 \
+        uint64_t _r0 = from_mont(mont_mul(_v0, scale, mont), mont);            \
+        uint64_t _r1 = from_mont(mont_mul(_v1, scale, mont), mont);            \
+        uint64_t _r2 = from_mont(mont_mul(_v2, scale, mont), mont);            \
+        uint64_t _r3 = from_mont(mont_mul(_v3, scale, mont), mont);            \
+        __m256i _result = _mm256_set_epi64x(                                   \
+            (long long) _r3, (long long) _r2, (long long) _r1, (long long) _r0); \
+        _mm256_storeu_si256((__m256i *) &(x)[_i], _result);                    \
+      }                                                                        \
+    }                                                                          \
+    for (; _i < (n); ++_i) {                                                   \
+      (x)[_i] = from_mont(mont_mul((x)[_i], scale, mont), mont);               \
+    }                                                                          \
+  } while (0)
+
 /*  Include the core for Montgomery arithmetic, CRT, etc.
     We need the helper functions before defining our custom transforms.  */
 #define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_avx2

@@ -789,7 +789,11 @@ arbint_err_t ARBINT_NTT_MUL_MAG_FN(arbint_limb_t * dst, size_t * out_used,
     const arbint_mont_params_t * mont = &prime->mont;
     const arbint_ntt_roots_t * roots = &g_ntt_ctx.roots[pi];
 
-    /*  Convert operand a to Montgomery form and zero-pad.  */
+    /*  Convert operand a to Montgomery form and zero-pad.
+        If NTT_TO_MONT_LOOP is defined, use custom implementation.  */
+#ifdef NTT_TO_MONT_LOOP
+    NTT_TO_MONT_LOOP(work_a, a, an, mont);
+#else
     for (size_t i = 0u; i < an; ++i) {
 #if ARBINT_LIMB_BITS == 64
       work_a[i] = to_mont(a[i], mont);
@@ -797,9 +801,13 @@ arbint_err_t ARBINT_NTT_MUL_MAG_FN(arbint_limb_t * dst, size_t * out_used,
       work_a[i] = to_mont((uint64_t) a[i], mont);
 #endif
     }
+#endif
     memset(&work_a[an], 0, (ntt_size - an) * sizeof(uint64_t));
 
     /*  Convert operand b to Montgomery form and zero-pad.  */
+#ifdef NTT_TO_MONT_LOOP
+    NTT_TO_MONT_LOOP(work_b, b, bn, mont);
+#else
     for (size_t i = 0u; i < bn; ++i) {
 #if ARBINT_LIMB_BITS == 64
       work_b[i] = to_mont(b[i], mont);
@@ -807,27 +815,38 @@ arbint_err_t ARBINT_NTT_MUL_MAG_FN(arbint_limb_t * dst, size_t * out_used,
       work_b[i] = to_mont((uint64_t) b[i], mont);
 #endif
     }
+#endif
     memset(&work_b[bn], 0, (ntt_size - bn) * sizeof(uint64_t));
 
     /*  Forward NTT.  */
     ntt_forward(work_a, log2_n, roots, mont);
     ntt_forward(work_b, log2_n, roots, mont);
 
-    /*  Pointwise multiplication.  */
+    /*  Pointwise multiplication.
+        If NTT_POINTWISE_MUL is defined, use custom implementation.  */
+#ifdef NTT_POINTWISE_MUL
+    NTT_POINTWISE_MUL(result[pi], work_a, work_b, ntt_size, mont);
+#else
     for (size_t i = 0u; i < ntt_size; ++i) {
       result[pi][i] = mont_mul(work_a[i], work_b[i], mont);
     }
+#endif
 
     /*  Inverse NTT.  */
     ntt_inverse(result[pi], log2_n, roots, mont);
 
-    /*  Scale by n^(-1) and convert from Montgomery form.  */
+    /*  Scale by n^(-1) and convert from Montgomery form.
+        If NTT_SCALE_FROM_MONT is defined, use custom implementation.  */
     uint64_t n_inv = modinv(ntt_size, prime->p);
     uint64_t n_inv_mont = to_mont(n_inv, mont);
+#ifdef NTT_SCALE_FROM_MONT
+    NTT_SCALE_FROM_MONT(result[pi], ntt_size, n_inv_mont, mont);
+#else
     for (size_t i = 0u; i < ntt_size; ++i) {
       result[pi][i] =
           from_mont(mont_mul(result[pi][i], n_inv_mont, mont), mont);
     }
+#endif
   }
 
   /*  CRT reconstruction into temporary buffer.
