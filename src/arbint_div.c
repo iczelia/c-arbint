@@ -296,6 +296,19 @@ arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
   return impl(x, d_norm, di, shift);
 }
 
+/*  Dispatched single-limb remainder (no quotient).  */
+
+arbint_err_t arbint_mod_mag_single_limb(const arbint_limb_t * np, size_t nn,
+                                        arbint_limb_t d_limb,
+                                        arbint_limb_t * rem_out) {
+  static arbint_div_mag_single_limb_fn_t impl = NULL;
+
+  if (impl == NULL)
+    impl = arbint_select_div_mag_single_limb();
+
+  return impl(np, nn, d_limb, NULL, NULL, rem_out);
+}
+
 /*  Dispatched u32 division.  */
 
 arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,

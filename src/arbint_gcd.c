@@ -302,10 +302,9 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
   if (b == 1u)
     return arbint_set_u32(g, 1u);
 
-  /*  Compute |a| mod b directly using limb-level division (no allocation).  */
-  rc = arbint_div_mag_single_limb_generic(ARBINT_CLIMBS(a), an,
-                                          (arbint_limb_t) b, NULL, NULL,
-                                          &rem_limb);
+  /*  Compute |a| mod b directly using dispatched limb-level division.  */
+  rc = arbint_mod_mag_single_limb(ARBINT_CLIMBS(a), an, (arbint_limb_t) b,
+                                  &rem_limb);
   if (rc != ARBINT_OK)
     return rc;
 
@@ -445,10 +444,9 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
   if (b == 1u)
     return arbint_abs(l, a);
 
-  /*  Compute |a| mod b directly (no allocation).  */
-  rc = arbint_div_mag_single_limb_generic(ARBINT_CLIMBS(a), an,
-                                          (arbint_limb_t) b, NULL, NULL,
-                                          &rem_limb);
+  /*  Compute |a| mod b directly using dispatched limb-level division.  */
+  rc = arbint_mod_mag_single_limb(ARBINT_CLIMBS(a), an, (arbint_limb_t) b,
+                                  &rem_limb);
   if (rc != ARBINT_OK)
     return rc;
 
