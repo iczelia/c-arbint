@@ -222,8 +222,8 @@ static inline void arbint_ubarrett(arbint_limb_t * q, arbint_limb_t * r,
 /*  Generic truncated division by uint32_t (magnitude) using Barrett
     reduction.  */
 arbint_err_t arbint_div_qr_u32_generic_impl(arbint_t q, arbint_t r,
-                                             const arbint_t n, uint32_t dmag,
-                                             int dsign) {
+                                            const arbint_t n, uint32_t dmag,
+                                            int dsign) {
   const arbint_limb_t * np;
   size_t nn;
   int nsign;
@@ -342,7 +342,7 @@ arbint_err_t arbint_div_qr_u32_generic_impl(arbint_t q, arbint_t r,
 
     Truncated division semantics: remainder sign matches dividend sign.  */
 arbint_err_t arbint_mod_u32_barrett_generic(arbint_t x, arbint_limb_t d_norm,
-                                             arbint_limb_t di, unsigned shift) {
+                                            arbint_limb_t di, unsigned shift) {
   const arbint_limb_t * xp;
   size_t xn;
   int xsign;

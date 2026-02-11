@@ -48,14 +48,14 @@
 /*  Number of iterations for timing.  */
 #define WARMUP_ITERS 3
 #define MIN_ITERS 5
-#define TARGET_TIME_NS 100000000  /* 100ms target per size */
+#define TARGET_TIME_NS 100000000 /* 100ms target per size */
 
 /*  Size ranges to test (in limbs).  */
 #define MIN_SIZE 4
 #define MAX_SIZE 300
-#define SIZE_STEP_SMALL 2   /* step for sizes < 50 */
-#define SIZE_STEP_MEDIUM 4  /* step for sizes 50-150 */
-#define SIZE_STEP_LARGE 8   /* step for sizes > 150 */
+#define SIZE_STEP_SMALL 2  /* step for sizes < 50 */
+#define SIZE_STEP_MEDIUM 4 /* step for sizes 50-150 */
+#define SIZE_STEP_LARGE 8  /* step for sizes > 150 */
 
 /*  Output format.  */
 static int g_csv_mode = 0;
@@ -200,7 +200,7 @@ static size_t find_crossover(double * times, size_t * sizes, size_t count,
     prev_slope = slope1;
   }
 
-  return 0;  /* No crossover found */
+  return 0; /* No crossover found */
 }
 
 static void print_header(const char * op) {
@@ -245,7 +245,7 @@ static void tune_multiplication(void) {
 
   print_header("Multiplication");
 
-  for (n = MIN_SIZE; n <= MAX_SIZE; ) {
+  for (n = MIN_SIZE; n <= MAX_SIZE;) {
     double ns = measure_mul(a, b, r, n);
     print_row(n, ns);
 
@@ -274,7 +274,8 @@ static void tune_multiplication(void) {
 
     printf("\n--- Multiplication Analysis ---\n");
     if (karatsuba_crossover > 0)
-      printf("Estimated Karatsuba crossover: ~%zu limbs\n", karatsuba_crossover);
+      printf("Estimated Karatsuba crossover: ~%zu limbs\n",
+             karatsuba_crossover);
     else
       printf("Karatsuba crossover: not detected (check smaller sizes)\n");
 
@@ -284,12 +285,12 @@ static void tune_multiplication(void) {
       printf("Toom-3 crossover: not detected (may need larger sizes)\n");
 
     printf("\nRecommendations:\n");
-    printf("  ARBINT_KARATSUBA_THRESHOLD: %zu (current: "
-           ARBINT_STR(ARBINT_KARATSUBA_THRESHOLD) ")\n",
+    printf("  ARBINT_KARATSUBA_THRESHOLD: %zu (current: " ARBINT_STR(
+               ARBINT_KARATSUBA_THRESHOLD) ")\n",
            karatsuba_crossover > 0 ? karatsuba_crossover
                                    : ARBINT_KARATSUBA_THRESHOLD);
-    printf("  ARBINT_TOOM3_THRESHOLD: %zu (current: "
-           ARBINT_STR(ARBINT_TOOM3_THRESHOLD) ")\n",
+    printf("  ARBINT_TOOM3_THRESHOLD: %zu (current: " ARBINT_STR(
+               ARBINT_TOOM3_THRESHOLD) ")\n",
            toom3_crossover > 0 ? toom3_crossover : ARBINT_TOOM3_THRESHOLD);
   }
 
@@ -321,7 +322,7 @@ static void tune_squaring(void) {
 
   print_header("Squaring");
 
-  for (n = MIN_SIZE; n <= MAX_SIZE; ) {
+  for (n = MIN_SIZE; n <= MAX_SIZE;) {
     double ns = measure_sqr(a, r, n);
     print_row(n, ns);
 
@@ -348,7 +349,8 @@ static void tune_squaring(void) {
 
     printf("\n--- Squaring Analysis ---\n");
     if (karatsuba_crossover > 0)
-      printf("Estimated Karatsuba crossover: ~%zu limbs\n", karatsuba_crossover);
+      printf("Estimated Karatsuba crossover: ~%zu limbs\n",
+             karatsuba_crossover);
     else
       printf("Karatsuba crossover: not detected (check smaller sizes)\n");
 
@@ -358,12 +360,12 @@ static void tune_squaring(void) {
       printf("Toom-3 crossover: not detected (may need larger sizes)\n");
 
     printf("\nRecommendations:\n");
-    printf("  ARBINT_SQR_KARATSUBA_THRESHOLD: %zu (current: "
-           ARBINT_STR(ARBINT_SQR_KARATSUBA_THRESHOLD) ")\n",
+    printf("  ARBINT_SQR_KARATSUBA_THRESHOLD: %zu (current: " ARBINT_STR(
+               ARBINT_SQR_KARATSUBA_THRESHOLD) ")\n",
            karatsuba_crossover > 0 ? karatsuba_crossover
                                    : ARBINT_SQR_KARATSUBA_THRESHOLD);
-    printf("  ARBINT_SQR_TOOM3_THRESHOLD: %zu (current: "
-           ARBINT_STR(ARBINT_SQR_TOOM3_THRESHOLD) ")\n",
+    printf("  ARBINT_SQR_TOOM3_THRESHOLD: %zu (current: " ARBINT_STR(
+               ARBINT_SQR_TOOM3_THRESHOLD) ")\n",
            toom3_crossover > 0 ? toom3_crossover : ARBINT_SQR_TOOM3_THRESHOLD);
   }
 

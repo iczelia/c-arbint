@@ -136,7 +136,7 @@ static double sqrt(double x) {
     Uses floating-point arithmetic on n_val (a small integer) to produce
     an initial guess accurate to ~15 digits, then refines with Newton's
     method. Since Newton doubles the number of correct digits each
-    iteration, only about log2(total_digits / 15) ≈ 10 iterations are
+    iteration, only about log2(total_digits / 15) ~= 10 iterations are
     needed for 10000+ digit precision.
 
     The iteration is: x_{k+1} = (x_k + n_val * one^2 / x_k) / 2

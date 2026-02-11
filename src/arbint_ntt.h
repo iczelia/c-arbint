@@ -27,7 +27,7 @@
 /*  NTT multiplication threshold is defined in arbint_mul.h to allow
     centralized threshold management.  */
 #ifndef ARBINT_NTT_THRESHOLD
-#define ARBINT_NTT_THRESHOLD 1024u
+  #define ARBINT_NTT_THRESHOLD 1024u
 #endif
 
 /*  Maximum supported NTT size as log2(size).
@@ -81,10 +81,10 @@ typedef struct arbint_mont_params {
 
 /*  NTT prime configuration including Montgomery parameters.  */
 typedef struct arbint_ntt_prime {
-  uint64_t p;                  /* Prime modulus */
-  uint64_t g;                  /* Primitive root mod p */
-  unsigned max_log2;           /* Max power of 2 dividing (p-1) */
-  arbint_mont_params_t mont;   /* Montgomery parameters */
+  uint64_t p;                /* Prime modulus */
+  uint64_t g;                /* Primitive root mod p */
+  unsigned max_log2;         /* Max power of 2 dividing (p-1) */
+  arbint_mont_params_t mont; /* Montgomery parameters */
 } arbint_ntt_prime_t;
 
 /*  Precomputed twiddle factors (roots of unity) for one prime.
@@ -97,11 +97,11 @@ typedef struct arbint_ntt_roots {
 
 /*  CRT constants for 3-prime reconstruction via Garner's algorithm.  */
 typedef struct arbint_ntt_crt {
-  uint64_t p1_inv_mod_p2;      /* p1^(-1) mod p2 */
-  uint64_t p1p2_inv_mod_p3;    /* (p1*p2)^(-1) mod p3 */
-  uint64_t p1_lo;              /* p1 (low 64 bits) */
-  uint64_t p1p2_lo;            /* (p1*p2) mod 2^64 */
-  uint64_t p1p2_mid;           /* (p1*p2) >> 64 mod 2^64 */
+  uint64_t p1_inv_mod_p2;   /* p1^(-1) mod p2 */
+  uint64_t p1p2_inv_mod_p3; /* (p1*p2)^(-1) mod p3 */
+  uint64_t p1_lo;           /* p1 (low 64 bits) */
+  uint64_t p1p2_lo;         /* (p1*p2) mod 2^64 */
+  uint64_t p1p2_mid;        /* (p1*p2) >> 64 mod 2^64 */
 } arbint_ntt_crt_t;
 
 /*  Global NTT context holding all precomputed data for the 3 primes.

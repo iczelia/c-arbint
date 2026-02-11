@@ -43,7 +43,7 @@ ARBINT_TEST_DECLARE_FAILURES();
 /* ------------------------------------------------------------------ */
 
 static void verify_tdiv_identity(arbint_t n, arbint_t d, arbint_t q,
-                                  arbint_t r, arbint_t tmp, arbint_t tmp2) {
+                                 arbint_t r, arbint_t tmp, arbint_t tmp2) {
   int nsign = arbint_signum(n);
   int rsign = arbint_signum(r);
 
@@ -468,7 +468,7 @@ static void test_cdiv_pow2(void) {
   CHECK_EQ_I(arbint_init(d, &ctx), ARBINT_OK);
 
   /*  Ceiling division: rounds toward +infinity.
-      For positive dividend with positive divisor, q = tdiv_q + 1 if r != 0.  */
+      For positive dividend with positive divisor, q = tdiv_q + 1 if r != 0. */
   CHECK_EQ_I(arbint_set_i32(n, 7), ARBINT_OK);
   CHECK_EQ_I(arbint_set_i32(d, 4), ARBINT_OK);
   CHECK_EQ_I(arbint_cdiv_qr(q, r, n, d), ARBINT_OK);
@@ -585,8 +585,9 @@ static void test_tdiv_pow2_vs_generic(void) {
   CHECK_EQ_I(arbint_add_i32(n, n, 12345), ARBINT_OK);
 
   /*  Test several power-of-two divisors.  */
-  uint32_t pow2_divs[] = {1u, 2u, 4u, 8u, 16u, 32u, 64u, 128u, 256u,
-                          512u, 1024u, 1u << 16, 1u << 20, 1u << 30};
+  uint32_t pow2_divs[] = {1u,    2u,       4u,       8u,      16u,
+                          32u,   64u,      128u,     256u,    512u,
+                          1024u, 1u << 16, 1u << 20, 1u << 30};
   size_t num_divs = sizeof(pow2_divs) / sizeof(pow2_divs[0]);
   size_t j;
 
@@ -757,12 +758,12 @@ static void test_tdiv_pow2_trailing_zeros(void) {
   /*  n = 3 * 2^64, divide by 2^32.
       n has 64 trailing zeros >= 32, so remainder is 0.  */
   CHECK_EQ_I(arbint_set_i32(tmp, 2), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 4 */
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 16 */
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 256 */
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 65536 */
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 2^32 */
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 2^64 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);      /* 4 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);      /* 16 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);      /* 256 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);      /* 65536 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);      /* 2^32 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);      /* 2^64 */
   CHECK_EQ_I(arbint_mul_i32(n, tmp, 3), ARBINT_OK); /* 3 * 2^64 */
 
   CHECK_EQ_I(arbint_set_i32(d, 2), ARBINT_OK);
@@ -787,7 +788,7 @@ static void test_tdiv_pow2_trailing_zeros(void) {
   CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);
   CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);
   CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK); /* 2^64 */
+  CHECK_EQ_I(arbint_sqr(tmp, tmp), ARBINT_OK);       /* 2^64 */
   CHECK_EQ_I(arbint_mul_i32(n, tmp, -3), ARBINT_OK); /* -3 * 2^64 */
 
   CHECK_EQ_I(arbint_tdiv_qr(q, r, n, d), ARBINT_OK);
@@ -795,17 +796,19 @@ static void test_tdiv_pow2_trailing_zeros(void) {
   check_i32_value(r, 0);
 
   /*  q-only test: ensure fast path works when r is NULL.  */
-  CHECK_EQ_I(arbint_set_i32(n, 256), ARBINT_OK); /* 2^8 */
+  CHECK_EQ_I(arbint_set_i32(n, 256), ARBINT_OK);       /* 2^8 */
   CHECK_EQ_I(arbint_tdiv_q_u32(q, n, 16u), ARBINT_OK); /* 2^4 */
-  check_i32_value(q, 16); /* 2^4 */
+  check_i32_value(q, 16);                              /* 2^4 */
 
   /*  r-only test: ensure fast path works when q is NULL.  */
   CHECK_EQ_I(arbint_tdiv_r_u32(r, n, 16u), ARBINT_OK);
   check_i32_value(r, 0);
 
   /*  Test case where trailing zeros < k (should use general path).  */
-  CHECK_EQ_I(arbint_set_i32(n, 12), ARBINT_OK); /* 12 = 4 * 3, has 2 trailing 0s */
-  CHECK_EQ_I(arbint_tdiv_qr_u32(q, r, n, 8u), ARBINT_OK); /* 2^3 > 2 trailing 0s */
+  CHECK_EQ_I(arbint_set_i32(n, 12),
+             ARBINT_OK); /* 12 = 4 * 3, has 2 trailing 0s */
+  CHECK_EQ_I(arbint_tdiv_qr_u32(q, r, n, 8u),
+             ARBINT_OK); /* 2^3 > 2 trailing 0s */
   check_i32_value(q, 1);
   check_i32_value(r, 4);
 

@@ -50,7 +50,8 @@ static void build_large_value(arbint_t x, size_t target_limbs) {
 }
 
 /*  Test NTT multiplication at threshold boundary.
-    Tests sizes just below, at, and just above the NTT threshold (1024 limbs).  */
+    Tests sizes just below, at, and just above the NTT threshold
+    (1024 limbs).  */
 static void test_ntt_threshold_boundary(void) {
   arbint_ctx_t ctx;
   arbint_t a, b, c, d;
@@ -148,7 +149,7 @@ static void test_ntt_unbalanced(void) {
   CHECK_EQ_I(arbint_init(c, &ctx), ARBINT_OK);
 
   /*  Build a very large value and a smaller one.  */
-  build_large_value(a, 2100u);  /* > 2 * 1024 */
+  build_large_value(a, 2100u); /* > 2 * 1024 */
   build_large_value(b, 1024u);
 
   /*  This should dispatch to Toom-3 due to imbalance ratio check.  */

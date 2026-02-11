@@ -68,8 +68,8 @@ static size_t arbint_mag_ctz(const arbint_limb_t * np, size_t nn) {
 /* ------------------------------------------------------------------ */
 
 static arbint_err_t arbint_tdiv_qr_pow2(arbint_t q, arbint_t r,
-                                         const arbint_t n, unsigned k,
-                                         int dsign) {
+                                        const arbint_t n, unsigned k,
+                                        int dsign) {
   size_t nn;
   const arbint_limb_t * np;
   size_t n_ctz;
@@ -269,7 +269,8 @@ static arbint_div_qr_u32_impl_fn_t arbint_select_div_qr_u32_impl(void) {
 #endif
 }
 
-static arbint_div_mag_single_limb_fn_t arbint_select_div_mag_single_limb(void) {
+static arbint_div_mag_single_limb_fn_t
+arbint_select_div_mag_single_limb(void) {
 #if HAS_BMI2_ALWAYS
   return arbint_div_mag_single_limb_bmi2;
 #elif HAS_BMI2
@@ -318,7 +319,8 @@ arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,
 
   /*  Power-of-two fast path: use shift/mask instead of reciprocal.  */
   if (arbint_div_is_pow2(dmag))
-    return arbint_tdiv_qr_pow2(q, r, n, (unsigned) arbint_ctz_limb(dmag), dsign);
+    return arbint_tdiv_qr_pow2(q, r, n, (unsigned) arbint_ctz_limb(dmag),
+                               dsign);
 
   if (impl == NULL)
     impl = arbint_select_div_qr_u32_impl();
@@ -812,7 +814,8 @@ arbint_err_t arbint_divisible(const arbint_t n, const arbint_t d, int * out) {
 /* ------------------------------------------------------------------ */
 
 arbint_err_t arbint_div_qr_mode_impl(arbint_t q, arbint_t r, const arbint_t n,
-                                     const arbint_t d, arbint_div_mode_t mode) {
+                                     const arbint_t d,
+                                     arbint_div_mode_t mode) {
   arbint_t q_tmp;
   arbint_t r_tmp;
   arbint_err_t rc;

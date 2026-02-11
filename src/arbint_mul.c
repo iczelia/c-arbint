@@ -38,14 +38,13 @@ typedef arbint_err_t (*arbint_mul_mag_fn_t)(arbint_limb_t * dst,
                                             const arbint_alloc_t * alloc);
 
 typedef size_t (*arbint_mulacc_fn_t)(arbint_limb_t * dst, size_t dst_n,
-                                     size_t dst_cap,
-                                     const arbint_limb_t * a, size_t an,
-                                     const arbint_limb_t * c, size_t cn);
+                                     size_t dst_cap, const arbint_limb_t * a,
+                                     size_t an, const arbint_limb_t * c,
+                                     size_t cn);
 
 typedef size_t (*arbint_mulacc_1_fn_t)(arbint_limb_t * dst, size_t dst_n,
-                                       size_t dst_cap,
-                                       const arbint_limb_t * a, size_t an,
-                                       arbint_limb_t b);
+                                       size_t dst_cap, const arbint_limb_t * a,
+                                       size_t an, arbint_limb_t b);
 
 /*  Select optimal single-limb multiplication implementation.
     Prefers BMI2 when available for faster wide multiply.  */
@@ -160,8 +159,8 @@ static void arbint_init_addmul_dispatch(void) {
     CRITICAL: Check ordering matters! The condition (an > SIZE_MAX - bn - 1u)
     relies on the previous check (bn > SIZE_MAX - 1u) having succeeded to avoid
     underflow. If bn == SIZE_MAX, then SIZE_MAX - bn == 0, and SIZE_MAX - bn -
-    1u would underflow to SIZE_MAX, making the check pass incorrectly. The prior
-    check catches bn >= SIZE_MAX, so this is safe.
+    1u would underflow to SIZE_MAX, making the check pass incorrectly. The
+    prior check catches bn >= SIZE_MAX, so this is safe.
 
     Parameters:
       an  - Number of limbs in first operand
@@ -447,8 +446,8 @@ static inline arbint_limb_t arbint_pow_prepare_barrett(arbint_limb_t d) {
     exponents.
 
     Aliasing: rop may alias base. We work in temporaries and swap at end.  */
-arbint_err_t arbint_pow_u32u32_tmod(arbint_t rop, const arbint_t base, uint32_t exp,
-                                 uint32_t mod) {
+arbint_err_t arbint_pow_u32u32_tmod(arbint_t rop, const arbint_t base,
+                                    uint32_t exp, uint32_t mod) {
   arbint_ctx_t * ctx;
   arbint_t acc;
   arbint_t b;

@@ -16,7 +16,7 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 /*  Ceiling division public API.
-    Rounds quotient toward +infinity; remainder has opposite sign to divisor. */
+    Rounds quotient toward +Inf; remainder has opposite sign to divisor.  */
 
 #include "arbint_div.h"
 

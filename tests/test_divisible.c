@@ -189,12 +189,12 @@ static void test_divisible_u32_multilimb(void) {
 
   /* Build a large number via repeated squaring: 2^64 * 12345. */
   CHECK_EQ_I(arbint_set_u32(n, 2u), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 4 */
-  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 16 */
-  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 256 */
-  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 65536 */
-  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 2^32 */
-  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 2^64 */
+  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);             /* 4 */
+  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);             /* 16 */
+  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);             /* 256 */
+  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);             /* 65536 */
+  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);             /* 2^32 */
+  CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);             /* 2^64 */
   CHECK_EQ_I(arbint_mul_u32(n, n, 12345u), ARBINT_OK); /* 2^64 * 12345 */
 
   /* n = 2^64 * 12345 is divisible by 3, 5, 15, 823, etc. */
@@ -395,10 +395,11 @@ static void test_divisible_multilimb(void) {
   CHECK_EQ_I(arbint_sqr(d, d), ARBINT_OK);
   CHECK_EQ_I(arbint_sqr(d, d), ARBINT_OK);
   CHECK_EQ_I(arbint_sqr(d, d), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(d, d), ARBINT_OK); /* 2^64 */
+  CHECK_EQ_I(arbint_sqr(d, d), ARBINT_OK);         /* 2^64 */
   CHECK_EQ_I(arbint_mul_u32(d, d, 3u), ARBINT_OK); /* 2^64 * 3 */
 
-  /* n = 2^128 * 999983 is not divisible by 2^64 * 3 (999983 is not div by 3). */
+  /* n = 2^128 * 999983 is not divisible by 2^64 * 3 (999983 is not div by 3).
+   */
   CHECK_EQ_I(arbint_divisible(n, d, &out), ARBINT_OK);
   CHECK_EQ_I(out, 0);
 
@@ -430,9 +431,10 @@ static void test_divisible_consistency(void) {
   arbint_t r;
   int div_out;
   int rem_is_zero;
-  uint32_t test_values[] = {1u, 2u, 3u, 5u, 7u, 10u, 13u, 17u, 100u, 127u, 128u,
-                            255u, 256u, 1000u, 10000u, 65535u, 65536u, 99999u,
-                            1000000u, 2147483647u};
+  uint32_t test_values[] = {1u,     2u,     3u,     5u,       7u,
+                            10u,    13u,    17u,    100u,     127u,
+                            128u,   255u,   256u,   1000u,    10000u,
+                            65535u, 65536u, 99999u, 1000000u, 2147483647u};
   size_t nvals = sizeof(test_values) / sizeof(test_values[0]);
   size_t i;
   size_t j;
@@ -470,9 +472,10 @@ static void test_divisible_u32_consistency(void) {
   arbint_t n;
   arbint_t r;
   int div_out;
-  uint32_t divisors[] = {1u, 2u, 3u, 4u, 5u, 7u, 8u, 9u, 10u, 16u, 17u, 32u,
-                         64u, 100u, 127u, 128u, 255u, 256u, 1000u, 65535u,
-                         65536u, 1000000u, 2147483647u, 0xFFFFFFFFu};
+  uint32_t divisors[] = {
+      1u,   2u,   3u,    4u,     5u,     7u,       8u,          9u,
+      10u,  16u,  17u,   32u,    64u,    100u,     127u,        128u,
+      255u, 256u, 1000u, 65535u, 65536u, 1000000u, 2147483647u, 0xFFFFFFFFu};
   size_t ndivs = sizeof(divisors) / sizeof(divisors[0]);
   size_t i;
 

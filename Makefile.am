@@ -32,7 +32,7 @@ EXTRA_DIST = bootstrap
 .PHONY: clang-format tools
 
 clang-format:
-	clang-format -i $$(find include src tests -type f \( -name '*.h' -o -name '*.c' \))
+	clang-format -i $$(find include src tests tools -type f \( -name '*.h' -o -name '*.c' \))
 
 # Build tools (tune_thresholds, etc.)
 tools:

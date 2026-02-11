@@ -282,13 +282,11 @@ static void test_sqr_thresholds(void) {
   arbint_t sqr_result;
   arbint_t mul_result;
   size_t sizes[] = {
-    1u, 2u, 4u, 8u,
-    23u, 24u, 25u,    /* around SQR_KARATSUBA_THRESHOLD */
-    31u, 32u, 33u,    /* around MUL_KARATSUBA_THRESHOLD for comparison */
-    64u,
-    79u, 80u, 81u,    /* around SQR_TOOM3_THRESHOLD */
-    95u, 96u, 97u,    /* around MUL_TOOM3_THRESHOLD for comparison */
-    128u, 160u, 200u  /* well into Toom-3 territory */
+      1u,   2u,   4u,  8u,  23u, 24u, 25u, /* around SQR_KARATSUBA_THRESHOLD */
+      31u,  32u,  33u,      /* around MUL_KARATSUBA_THRESHOLD for comparison */
+      64u,  79u,  80u, 81u, /* around SQR_TOOM3_THRESHOLD */
+      95u,  96u,  97u,      /* around MUL_TOOM3_THRESHOLD for comparison */
+      128u, 160u, 200u      /* well into Toom-3 territory */
   };
   size_t num_sizes = sizeof(sizes) / sizeof(sizes[0]);
   size_t i;
@@ -332,9 +330,9 @@ static void test_sqr_thresholds(void) {
     arbint_zero(a);
     for (j = 0u; j < n && j < a[0]._cap; ++j) {
       /*  Alternating pattern: 0xAAAA...AAAA and 0x5555...5555.  */
-      ARBINT_LIMBS(a)[j] = (j & 1u)
-        ? (arbint_limb_t) 0xAAAAAAAAAAAAAAAAull
-        : (arbint_limb_t) 0x5555555555555555ull;
+      ARBINT_LIMBS(a)
+      [j] = (j & 1u) ? (arbint_limb_t) 0xAAAAAAAAAAAAAAAAull
+                     : (arbint_limb_t) 0x5555555555555555ull;
     }
     a[0]._sz = (ptrdiff_t) n;
 

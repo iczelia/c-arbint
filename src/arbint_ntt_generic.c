@@ -26,7 +26,8 @@
 /*  Multiply two 64-bit integers producing full 128-bit result (hi:lo = a * b).
 
     Uses half-limb (32x32) multiplication to synthesize 128-bit product
-    via Karatsuba-like decomposition (same pattern as arbint_div_generic.c).  */
+    via Karatsuba-like decomposition (same pattern as seen in
+    arbint_div_generic.c).  */
 static inline void ntt_umul(uint64_t * hi, uint64_t * lo, uint64_t a,
                             uint64_t b) {
   /*  Half-limb decomposition:
@@ -148,13 +149,13 @@ static uint64_t compute_p_neg_inv(uint64_t p) {
   /*  Newton iteration: x = x * (2 - p * x) mod 2^64.
       Each iteration doubles the number of correct bits.
       6 iterations: 1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64 bits.  */
-  x = x * (2u - p * x); /* mod 2^2 */
-  x = x * (2u - p * x); /* mod 2^4 */
-  x = x * (2u - p * x); /* mod 2^8 */
-  x = x * (2u - p * x); /* mod 2^16 */
-  x = x * (2u - p * x); /* mod 2^32 */
-  x = x * (2u - p * x); /* mod 2^64 */
-  return (uint64_t) 0u - x;  /* negate to get -p^(-1) */
+  x = x * (2u - p * x);     /* mod 2^2 */
+  x = x * (2u - p * x);     /* mod 2^4 */
+  x = x * (2u - p * x);     /* mod 2^8 */
+  x = x * (2u - p * x);     /* mod 2^16 */
+  x = x * (2u - p * x);     /* mod 2^32 */
+  x = x * (2u - p * x);     /* mod 2^64 */
+  return (uint64_t) 0u - x; /* negate to get -p^(-1) */
 }
 
 /*  Compute R^2 mod p where R = 2^64.
@@ -453,15 +454,13 @@ static arbint_err_t ensure_roots(size_t log2_n, const arbint_alloc_t * alloc) {
     size_t new_size = log2_n;
     if (new_size == 0u)
       new_size = 1u;
-    uint64_t * new_omega =
-        (uint64_t *) alloc->realloc(alloc->ud, r->omega,
-                                    new_size * sizeof(uint64_t));
+    uint64_t * new_omega = (uint64_t *) alloc->realloc(
+        alloc->ud, r->omega, new_size * sizeof(uint64_t));
     if (new_omega == NULL)
       return ARBINT_ENOMEM;
 
-    uint64_t * new_omega_inv =
-        (uint64_t *) alloc->realloc(alloc->ud, r->omega_inv,
-                                    new_size * sizeof(uint64_t));
+    uint64_t * new_omega_inv = (uint64_t *) alloc->realloc(
+        alloc->ud, r->omega_inv, new_size * sizeof(uint64_t));
     if (new_omega_inv == NULL) {
       alloc->realloc(alloc->ud, new_omega, 0);
       return ARBINT_ENOMEM;
@@ -851,17 +850,17 @@ arbint_err_t arbint_mul_mag_ntt_generic(arbint_limb_t * dst, size_t * out_used,
     uint64_t n_inv = modinv(ntt_size, prime->p);
     uint64_t n_inv_mont = to_mont(n_inv, mont);
     for (size_t i = 0u; i < ntt_size; ++i) {
-      result[pi][i] = from_mont(mont_mul(result[pi][i], n_inv_mont, mont), mont);
+      result[pi][i] =
+          from_mont(mont_mul(result[pi][i], n_inv_mont, mont), mont);
     }
-
   }
 
   /*  CRT reconstruction into temporary buffer.
       CRT can output up to conv_len + 2 limbs due to carry propagation.
       We use crt_tmp which has conv_len + 3 limbs of space.  */
   size_t crt_used = 0u;
-  ntt_crt_combine(crt_tmp, &crt_used, result[0], result[1], result[2], conv_len,
-                  &g_ntt_ctx.crt);
+  ntt_crt_combine(crt_tmp, &crt_used, result[0], result[1], result[2],
+                  conv_len, &g_ntt_ctx.crt);
 
   /*  The actual product has at most an + bn limbs. Copy to dst.  */
   size_t max_out = an + bn;

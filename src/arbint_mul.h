@@ -44,9 +44,9 @@ arbint_err_t arbint_mul_mag_generic(arbint_limb_t * dst, size_t * out_used,
     Computes dst[0..dst_n-1] += a[0..an-1] * b in place.
     dst must have capacity for at least max(dst_n, an) + 1 limbs.
     Returns new normalized limb count.  */
-size_t arbint_mulacc_1_generic(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
-                               const arbint_limb_t * a, size_t an,
-                               arbint_limb_t b);
+size_t arbint_mulacc_1_generic(arbint_limb_t * dst, size_t dst_n,
+                               size_t dst_cap, const arbint_limb_t * a,
+                               size_t an, arbint_limb_t b);
 
 /*  Fused multiply-accumulate for multi-limb multiplier.
     Computes dst[0..] += a[0..an-1] * c[0..cn-1] in place.
@@ -71,12 +71,12 @@ arbint_err_t arbint_mul_mag_bmi2(arbint_limb_t * dst, size_t * out_used,
                                  const arbint_alloc_t * alloc);
 
 size_t arbint_mulacc_1_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
-                             const arbint_limb_t * a, size_t an,
-                             arbint_limb_t b);
+                            const arbint_limb_t * a, size_t an,
+                            arbint_limb_t b);
 
 size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
-                           const arbint_limb_t * a, size_t an,
-                           const arbint_limb_t * c, size_t cn);
+                          const arbint_limb_t * a, size_t an,
+                          const arbint_limb_t * c, size_t cn);
 #endif /* HAS_BMI2 */
 
 /*  Multiplication thresholds (limb counts).  */

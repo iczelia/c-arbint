@@ -20,13 +20,9 @@
 #include "config.h"
 
 /*  Function pointer type for NTT multiplication dispatch.  */
-typedef arbint_err_t (*arbint_mul_mag_ntt_fn_t)(arbint_limb_t * dst,
-                                                size_t * out_used,
-                                                const arbint_limb_t * a,
-                                                size_t an,
-                                                const arbint_limb_t * b,
-                                                size_t bn,
-                                                const arbint_alloc_t * alloc);
+typedef arbint_err_t (*arbint_mul_mag_ntt_fn_t)(
+    arbint_limb_t * dst, size_t * out_used, const arbint_limb_t * a, size_t an,
+    const arbint_limb_t * b, size_t bn, const arbint_alloc_t * alloc);
 
 /*  Select optimal NTT implementation based on CPU features.
     Three-tier dispatch: compile-time always, runtime detection, fallback.  */

@@ -44,11 +44,10 @@ arbint_err_t arbint_div_qr_u32_generic_impl(arbint_t q, arbint_t r,
                                             const arbint_t n, uint32_t dmag,
                                             int dsign);
 
-arbint_err_t arbint_div_mag_single_limb_generic(const arbint_limb_t * np,
-                                                size_t nn, arbint_limb_t d_limb,
-                                                arbint_limb_t * qp,
-                                                size_t * q_used,
-                                                arbint_limb_t * rem_out);
+arbint_err_t
+arbint_div_mag_single_limb_generic(const arbint_limb_t * np, size_t nn,
+                                   arbint_limb_t d_limb, arbint_limb_t * qp,
+                                   size_t * q_used, arbint_limb_t * rem_out);
 
 arbint_err_t arbint_div_mag_knuth(const arbint_limb_t * np, size_t nn,
                                   const arbint_limb_t * dp, size_t dn,

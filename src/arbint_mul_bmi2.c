@@ -180,13 +180,13 @@ arbint_err_t arbint_mul_mag_bmi2(arbint_limb_t * dst, size_t * out_used,
 }
 
 size_t arbint_mulacc_1_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
-                             const arbint_limb_t * a, size_t an,
-                             arbint_limb_t b) {
+                            const arbint_limb_t * a, size_t an,
+                            arbint_limb_t b) {
   return arbint_mulacc_1(dst, dst_n, dst_cap, a, an, b);
 }
 
 size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
-                           const arbint_limb_t * a, size_t an,
-                           const arbint_limb_t * c, size_t cn) {
+                          const arbint_limb_t * a, size_t an,
+                          const arbint_limb_t * c, size_t cn) {
   return arbint_mulacc(dst, dst_n, dst_cap, a, an, c, cn);
 }

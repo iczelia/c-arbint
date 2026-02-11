@@ -343,7 +343,8 @@ static void test_pow_u32_mod_fermat(void) {
 
   /* 5^1000000006 mod 1000000007 = 1 (large prime). */
   CHECK_EQ_I(arbint_set_i32(base, 5), ARBINT_OK);
-  CHECK_EQ_I(arbint_pow_u32u32_tmod(rop, base, 1000000006u, 1000000007u), ARBINT_OK);
+  CHECK_EQ_I(arbint_pow_u32u32_tmod(rop, base, 1000000006u, 1000000007u),
+             ARBINT_OK);
   check_i32_value(rop, 1);
 
   arbint_clear(rop);

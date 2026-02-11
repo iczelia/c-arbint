@@ -236,8 +236,8 @@ arbint_err_t arbint_div_mag_single_limb_bmi2(const arbint_limb_t * np,
     Uses _mulx_u64 for fast wide multiply in reciprocal-based division step.
     1.5-2x faster than generic implementation.  */
 arbint_err_t arbint_div_qr_u32_bmi2_impl(arbint_t q, arbint_t r,
-                                          const arbint_t n, uint32_t dmag,
-                                          int dsign) {
+                                         const arbint_t n, uint32_t dmag,
+                                         int dsign) {
   const arbint_limb_t * np;
   size_t nn;
   int nsign;
@@ -341,7 +341,7 @@ arbint_err_t arbint_div_qr_u32_bmi2_impl(arbint_t q, arbint_t r,
 
     Truncated division semantics: remainder sign matches dividend sign.  */
 arbint_err_t arbint_mod_u32_barrett_bmi2(arbint_t x, arbint_limb_t d_norm,
-                                          arbint_limb_t di, unsigned shift) {
+                                         arbint_limb_t di, unsigned shift) {
   const arbint_limb_t * xp;
   size_t xn;
   int xsign;
