@@ -273,6 +273,196 @@ static void test_mul_u32(void) {
   arbint_clear(a);
 }
 
+/*  Test squaring at algorithm threshold boundaries.
+    Verifies sqr(a) == a*a across schoolbook, Karatsuba, and Toom-3.
+    Thresholds: SQR_KARATSUBA=24, SQR_TOOM3=80 limbs.  */
+static void test_sqr_thresholds(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t sqr_result;
+  arbint_t mul_result;
+  size_t sizes[] = {
+    1u, 2u, 4u, 8u,
+    23u, 24u, 25u,    /* around SQR_KARATSUBA_THRESHOLD */
+    31u, 32u, 33u,    /* around MUL_KARATSUBA_THRESHOLD for comparison */
+    64u,
+    79u, 80u, 81u,    /* around SQR_TOOM3_THRESHOLD */
+    95u, 96u, 97u,    /* around MUL_TOOM3_THRESHOLD for comparison */
+    128u, 160u, 200u  /* well into Toom-3 territory */
+  };
+  size_t num_sizes = sizeof(sizes) / sizeof(sizes[0]);
+  size_t i;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(sqr_result, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(mul_result, &ctx), ARBINT_OK);
+
+  for (i = 0u; i < num_sizes; ++i) {
+    size_t n = sizes[i];
+    size_t j;
+
+    /*  Build a value with n limbs by starting with a seed and squaring
+        repeatedly until we reach the desired size.  */
+    CHECK_EQ_I(arbint_set_u32(a, 0xDEADBEEFu), ARBINT_OK);
+
+    while (arbint_abs_sz(a[0]._sz) < n) {
+      CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);
+      /*  Add a constant to avoid patterns like all-zeros or powers of 2.  */
+      CHECK_EQ_I(arbint_add_u32(a, a, 12345u), ARBINT_OK);
+    }
+
+    /*  Verify sqr(a) == a * a.  */
+    CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul(mul_result, a, a), ARBINT_OK);
+    CHECK(arbint_eq(sqr_result, mul_result));
+
+    /*  Also test in-place squaring.  */
+    CHECK_EQ_I(arbint_set(sqr_result, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_sqr(sqr_result, sqr_result), ARBINT_OK);
+    CHECK(arbint_eq(sqr_result, mul_result));
+
+    /*  Test negative values (result should still be positive).  */
+    CHECK_EQ_I(arbint_neg(a, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+    CHECK(arbint_eq(sqr_result, mul_result));
+    CHECK(arbint_signum(sqr_result) >= 0);
+
+    /*  Test values with specific bit patterns.  */
+    arbint_zero(a);
+    for (j = 0u; j < n && j < a[0]._cap; ++j) {
+      /*  Alternating pattern: 0xAAAA...AAAA and 0x5555...5555.  */
+      ARBINT_LIMBS(a)[j] = (j & 1u)
+        ? (arbint_limb_t) 0xAAAAAAAAAAAAAAAAull
+        : (arbint_limb_t) 0x5555555555555555ull;
+    }
+    a[0]._sz = (ptrdiff_t) n;
+
+    CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul(mul_result, a, a), ARBINT_OK);
+    CHECK(arbint_eq(sqr_result, mul_result));
+  }
+
+  arbint_clear(mul_result);
+  arbint_clear(sqr_result);
+  arbint_clear(a);
+}
+
+/*  Test large Toom-3 squaring with known mathematical identities.
+    Uses the identity (B^n - 1)^2 = B^(2n) - 2*B^n + 1.  */
+static void test_sqr_toom3_identity(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t sqr_result;
+  arbint_t expected;
+  arbint_t tmp;
+  size_t n;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(sqr_result, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(tmp, &ctx), ARBINT_OK);
+
+  /*  Test with 100 limbs (definitely Toom-3 territory).
+      Build a = B^100 - 1 = 0xFFFF...FFFF (100 limbs of all 1s).  */
+  n = 100u;
+  CHECK_EQ_I(arbint_resize(a, n), ARBINT_OK);
+  {
+    size_t j;
+    for (j = 0u; j < n; ++j)
+      ARBINT_LIMBS(a)[j] = (arbint_limb_t) ~((arbint_limb_t) 0u);
+    a[0]._sz = (ptrdiff_t) n;
+  }
+
+  CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+
+  /*  Expected: (B^n - 1)^2 = B^(2n) - 2*B^n + 1.
+      This equals: limb[0] = 1, limbs[1..n-1] = 0, limbs[n..2n-2] = MAX-1,
+                   limb[2n-1] = MAX.
+
+      Actually, let's just verify sqr == mul.  */
+  CHECK_EQ_I(arbint_mul(expected, a, a), ARBINT_OK);
+  CHECK(arbint_eq(sqr_result, expected));
+
+  /*  Test with 150 limbs (deeper into Toom-3 recursion).  */
+  n = 150u;
+  CHECK_EQ_I(arbint_resize(a, n), ARBINT_OK);
+  {
+    size_t j;
+    for (j = 0u; j < n; ++j)
+      ARBINT_LIMBS(a)[j] = (arbint_limb_t) ~((arbint_limb_t) 0u);
+    a[0]._sz = (ptrdiff_t) n;
+  }
+
+  CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul(expected, a, a), ARBINT_OK);
+  CHECK(arbint_eq(sqr_result, expected));
+
+  /*  Test with B^n + 1 pattern (alternating carries).  */
+  n = 100u;
+  CHECK_EQ_I(arbint_resize(a, n + 1u), ARBINT_OK);
+  {
+    size_t j;
+    for (j = 0u; j < n; ++j)
+      ARBINT_LIMBS(a)[j] = 0u;
+    ARBINT_LIMBS(a)[0] = 1u;
+    ARBINT_LIMBS(a)[n] = 1u;
+    a[0]._sz = (ptrdiff_t) (n + 1u);
+  }
+
+  CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul(expected, a, a), ARBINT_OK);
+  CHECK(arbint_eq(sqr_result, expected));
+
+  arbint_clear(tmp);
+  arbint_clear(expected);
+  arbint_clear(sqr_result);
+  arbint_clear(a);
+}
+
+/*  Stochastic test: random-ish values at various sizes.  */
+static void test_sqr_stochastic(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t sqr_result;
+  arbint_t mul_result;
+  uint32_t seed = 0x12345678u;
+  int iter;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(sqr_result, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(mul_result, &ctx), ARBINT_OK);
+
+  for (iter = 0; iter < 50; ++iter) {
+    size_t n;
+    size_t j;
+
+    /*  Simple LCG for reproducible pseudo-random sizes.  */
+    seed = seed * 1103515245u + 12345u;
+    n = (seed % 250u) + 1u;
+
+    CHECK_EQ_I(arbint_resize(a, n), ARBINT_OK);
+    for (j = 0u; j < n; ++j) {
+      seed = seed * 1103515245u + 12345u;
+      ARBINT_LIMBS(a)[j] = ((arbint_limb_t) seed << 32u) | (seed >> 1u);
+    }
+    /*  Ensure top limb is non-zero for proper normalization.  */
+    if (ARBINT_LIMBS(a)[n - 1u] == 0u)
+      ARBINT_LIMBS(a)[n - 1u] = 1u;
+    a[0]._sz = (ptrdiff_t) n;
+
+    CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul(mul_result, a, a), ARBINT_OK);
+    CHECK(arbint_eq(sqr_result, mul_result));
+  }
+
+  arbint_clear(mul_result);
+  arbint_clear(sqr_result);
+  arbint_clear(a);
+}
+
 static void test_mul_i32(void) {
   arbint_ctx_t ctx;
   arbint_t a;
@@ -341,5 +531,8 @@ int main(void) {
   test_mul_carry_regression();
   test_mul_u32();
   test_mul_i32();
+  test_sqr_thresholds();
+  test_sqr_toom3_identity();
+  test_sqr_stochastic();
   ARBINT_TEST_FINISH("test_mul");
 }

@@ -697,6 +697,273 @@ cleanup:
   return rc;
 }
 
+/*  Forward declaration for recursive squaring (used by Toom-3 squaring).  */
+static arbint_err_t arbint_sqr_mag_rec(arbint_limb_t * dst, size_t * out_used,
+                                       const arbint_limb_t * a, size_t an,
+                                       const arbint_alloc_t * alloc);
+
+/*  Toom-Cook-3 squaring: dst = a^2 for large operands.
+
+    Splits a into 3 pieces of k = ceil(an/3) limbs, evaluates at points
+    {0, 1, -1, 2, inf}, performs 5 recursive squarings, then interpolates
+    and recomposes.
+
+    Key simplification vs multiplication: at point -1, we compute
+    (a0 - a1 + a2)^2 = |a0 - a1 + a2|^2, so sign tracking is unnecessary.
+
+    Precondition: an >= ARBINT_SQR_TOOM3_THRESHOLD.
+    dst must have capacity for 2*an + 1 limbs.  */
+static arbint_err_t arbint_toom3_sqr(arbint_limb_t * dst, size_t * out_used,
+                                      const arbint_limb_t * a, size_t an,
+                                      const arbint_alloc_t * alloc) {
+  size_t k;
+  size_t a0n;
+  size_t a1n;
+  size_t a2n;
+  const arbint_limb_t * a0;
+  const arbint_limb_t * a1;
+  const arbint_limb_t * a2;
+  size_t prod_cap;
+  size_t r_cap;
+  size_t scr_cap;
+  size_t total;
+  arbint_limb_t * work = NULL;
+  arbint_limb_t * w0;
+  arbint_limb_t * w1;
+  arbint_limb_t * wm1;
+  arbint_limb_t * w2;
+  arbint_limb_t * winf;
+  arbint_limb_t * r1;
+  arbint_limb_t * r2;
+  arbint_limb_t * r3;
+  arbint_limb_t * scr;
+  size_t w0n;
+  size_t w1n;
+  size_t wm1n;
+  size_t w2n;
+  size_t winfn;
+  size_t r1n;
+  size_t r2n;
+  size_t r3n;
+  size_t va1n;
+  size_t va_neg1n;
+  size_t va2n;
+  size_t tn;
+  int t_neg;
+  size_t scrn;
+  size_t cap;
+  arbint_err_t rc;
+
+  /*  Splitting: k = ceil(an / 3).  */
+  k = (an + 2u) / 3u;
+
+  /*  a = a2 * B^(2k) + a1 * B^k + a0.  */
+  a0 = a;
+  a0n = (k < an) ? k : an;
+  a0n = arbint_norm_used(a0, a0n);
+
+  if (an > k) {
+    a1 = a + k;
+    a1n = ((2u * k) < an) ? k : (an - k);
+    a1n = arbint_norm_used(a1, a1n);
+  } else {
+    a1 = a;
+    a1n = 0u;
+  }
+
+  if (an > 2u * k) {
+    a2 = a + 2u * k;
+    a2n = an - 2u * k;
+    a2n = arbint_norm_used(a2, a2n);
+  } else {
+    a2 = a;
+    a2n = 0u;
+  }
+
+  /*  Degenerate split: if high piece is empty, fall back to Karatsuba.  */
+  if (a2n == 0u) {
+    *out_used = arbint_sqr_schoolbook(dst, a, an);
+    return ARBINT_OK;
+  }
+
+  /*  Allocate workspace.
+      product buffers: 2k+7 limbs (square of (k+3)-limb value).
+      w0/winf: 2k+2 limbs (squares of k-limb pieces).
+      r1/r2/r3: 2k+3 limbs each.
+      scr: 2k+7 limbs (scratch for evaluation).
+
+      Layout: w0 + w1 + wm1 + w2 + winf + r1 + r2 + r3 + scr.
+      w0 = 2k+2, w1 = 2k+7, wm1 = 2k+7, w2 = 2k+7, winf = 2k+2,
+      r1 = 2k+3, r2 = 2k+3, r3 = 2k+3, scr = 2k+7.
+      Total = 18k + 41.  */
+  prod_cap = 2u * k + 7u;
+  r_cap = 2u * k + 3u;
+  scr_cap = 2u * k + 7u;
+  total = 18u * k + 41u;
+
+  work = arbint_alloc_limbs(alloc, total);
+  if (work == NULL)
+    return ARBINT_ENOMEM;
+
+  w0   = work;
+  w1   = w0   + (2u * k + 2u);
+  wm1  = w1   + prod_cap;
+  w2   = wm1  + prod_cap;
+  winf = w2   + prod_cap;
+  r1   = winf + (2u * k + 2u);
+  r2   = r1   + r_cap;
+  r3   = r2   + r_cap;
+  scr  = r3   + r_cap;
+
+  /* ---- Pointwise squarings ---- */
+
+  /*  w0 = a0^2 and winf = a2^2 first (smallest inputs).  */
+  rc = arbint_sqr_mag_rec(w0, &w0n, a0, a0n, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_sqr_mag_rec(winf, &winfn, a2, a2n, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /* ---- Evaluation and remaining squarings ---- */
+
+  /*  Point 1: a(1) = a0 + a1 + a2.  */
+  va1n = arbint__add_mag(scr, a0, a0n, a2, a2n);
+  va1n = arbint__add_mag(scr, scr, va1n, a1, a1n);
+
+  /*  w1 = a(1)^2.  */
+  if (va1n == 0u) {
+    w1n = 0u;
+  } else {
+    rc = arbint_sqr_mag_rec(w1, &w1n, scr, va1n, alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /*  Point -1: a(-1) = a0 - a1 + a2 = (a0 + a2) - a1.
+      For squaring, sign doesn't matter: (a(-1))^2 = |a(-1)|^2.  */
+  tn = arbint__add_mag(scr, a0, a0n, a2, a2n);
+  if (arbint_cmp_mag_limbs(scr, tn, a1, a1n) >= 0) {
+    va_neg1n = arbint__sub_mag(scr, scr, tn, a1, a1n);
+  } else {
+    va_neg1n = arbint__sub_mag(scr, a1, a1n, scr, tn);
+  }
+
+  /*  wm1 = |a(-1)|^2.  */
+  if (va_neg1n == 0u) {
+    wm1n = 0u;
+  } else {
+    rc = arbint_sqr_mag_rec(wm1, &wm1n, scr, va_neg1n, alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /*  Point 2: a(2) = a0 + 2*a1 + 4*a2 = a0 + 2*(a1 + 2*a2).  */
+  tn = arbint__dbl_mag(scr, a2, a2n);
+  tn = arbint__add_mag(scr, scr, tn, a1, a1n);
+  tn = arbint__dbl_mag(scr, scr, tn);
+  va2n = arbint__add_mag(scr, scr, tn, a0, a0n);
+
+  /*  w2 = a(2)^2.  */
+  if (va2n == 0u) {
+    w2n = 0u;
+  } else {
+    rc = arbint_sqr_mag_rec(w2, &w2n, scr, va2n, alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /* ---- Interpolation ---- */
+
+  /*  r0 = w0 (already in w0).
+      r4 = winf (already in winf).
+
+      The interpolation formulas are the same as for multiplication.
+      For squaring, wm1 is always non-negative (it's a square).  */
+
+  /*  Compute r2 = (w1 + wm1 - 2*w0 - 2*winf) / 2.  */
+  r2n = arbint__add_mag(r2, w1, w1n, wm1, wm1n);
+  t_neg = 0;
+
+  scrn = arbint__dbl_mag(scr, w0, w0n);
+  toom3_signed_sub(r2, &r2n, &t_neg, r2, r2n, t_neg, scr, scrn, 0);
+
+  scrn = arbint__dbl_mag(scr, winf, winfn);
+  toom3_signed_sub(r2, &r2n, &t_neg, r2, r2n, t_neg, scr, scrn, 0);
+
+  assert(r2n == 0u || t_neg == 0);
+  assert(r2n == 0u || (r2[0] & 1u) == 0u);
+
+  r2n = arbint_rsh1(r2, r2n);
+
+  /*  Compute r3 = (w2 - 3*w1 - wm1 + 3*w0 - 12*winf) / 6.
+      Note: wm1 is subtracted (not added with sign) because for squaring
+      the product at -1 is always positive.  */
+  scrn = arbint_mul3(scr, w0, w0n);
+  toom3_signed_add(r3, &r3n, &t_neg, w2, w2n, 0, scr, scrn, 0);
+
+  scrn = arbint_mul3(scr, w1, w1n);
+  toom3_signed_sub(r3, &r3n, &t_neg, r3, r3n, t_neg, scr, scrn, 0);
+
+  toom3_signed_sub(r3, &r3n, &t_neg, r3, r3n, t_neg, wm1, wm1n, 0);
+
+  scrn = arbint_mul12(scr, winf, winfn);
+  toom3_signed_sub(r3, &r3n, &t_neg, r3, r3n, t_neg, scr, scrn, 0);
+
+  assert(r3n == 0u || t_neg == 0);
+  assert(r3n == 0u || (r3[0] & 1u) == 0u);
+
+  r3n = arbint_rsh1(r3, r3n);
+  r3n = ARBINT_DIVEXACT3_FN(r3, r3n);
+
+  /*  Compute r1 = w1 - w0 - r2 - r3 - winf.  */
+  assert(arbint_cmp_mag_limbs(w1, w1n, w0, w0n) >= 0);
+  r1n = arbint__sub_mag(r1, w1, w1n, w0, w0n);
+
+  assert(arbint_cmp_mag_limbs(r1, r1n, r2, r2n) >= 0);
+  r1n = arbint__sub_mag(r1, r1, r1n, r2, r2n);
+
+  assert(arbint_cmp_mag_limbs(r1, r1n, r3, r3n) >= 0);
+  r1n = arbint__sub_mag(r1, r1, r1n, r3, r3n);
+
+  assert(arbint_cmp_mag_limbs(r1, r1n, winf, winfn) >= 0);
+  r1n = arbint__sub_mag(r1, r1, r1n, winf, winfn);
+
+  /* ---- Recomposition ---- */
+
+  cap = 2u * an + 1u;
+  memset(dst, 0, cap * sizeof(arbint_limb_t));
+
+  if (w0n > 0u)
+    memcpy(dst, w0, w0n * sizeof(arbint_limb_t));
+
+  if (winfn > 0u)
+    memcpy(dst + 4u * k, winf, winfn * sizeof(arbint_limb_t));
+
+  if (!arbint_add_shifted(dst, cap, r1, r1n, k)) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  if (!arbint_add_shifted(dst, cap, r2, r2n, 2u * k)) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  if (!arbint_add_shifted(dst, cap, r3, r3n, 3u * k)) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  *out_used = arbint_norm_used(dst, cap);
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_free_limbs(alloc, work);
+  return rc;
+}
+
 /* ========== End Toom-Cook-3 helpers ========== */
 
 /*  Recursive multiplication using Karatsuba algorithm for large operands.
@@ -827,7 +1094,8 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
 }
 
 /*  Recursive squaring using Karatsuba identity for large operands.
-    Falls back to schoolbook squaring below ARBINT_KARATSUBA_THRESHOLD.
+    Falls back to schoolbook squaring below ARBINT_SQR_KARATSUBA_THRESHOLD.
+    Uses Toom-Cook-3 for operands >= ARBINT_SQR_TOOM3_THRESHOLD.
     Splits a into halves a = a1*B^k + a0 and uses:
       a^2 = a1^2*B^(2k) + ((a0+a1)^2 - a0^2 - a1^2)*B^k + a0^2.
     All three sub-products are themselves squarings, so the optimization
@@ -849,10 +1117,14 @@ static arbint_err_t arbint_sqr_mag_rec(arbint_limb_t * dst, size_t * out_used,
   if (!arbint_mul_cap(an, an, &cap))
     return ARBINT_EOVERFLOW;
 
-  if (an < ARBINT_KARATSUBA_THRESHOLD || an <= 1u) {
+  if (an < ARBINT_SQR_KARATSUBA_THRESHOLD || an <= 1u) {
     *out_used = arbint_sqr_schoolbook(dst, a, an);
     return ARBINT_OK;
   }
+
+  /*  Toom-Cook-3 for large operands.  */
+  if (an >= ARBINT_SQR_TOOM3_THRESHOLD)
+    return arbint_toom3_sqr(dst, out_used, a, an, alloc);
 
   {
     size_t k = an / 2u;

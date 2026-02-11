@@ -22,6 +22,7 @@ autom4te.cache/
 /man/Makefile.in
 /doc/Makefile.in
 /tests/Makefile.in
+/tools/Makefile.in
 
 # Build outputs
 */.deps/*
@@ -46,6 +47,7 @@ build-aux/
 /man/Makefile
 /doc/Makefile
 /tests/Makefile
+/tools/Makefile
 /config.log
 /config.status
 /config.h

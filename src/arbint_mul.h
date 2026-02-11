@@ -79,7 +79,15 @@ size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                            const arbint_limb_t * c, size_t cn);
 #endif /* HAS_BMI2 */
 
+/*  Multiplication thresholds (limb counts).  */
 #define ARBINT_KARATSUBA_THRESHOLD 32u
 #define ARBINT_TOOM3_THRESHOLD 96u
+
+/*  Squaring thresholds (limb counts).
+    Squaring exploits symmetry, so Karatsuba may be beneficial at smaller sizes
+    than for general multiplication. Toom-3 squaring is simpler than Toom-3
+    multiplication (no sign tracking at point -1).  */
+#define ARBINT_SQR_KARATSUBA_THRESHOLD 24u
+#define ARBINT_SQR_TOOM3_THRESHOLD 80u
 
 #endif /* ARBINT_MUL_H */

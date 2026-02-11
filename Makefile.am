@@ -17,7 +17,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = include src man tests
+SUBDIRS = include src man tests tools
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = c-arbint.pc
