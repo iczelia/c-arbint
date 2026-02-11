@@ -17,7 +17,6 @@
 
 /*  The following features are currently unimplemented:
       - arbint_set_str, arbint_get_str
-      - arbint_gcd, arbint_lcm and immediate variants.
       - arbint_moebius, arbint_totient, arbint_carmichael,
       - arbint_xgcd, arbint_legendre, arbint_jacobi,
       - arbint_kronecker, arbint_removefactor_u32,

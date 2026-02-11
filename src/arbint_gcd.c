@@ -18,6 +18,7 @@
 #include "arbint_gcd.h"
 
 #include "arbint_addsub.h"
+#include "arbint_div.h"
 #include "arbint_shift.h"
 #include "config.h"
 
@@ -46,13 +47,15 @@ static const arbint_alloc_t * arbint_gcd_pick_alloc(const arbint_t a,
 }
 
 /*  Binary GCD (Stein's algorithm) for large operands.
-    Uses internal limb-level operations for performance.  */
+    Uses internal limb-level operations for performance.
+    Single combined allocation for u and v workspace.  */
 static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
                                       size_t an, const arbint_limb_t * bp,
                                       size_t bn,
                                       const arbint_alloc_t * alloc) {
-  arbint_limb_t * up = NULL;
-  arbint_limb_t * vp = NULL;
+  arbint_limb_t * scratch = NULL;
+  arbint_limb_t * up;
+  arbint_limb_t * vp;
   arbint_limb_t * tmp;
   size_t un;
   size_t vn;
@@ -65,19 +68,15 @@ static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
 
   max_n = (an > bn) ? an : bn;
 
-  /*  Allocate workspace for u and v.
-      Need extra space for the final left shift.  */
+  /*  Allocate combined workspace for u and v.
+      Each needs cap = max_n + 1 limbs for final left shift.  */
   cap = max_n + 1u;
-  up = arbint_alloc_limbs(alloc, cap);
-  if (up == NULL) {
-    rc = ARBINT_ENOMEM;
-    goto cleanup;
-  }
-  vp = arbint_alloc_limbs(alloc, cap);
-  if (vp == NULL) {
-    rc = ARBINT_ENOMEM;
-    goto cleanup;
-  }
+  scratch = arbint_alloc_limbs(alloc, cap * 2u);
+  if (scratch == NULL)
+    return ARBINT_ENOMEM;
+
+  up = scratch;
+  vp = scratch + cap;
 
   /*  Copy magnitudes to workspace.  */
   memcpy(up, ap, an * sizeof(arbint_limb_t));
@@ -140,8 +139,7 @@ static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
   g[0]._sz = (ptrdiff_t) un;
 
 cleanup:
-  arbint_free_limbs(alloc, vp);
-  arbint_free_limbs(alloc, up);
+  arbint_free_limbs(alloc, scratch);
   return rc;
 }
 
@@ -283,14 +281,13 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
   return rc;
 }
 
-/*  arbint_gcd_u32: GCD with a uint32_t operand.  */
+/*  arbint_gcd_u32: GCD with a uint32_t operand.
+    Allocation-free: uses limb-level division to get remainder directly.  */
 ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
                                        uint32_t b) {
-  arbint_t rem;
   size_t an;
+  arbint_limb_t rem_limb;
   arbint_err_t rc;
-  uint32_t r;
-  int init_rem = 0;
 
   if (g == NULL || a == NULL)
     return ARBINT_EINVAL;
@@ -305,45 +302,24 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
   if (b == 1u)
     return arbint_set_u32(g, 1u);
 
-  /*  Reduce |a| mod b to get a uint32_t remainder.  */
-  rc = arbint_init(rem, g[0]._ctx);
+  /*  Compute |a| mod b directly using limb-level division (no allocation).  */
+  rc = arbint_div_mag_single_limb_generic(ARBINT_CLIMBS(a), an,
+                                          (arbint_limb_t) b, NULL, NULL,
+                                          &rem_limb);
   if (rc != ARBINT_OK)
     return rc;
-  init_rem = 1;
 
-  rc = arbint_tdiv_r_u32(rem, a, b);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-
-  if (arbint_is_zero(rem)) {
-    arbint_clear(rem);
-    return arbint_set_u32(g, b);
-  }
-
-  /*  Get absolute value of remainder as u32.  */
-  rc = arbint_abs(rem, rem);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-
-  rc = arbint_get_u32(rem, &r);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-
-  arbint_clear(rem);
-  init_rem = 0;
-
-  /*  Now compute gcd(r, b) with hardware division.  */
-  return arbint_set_u32(g, arbint_gcd_u32u32(r, b));
-
-cleanup:
-  if (init_rem)
-    arbint_clear(rem);
-  return rc;
+  /*  Now compute gcd(rem, b) with hardware division.  */
+  return arbint_set_u32(g, arbint_gcd_u32u32((uint32_t) rem_limb, b));
 }
 
 /*  arbint_lcm: compute least common multiple.
     lcm(a, b) = (|a| / gcd(a, b)) * |b|
-    Result is always non-negative.  */
+    Result is always non-negative.
+
+    Fast shortcuts:
+    - gcd == 1: lcm = |a| * |b| (skip division)
+    - one divides other: lcm = max(|a|, |b|) (skip multiplication)  */
 ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
                                    const arbint_t b) {
   arbint_t gcd_val, quotient;
@@ -353,6 +329,7 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
   int init_quot = 0;
   size_t an;
   size_t bn;
+  size_t gn;
 
   if (l == NULL || a == NULL || b == NULL)
     return ARBINT_EINVAL;
@@ -373,15 +350,50 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
     return rc;
   init_gcd = 1;
 
-  rc = arbint_init(quotient, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_quot = 1;
-
   /*  Compute gcd(a, b).  */
   rc = arbint_gcd(gcd_val, a, b);
   if (rc != ARBINT_OK)
     goto cleanup;
+
+  gn = arbint_abs_sz(gcd_val[0]._sz);
+
+  /*  Fast path: gcd == 1 means lcm = |a| * |b|.  */
+  if (gn == 1u && ARBINT_CLIMBS(gcd_val)[0] == 1u) {
+    arbint_clear(gcd_val);
+    init_gcd = 0;
+
+    rc = arbint_abs(l, a);
+    if (rc != ARBINT_OK)
+      return rc;
+    rc = arbint_init(quotient, ctx);
+    if (rc != ARBINT_OK)
+      return rc;
+    rc = arbint_abs(quotient, b);
+    if (rc != ARBINT_OK) {
+      arbint_clear(quotient);
+      return rc;
+    }
+    rc = arbint_mul(l, l, quotient);
+    arbint_clear(quotient);
+    return rc;
+  }
+
+  /*  Fast path: gcd == |a| means a divides b, lcm = |b|.  */
+  if (gn == an && arbint_cmpabs(gcd_val, a) == 0) {
+    arbint_clear(gcd_val);
+    return arbint_abs(l, b);
+  }
+
+  /*  Fast path: gcd == |b| means b divides a, lcm = |a|.  */
+  if (gn == bn && arbint_cmpabs(gcd_val, b) == 0) {
+    arbint_clear(gcd_val);
+    return arbint_abs(l, a);
+  }
+
+  rc = arbint_init(quotient, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_quot = 1;
 
   /*  quotient = |a| / gcd (exact division).  */
   rc = arbint_abs(quotient, a);
@@ -407,17 +419,16 @@ cleanup:
   return rc;
 }
 
-/*  arbint_lcm_u32: LCM with a uint32_t operand.  */
+/*  arbint_lcm_u32: LCM with a uint32_t operand.
+    Optimized: uses allocation-free mod for gcd computation.  */
 ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
                                        uint32_t b) {
-  arbint_t tmp, rem;
+  arbint_t tmp;
   arbint_err_t rc;
-  arbint_ctx_t * ctx;
+  arbint_limb_t rem_limb;
   uint32_t g;
-  uint32_t r;
   size_t an;
   int init_tmp = 0;
-  int init_rem = 0;
 
   if (l == NULL || a == NULL)
     return ARBINT_EINVAL;
@@ -430,37 +441,34 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
     return ARBINT_OK;
   }
 
-  ctx = l[0]._ctx;
+  /*  Fast path: lcm(a, 1) = |a|.  */
+  if (b == 1u)
+    return arbint_abs(l, a);
 
-  /*  Compute gcd(|a| mod b, b) to get a u32 gcd.  */
-  rc = arbint_init(rem, ctx);
+  /*  Compute |a| mod b directly (no allocation).  */
+  rc = arbint_div_mag_single_limb_generic(ARBINT_CLIMBS(a), an,
+                                          (arbint_limb_t) b, NULL, NULL,
+                                          &rem_limb);
   if (rc != ARBINT_OK)
     return rc;
-  init_rem = 1;
 
-  rc = arbint_tdiv_r_u32(rem, a, b);
-  if (rc != ARBINT_OK)
-    goto cleanup;
+  /*  Compute gcd(rem, b).  */
+  if (rem_limb == 0u) {
+    /*  b divides |a|, so lcm = |a|.  */
+    return arbint_abs(l, a);
+  }
+  g = arbint_gcd_u32u32((uint32_t) rem_limb, b);
 
-  if (arbint_is_zero(rem)) {
-    g = b;
-  } else {
-    /*  Get absolute value of remainder as u32.  */
-    rc = arbint_abs(rem, rem);
+  /*  Fast path: if gcd == 1, lcm = |a| * b.  */
+  if (g == 1u) {
+    rc = arbint_abs(l, a);
     if (rc != ARBINT_OK)
-      goto cleanup;
-
-    rc = arbint_get_u32(rem, &r);
-    if (rc != ARBINT_OK)
-      goto cleanup;
-    g = arbint_gcd_u32u32(r, b);
+      return rc;
+    return arbint_mul_u32(l, l, b);
   }
 
-  arbint_clear(rem);
-  init_rem = 0;
-
   /*  l = (|a| / g) * b.  */
-  rc = arbint_init(tmp, ctx);
+  rc = arbint_init(tmp, l[0]._ctx);
   if (rc != ARBINT_OK)
     return rc;
   init_tmp = 1;
@@ -478,7 +486,5 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
 cleanup:
   if (init_tmp)
     arbint_clear(tmp);
-  if (init_rem)
-    arbint_clear(rem);
   return rc;
 }
