@@ -439,7 +439,11 @@ static void test_sqr_stochastic(void) {
     CHECK_EQ_I(arbint_resize(a, n), ARBINT_OK);
     for (j = 0u; j < n; ++j) {
       seed = seed * 1103515245u + 12345u;
+#if ARBINT_LIMB_BITS == 64
       ARBINT_LIMBS(a)[j] = ((arbint_limb_t) seed << 32u) | (seed >> 1u);
+#else
+      ARBINT_LIMBS(a)[j] = seed;
+#endif
     }
     /*  Ensure top limb is non-zero for proper normalization.  */
     if (ARBINT_LIMBS(a)[n - 1u] == 0u)
