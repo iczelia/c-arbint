@@ -51,7 +51,7 @@ libarbint_la_LIBADD += libarbint_la-${name}.lo
 endif
 
 @AMDEP_TRUE@libarbint_la-${name}.lo: ${name}.c
-@AMDEP_TRUE@	\$(ARBINT_LTCOMPILE) ${cflags_ref}-MT \$@ -MD -MP -MF \$(DEPDIR)/libarbint_la-${name}.Tpo -c -o \$@ \`test -f '\$<' || echo '\$(srcdir)/'\`\$<
+@AMDEP_TRUE@	\$(ARBINT_LTCOMPILE) ${cflags_ref}-MD -MF \$(DEPDIR)/libarbint_la-${name}.Tpo -c -o \$@ \`test -f '\$<' || echo '\$(srcdir)/'\`\$<
 @AMDEP_TRUE@	\$(am__mv) \$(DEPDIR)/libarbint_la-${name}.Tpo \$(DEPDIR)/libarbint_la-${name}.Plo
 
 @AMDEP_FALSE@libarbint_la-${name}.lo: ${name}.c
