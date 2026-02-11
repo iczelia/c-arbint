@@ -481,6 +481,80 @@ Single-limb division uses reciprocal-based algorithms (Granlund-Montgomery
 technique) for significantly faster performance than hardware DIV.
 .RE
 .\" -------------------------------------------------------------------------
+.SS Floor Division
+.\" -------------------------------------------------------------------------
+.PP
+Floor division rounds the quotient toward negative infinity:
+.PP
+.RS 4
+.nf
+q = floor(n / d)
+r = n - q * d
+.fi
+.RE
+.PP
+The remainder
+.I r
+has the same sign as the divisor
+.I d
+(or is zero).
+.PP
+.B Full-precision floor division:
+.PP
+.nf
+.BI "arbint_err_t arbint_fdiv_qr(arbint_t " q ", arbint_t " r ", const arbint_t " n ", const arbint_t " d ")"
+.BI "arbint_err_t arbint_fdiv_q(arbint_t " q ", const arbint_t " n ", const arbint_t " d ")"
+.BI "arbint_err_t arbint_fdiv_r(arbint_t " r ", const arbint_t " n ", const arbint_t " d ")"
+.fi
+.PP
+.B 32-bit divisor variants:
+.PP
+.nf
+.BI "arbint_err_t arbint_fdiv_qr_u32(arbint_t " q ", uint32_t *" r ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_fdiv_q_u32(arbint_t " q ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_fdiv_r_u32(uint32_t *" r ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_fdiv_qr_i32(arbint_t " q ", int32_t *" r ", const arbint_t " n ", int32_t " d ")"
+.BI "arbint_err_t arbint_fdiv_q_i32(arbint_t " q ", const arbint_t " n ", int32_t " d ")"
+.BI "arbint_err_t arbint_fdiv_r_i32(int32_t *" r ", const arbint_t " n ", int32_t " d ")"
+.fi
+.\" -------------------------------------------------------------------------
+.SS Ceiling Division
+.\" -------------------------------------------------------------------------
+.PP
+Ceiling division rounds the quotient toward positive infinity:
+.PP
+.RS 4
+.nf
+q = ceil(n / d)
+r = n - q * d
+.fi
+.RE
+.PP
+The remainder
+.I r
+has the opposite sign of the divisor
+.I d
+(or is zero).
+.PP
+.B Full-precision ceiling division:
+.PP
+.nf
+.BI "arbint_err_t arbint_cdiv_qr(arbint_t " q ", arbint_t " r ", const arbint_t " n ", const arbint_t " d ")"
+.BI "arbint_err_t arbint_cdiv_q(arbint_t " q ", const arbint_t " n ", const arbint_t " d ")"
+.BI "arbint_err_t arbint_cdiv_r(arbint_t " r ", const arbint_t " n ", const arbint_t " d ")"
+.fi
+.PP
+.B 32-bit divisor variants:
+.PP
+.nf
+.BI "arbint_err_t arbint_cdiv_qr_u32(arbint_t " q ", uint32_t *" r ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_cdiv_q_u32(arbint_t " q ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_cdiv_r_u32(uint32_t *" r ", const arbint_t " n ", uint32_t " d ")"
+.BI "arbint_err_t arbint_cdiv_qr_i32(arbint_t " q ", int32_t *" r ", const arbint_t " n ", int32_t " d ")"
+.BI "arbint_err_t arbint_cdiv_q_i32(arbint_t " q ", const arbint_t " n ", int32_t " d ")"
+.BI "arbint_err_t arbint_cdiv_r_i32(int32_t *" r ", const arbint_t " n ", int32_t " d ")"
+.fi
+.\" -------------------------------------------------------------------------
 .SS Divisibility Testing
 .\" -------------------------------------------------------------------------
 .PP
@@ -635,6 +709,55 @@ XOR|arbint_xor_i32|arbint_xor_u32
 .TE
 .PP
 Signed variants sign-extend the scalar; unsigned variants zero-extend.
+.\" -------------------------------------------------------------------------
+.SS GCD and LCM
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_gcd(arbint_t " g ", const arbint_t " a ", const arbint_t " b ")"
+.RS 4
+.PP
+Compute
+.IR g " = gcd(" a ", " b ")."
+The result is always non-negative.
+Signs of inputs are ignored (operates on magnitudes).
+.I g
+may alias
+.I a
+or
+.IR b .
+.PP
+.BR gcd(0, 0) " = 0."
+.BR gcd(0, " n ") = gcd(" n ", 0) = |" n "|."
+.RE
+.PP
+.BI "arbint_err_t arbint_lcm(arbint_t " l ", const arbint_t " a ", const arbint_t " b ")"
+.RS 4
+.PP
+Compute
+.IR l " = lcm(" a ", " b ")."
+The result is always non-negative.
+If either operand is zero, the result is zero.
+.I l
+may alias
+.I a
+or
+.IR b .
+.PP
+.BR "Identity: gcd(" a ", " b ") * lcm(" a ", " b ") = |" a "| * |" b "|."
+.RE
+.PP
+.BI "arbint_err_t arbint_gcd_u32(arbint_t " g ", const arbint_t " a ", uint32_t " b ")"
+.br
+.BI "arbint_err_t arbint_lcm_u32(arbint_t " l ", const arbint_t " a ", uint32_t " b ")"
+.RS 4
+.PP
+32-bit scalar variants.
+.I g
+or
+.I l
+may alias
+.IR a .
+.RE
 .\" -------------------------------------------------------------------------
 .SS Random Number Generation
 .\" -------------------------------------------------------------------------
@@ -845,6 +968,23 @@ x_{n+1} = floor((x_n + floor(a / x_n)) / 2),
 starting from x_0 = 2^ceil(nbits(a)/2).
 Quadratic convergence yields O(log nbits(a)) iterations, each dominated
 by one truncated division.
+.\" -------------------------------------------------------------------------
+.SS GCD and LCM
+.\" -------------------------------------------------------------------------
+.PP
+.B Small operands (<= 4 limbs):
+Euclidean algorithm with modular reduction.
+For size-disparate operands (one much larger than the other), a modular
+reduction step first brings them to similar size.
+.PP
+.B Large operands (> 4 limbs):
+Binary GCD (Stein's algorithm) exploiting the identity
+gcd(2a, 2b) = 2*gcd(a, b) and gcd(a, b) = gcd(a-b, b) for odd a, b.
+Requires only shifts and subtractions, avoiding expensive divisions.
+.PP
+.B LCM:
+Computed as lcm(a, b) = |a| * |b| / gcd(a, b), with division performed
+after the GCD to avoid intermediate overflow.
 .\" =========================================================================
 .\"                       ENTROPY SOURCES
 .\" =========================================================================
