@@ -80,8 +80,8 @@ size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
 #endif /* HAS_BMI2 */
 
 /*  Multiplication thresholds (limb counts).  */
-#define ARBINT_KARATSUBA_THRESHOLD 10u
-#define ARBINT_TOOM3_THRESHOLD 18u
+#define ARBINT_KARATSUBA_THRESHOLD 15u
+#define ARBINT_TOOM3_THRESHOLD 20u
 
 /*  Squaring thresholds (limb counts).
     Squaring exploits symmetry, so Karatsuba may be beneficial at smaller sizes

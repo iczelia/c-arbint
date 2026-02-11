@@ -60,6 +60,9 @@
 /*  Output format.  */
 static int g_csv_mode = 0;
 
+/*  Global RNG for generating random operands.  */
+static arbint_rng_t g_rng;
+
 /*  Get current time in nanoseconds (platform-specific).  */
 static uint64_t get_time_ns(void) {
 #if defined(_WIN32)
@@ -77,33 +80,24 @@ static uint64_t get_time_ns(void) {
 #endif
 }
 
-/*  Build an arbint with approximately n limbs by repeated squaring.
-    Uses only public API.  */
-static void build_large_value(arbint_t a, size_t target_limbs, uint32_t seed) {
-  /*  Start with a seed value.  */
-  arbint_set_u32(a, seed);
-
-  /*  Square repeatedly until we reach the target size.
-      Each squaring roughly doubles the number of limbs.  */
-  while (arbint_sizeinbase(a, 2) < target_limbs * 64) {
-    arbint_sqr(a, a);
-    /*  Add a small constant to break patterns.  */
-    arbint_add_u32(a, a, seed & 0xFFFFu);
-  }
+/*  Build an arbint with exactly n limbs of random data.  */
+static void build_random_value(arbint_t a, size_t target_limbs) {
+  /*  Generate a random value with target_limbs * LIMB_BITS bits.
+      This gives us exactly target_limbs limbs of uniformly random data.  */
+  arbint_urandomb(a, &g_rng, target_limbs * sizeof(arbint_limb_t) * 8);
 }
 
 /*  Measure time for multiplication at given size.
     Returns average nanoseconds per operation.  */
-static double measure_mul(arbint_t a, arbint_t b, arbint_t r, size_t n,
-                          uint32_t seed) {
+static double measure_mul(arbint_t a, arbint_t b, arbint_t r, size_t n) {
   uint64_t start;
   uint64_t end;
   uint64_t total_ns;
   int iters;
   int i;
 
-  build_large_value(a, n, seed);
-  build_large_value(b, n, seed + 12345u);
+  build_random_value(a, n);
+  build_random_value(b, n);
 
   /*  Warmup.  */
   for (i = 0; i < WARMUP_ITERS; ++i)
@@ -137,14 +131,14 @@ static double measure_mul(arbint_t a, arbint_t b, arbint_t r, size_t n,
 
 /*  Measure time for squaring at given size.
     Returns average nanoseconds per operation.  */
-static double measure_sqr(arbint_t a, arbint_t r, size_t n, uint32_t seed) {
+static double measure_sqr(arbint_t a, arbint_t r, size_t n) {
   uint64_t start;
   uint64_t end;
   uint64_t total_ns;
   int iters;
   int i;
 
-  build_large_value(a, n, seed);
+  build_random_value(a, n);
 
   /*  Warmup.  */
   for (i = 0; i < WARMUP_ITERS; ++i)
@@ -232,7 +226,6 @@ static void tune_multiplication(void) {
   arbint_t a;
   arbint_t b;
   arbint_t r;
-  uint32_t seed = 0xDEADBEEFu;
   double times[500];
   size_t sizes[500];
   size_t count = 0;
@@ -253,7 +246,7 @@ static void tune_multiplication(void) {
   print_header("Multiplication");
 
   for (n = MIN_SIZE; n <= MAX_SIZE; ) {
-    double ns = measure_mul(a, b, r, n, seed);
+    double ns = measure_mul(a, b, r, n);
     print_row(n, ns);
 
     if (count < 500) {
@@ -310,7 +303,6 @@ static void tune_squaring(void) {
   arbint_ctx_t ctx;
   arbint_t a;
   arbint_t r;
-  uint32_t seed = 0xCAFEBABEu;
   double times[500];
   size_t sizes[500];
   size_t count = 0;
@@ -330,7 +322,7 @@ static void tune_squaring(void) {
   print_header("Squaring");
 
   for (n = MIN_SIZE; n <= MAX_SIZE; ) {
-    double ns = measure_sqr(a, r, n, seed);
+    double ns = measure_sqr(a, r, n);
     print_row(n, ns);
 
     if (count < 500) {
@@ -397,6 +389,14 @@ int main(int argc, char ** argv) {
   int do_mul = 0;
   int do_sqr = 0;
   int i;
+  arbint_err_t rc;
+
+  /*  Initialize RNG with platform entropy.  */
+  rc = arbint_rng_init(&g_rng, NULL, 0);
+  if (rc != ARBINT_OK) {
+    fprintf(stderr, "Failed to initialize RNG: %d\n", rc);
+    return 1;
+  }
 
   for (i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--mul") == 0) {
@@ -444,5 +444,6 @@ int main(int argc, char ** argv) {
     printf("  4. Re-run this tool to verify\n");
   }
 
+  arbint_rng_clear(&g_rng);
   return 0;
 }
