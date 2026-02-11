@@ -37,10 +37,8 @@
 
 ARBINT_TEST_DECLARE_FAILURES();
 
-/* ------------------------------------------------------------------ */
-/*  Helper: verify division result using multiplication identity.      */
-/*  n == q * d + r  &&  |r| < |d|  &&  sign(r) == sign(n) or r == 0    */
-/* ------------------------------------------------------------------ */
+/*  Helper: verify division result using multiplication identity.
+    n == q * d + r  &&  |r| < |d|  &&  sign(r) == sign(n) or r == 0.  */
 
 static void verify_tdiv_identity(arbint_t n, arbint_t d, arbint_t q,
                                  arbint_t r, arbint_t tmp, arbint_t tmp2) {
@@ -60,9 +58,7 @@ static void verify_tdiv_identity(arbint_t n, arbint_t d, arbint_t q,
     CHECK_EQ_I(rsign, nsign);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: small power-of-two divisors (u32 path).                      */
-/* ------------------------------------------------------------------ */
+/*  Test: small power-of-two divisors (u32 path).  */
 
 static void test_tdiv_pow2_u32_small(void) {
   arbint_ctx_t ctx;
@@ -159,9 +155,7 @@ static void test_tdiv_pow2_u32_small(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: power-of-two with i32 divisor (signed).                      */
-/* ------------------------------------------------------------------ */
+/*  Test: power-of-two with i32 divisor (signed).  */
 
 static void test_tdiv_pow2_i32_signed(void) {
   arbint_ctx_t ctx;
@@ -213,9 +207,7 @@ static void test_tdiv_pow2_i32_signed(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: arbint / arbint power-of-two divisor.                        */
-/* ------------------------------------------------------------------ */
+/*  Test: arbint / arbint power-of-two divisor.  */
 
 static void test_tdiv_pow2_arbint(void) {
   arbint_ctx_t ctx;
@@ -269,9 +261,7 @@ static void test_tdiv_pow2_arbint(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: large multi-limb power-of-two divisor.                       */
-/* ------------------------------------------------------------------ */
+/*  Test: large multi-limb power-of-two divisor.  */
 
 static void test_tdiv_pow2_large(void) {
   arbint_ctx_t ctx;
@@ -351,9 +341,7 @@ static void test_tdiv_pow2_large(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: q-only and r-only variants.                                  */
-/* ------------------------------------------------------------------ */
+/*  Test: q-only and r-only variants.  */
 
 static void test_tdiv_pow2_q_r_only(void) {
   arbint_ctx_t ctx;
@@ -401,9 +389,7 @@ static void test_tdiv_pow2_q_r_only(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: floor division with power-of-two.                            */
-/* ------------------------------------------------------------------ */
+/*  Test: floor division with power-of-two.  */
 
 static void test_fdiv_pow2(void) {
   arbint_ctx_t ctx;
@@ -450,9 +436,7 @@ static void test_fdiv_pow2(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: ceiling division with power-of-two.                          */
-/* ------------------------------------------------------------------ */
+/*  Test: ceiling division with power-of-two.  */
 
 static void test_cdiv_pow2(void) {
   arbint_ctx_t ctx;
@@ -500,9 +484,7 @@ static void test_cdiv_pow2(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: aliasing (q == n, r == n, etc.).                             */
-/* ------------------------------------------------------------------ */
+/*  Test: aliasing (q == n, r == n, etc.).  */
 
 static void test_tdiv_pow2_aliasing(void) {
   arbint_ctx_t ctx;
@@ -553,9 +535,7 @@ static void test_tdiv_pow2_aliasing(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: compare pow2 path to non-pow2 for consistency.               */
-/* ------------------------------------------------------------------ */
+/*  Test: compare pow2 path to non-pow2 for consistency.  */
 
 static void test_tdiv_pow2_vs_generic(void) {
   arbint_ctx_t ctx;
@@ -621,9 +601,7 @@ static void test_tdiv_pow2_vs_generic(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: edge case - dividend smaller than divisor.                   */
-/* ------------------------------------------------------------------ */
+/*  Test: edge case - dividend smaller than divisor.  */
 
 static void test_tdiv_pow2_dividend_smaller(void) {
   arbint_ctx_t ctx;
@@ -669,12 +647,9 @@ static void test_tdiv_pow2_dividend_smaller(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: trailing zeros optimization.                                  */
-/*                                                                      */
-/*  When dividend has trailing zeros >= divisor's k (for 2^k), the      */
-/*  remainder is 0 and we can use a faster quotient computation.        */
-/* ------------------------------------------------------------------ */
+/*  Test: trailing zeros optimization.
+    When dividend has trailing zeros >= divisor's k (for 2^k), the
+    remainder is 0 and we can use a faster quotient computation.  */
 
 static void test_tdiv_pow2_trailing_zeros(void) {
   arbint_ctx_t ctx;
@@ -821,9 +796,7 @@ static void test_tdiv_pow2_trailing_zeros(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Test: ensure non-power-of-two still works (regression check).      */
-/* ------------------------------------------------------------------ */
+/*  Test: ensure non-power-of-two still works (regression check).  */
 
 static void test_tdiv_non_pow2_regression(void) {
   arbint_ctx_t ctx;

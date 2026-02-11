@@ -20,9 +20,7 @@
 
 #include "arbint_div.h"
 
-/* ------------------------------------------------------------------ */
-/*  arbint / arbint floor division.                                   */
-/* ------------------------------------------------------------------ */
+/*  arbint / arbint floor division.  */
 
 arbint_err_t arbint_fdiv_qr(arbint_t q, arbint_t r, const arbint_t n,
                             const arbint_t d) {
@@ -39,12 +37,9 @@ arbint_err_t arbint_fdiv_r(arbint_t r, const arbint_t n, const arbint_t d) {
   return arbint_div_qr_mode_impl(NULL, r, n, d, ARBINT_DIV_FLOOR);
 }
 
-/* ------------------------------------------------------------------ */
-/*  arbint / u32 floor division.                                      */
-/*                                                                    */
-/*  For positive divisor, fdiv adjustment needed when:                */
-/*  r != 0 && n < 0: q -= 1, r += d                                   */
-/* ------------------------------------------------------------------ */
+/*  arbint / u32 floor division.
+    For positive divisor, fdiv adjustment needed when:
+    r != 0 && n < 0: q -= 1, r += d.  */
 
 static arbint_err_t arbint_fdiv_qr_u32_impl(arbint_t q, arbint_t r,
                                             const arbint_t n, uint32_t d) {

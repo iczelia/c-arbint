@@ -39,6 +39,7 @@ check_PROGRAMS = \
   test_toom3 \
   test_addmul \
   test_ntt \
+  test_gcd \
   compute_pi \
   compute_e \
   compute_bitops

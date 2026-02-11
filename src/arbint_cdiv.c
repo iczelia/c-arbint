@@ -20,9 +20,7 @@
 
 #include "arbint_div.h"
 
-/* ------------------------------------------------------------------ */
-/*  arbint / arbint ceiling division.                                 */
-/* ------------------------------------------------------------------ */
+/*  arbint / arbint ceiling division.  */
 
 arbint_err_t arbint_cdiv_qr(arbint_t q, arbint_t r, const arbint_t n,
                             const arbint_t d) {

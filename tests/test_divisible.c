@@ -22,9 +22,7 @@
 
 ARBINT_TEST_DECLARE_FAILURES();
 
-/* ------------------------------------------------------------------ */
-/*  arbint_divisible_u32 tests.                                       */
-/* ------------------------------------------------------------------ */
+/*  arbint_divisible_u32 tests.  */
 
 static void test_divisible_u32_basic(void) {
   arbint_ctx_t ctx;
@@ -226,9 +224,7 @@ static void test_divisible_u32_multilimb(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/* ------------------------------------------------------------------ */
-/*  arbint_divisible tests.                                           */
-/* ------------------------------------------------------------------ */
+/*  arbint_divisible tests.  */
 
 static void test_divisible_basic(void) {
   arbint_ctx_t ctx;

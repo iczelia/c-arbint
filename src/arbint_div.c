@@ -24,9 +24,7 @@
 #include <limits.h>
 #include <string.h>
 
-/* ------------------------------------------------------------------ */
-/*  Power-of-two detection helper.                                    */
-/* ------------------------------------------------------------------ */
+/*  Power-of-two detection helper.  */
 
 /*  Check if v is a power of two (v != 0 required).  */
 static inline int arbint_div_is_pow2(uint32_t v) {
@@ -55,17 +53,13 @@ static size_t arbint_mag_ctz(const arbint_limb_t * np, size_t nn) {
   return ctz;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Power-of-two truncated division: q = n / 2^k, r = n % 2^k.        */
-/*                                                                    */
-/*  Truncated division semantics:                                     */
-/*    - Quotient: magnitude right-shift, sign preserved               */
-/*    - Remainder: low k bits of magnitude, sign of dividend          */
-/*                                                                    */
-/*  Examples:                                                         */
-/*     7 / 4 =  1,  7 % 4 =  3                                        */
-/*    -7 / 4 = -1, -7 % 4 = -3                                        */
-/* ------------------------------------------------------------------ */
+/*  Power-of-two truncated division: q = n / 2^k, r = n % 2^k.
+    Truncated division semantics:
+      - Quotient: magnitude right-shift, sign preserved
+      - Remainder: low k bits of magnitude, sign of dividend
+    Examples:
+       7 / 4 =  1,  7 % 4 =  3
+      -7 / 4 = -1, -7 % 4 = -3  */
 
 static arbint_err_t arbint_tdiv_qr_pow2(arbint_t q, arbint_t r,
                                         const arbint_t n, unsigned k,
@@ -236,9 +230,7 @@ static arbint_err_t arbint_tdiv_qr_pow2(arbint_t q, arbint_t r,
   return ARBINT_OK;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Function pointer types for runtime dispatch.                      */
-/* ------------------------------------------------------------------ */
+/*  Function pointer types for runtime dispatch.  */
 
 typedef arbint_err_t (*arbint_div_qr_u32_impl_fn_t)(arbint_t q, arbint_t r,
                                                     const arbint_t n,
@@ -253,9 +245,7 @@ typedef arbint_err_t (*arbint_mod_u32_barrett_fn_t)(arbint_t x,
                                                     arbint_limb_t di,
                                                     unsigned shift);
 
-/* ------------------------------------------------------------------ */
-/*  Runtime dispatch selectors.                                       */
-/* ------------------------------------------------------------------ */
+/*  Runtime dispatch selectors.  */
 
 static arbint_div_qr_u32_impl_fn_t arbint_select_div_qr_u32_impl(void) {
 #if HAS_BMI2_ALWAYS
@@ -294,9 +284,7 @@ static arbint_mod_u32_barrett_fn_t arbint_select_mod_u32_barrett(void) {
 #endif
 }
 
-/* ------------------------------------------------------------------ */
-/*  Dispatched Barrett reduction.                                     */
-/* ------------------------------------------------------------------ */
+/*  Dispatched Barrett reduction.  */
 
 arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
                                     arbint_limb_t di, unsigned shift) {
@@ -308,9 +296,7 @@ arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
   return impl(x, d_norm, di, shift);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Dispatched u32 division.                                          */
-/* ------------------------------------------------------------------ */
+/*  Dispatched u32 division.  */
 
 arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,
                                         const arbint_t n, uint32_t dmag,
@@ -328,9 +314,7 @@ arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,
   return impl(q, r, n, dmag, dsign);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Allocator helpers.                                                */
-/* ------------------------------------------------------------------ */
+/*  Allocator helpers.  */
 
 static const arbint_alloc_t * arbint_get_alloc_from(const arbint_t x) {
   if (x == NULL || x[0]._ctx == NULL || x[0]._ctx->a.realloc == NULL)
@@ -356,9 +340,7 @@ static const arbint_alloc_t * arbint_pick_alloc(const arbint_t a,
   return arbint_get_alloc_from(d);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Magnitude view and signed assignment.                             */
-/* ------------------------------------------------------------------ */
+/*  Magnitude view and signed assignment.  */
 
 arbint_err_t arbint_get_mag_view(const arbint_t x, const arbint_limb_t ** xp,
                                  size_t * xn, int * sign) {
@@ -410,9 +392,7 @@ static arbint_err_t arbint_set_mag_signed(arbint_t x,
   return ARBINT_OK;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Core truncated magnitude division.                                */
-/* ------------------------------------------------------------------ */
+/*  Core truncated magnitude division.  */
 
 static arbint_err_t
 arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
@@ -524,9 +504,7 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
   return ARBINT_OK;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Truncated division implementation (arbint / arbint).              */
-/* ------------------------------------------------------------------ */
+/*  Truncated division implementation (arbint / arbint).  */
 
 /*  Check if magnitude limbs represent a power of two.
     If so, return the bit position (0 for 1, 1 for 2, etc.).
@@ -607,13 +585,10 @@ arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
   return arbint_tdiv_qr_mag_impl(q, r, np, nn, nsign, dp, dn, dsign, alloc);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Divisibility testing: arbint_divisible_u32.                       */
-/*                                                                    */
-/*  Tests if n is divisible by d without computing the full quotient. */
-/*  Uses Barrett reduction for O(n) time with no division in the      */
-/*  inner loop.                                                       */
-/* ------------------------------------------------------------------ */
+/*  Divisibility testing: arbint_divisible_u32.
+    Tests if n is divisible by d without computing the full quotient.
+    Uses Barrett reduction for O(n) time with no division in the
+    inner loop.  */
 
 arbint_err_t arbint_divisible_u32(const arbint_t n, uint32_t d, int * out) {
   size_t nn;
@@ -717,16 +692,12 @@ arbint_err_t arbint_divisible_u32(const arbint_t n, uint32_t d, int * out) {
   return ARBINT_OK;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Divisibility testing: arbint_divisible (multi-limb divisor).      */
-/*                                                                    */
-/*  Tests if n is divisible by d.                                     */
-/*                                                                    */
-/*  Key optimizations:                                                */
-/*    1. Power of 2: O(1) - check trailing zeros                      */
-/*    2. Single-limb divisor: delegate to arbint_divisible_u32        */
-/*    3. General: compute remainder via tdiv and check if zero        */
-/* ------------------------------------------------------------------ */
+/*  Divisibility testing: arbint_divisible (multi-limb divisor).
+    Tests if n is divisible by d.
+    Key optimizations:
+      1. Power of 2: O(1) - check trailing zeros
+      2. Single-limb divisor: delegate to arbint_divisible_u32
+      3. General: compute remainder via tdiv and check if zero  */
 
 arbint_err_t arbint_divisible(const arbint_t n, const arbint_t d, int * out) {
   size_t nn;
@@ -809,9 +780,7 @@ arbint_err_t arbint_divisible(const arbint_t n, const arbint_t d, int * out) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Generalized division with rounding mode.                          */
-/* ------------------------------------------------------------------ */
+/*  Generalized division with rounding mode.  */
 
 arbint_err_t arbint_div_qr_mode_impl(arbint_t q, arbint_t r, const arbint_t n,
                                      const arbint_t d,

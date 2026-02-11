@@ -20,9 +20,7 @@
 
 #include "arbint_div.h"
 
-/* ------------------------------------------------------------------ */
-/*  arbint / arbint truncated division.                               */
-/* ------------------------------------------------------------------ */
+/*  arbint / arbint truncated division.  */
 
 arbint_err_t arbint_tdiv_qr(arbint_t q, arbint_t r, const arbint_t n,
                             const arbint_t d) {
@@ -39,9 +37,7 @@ arbint_err_t arbint_tdiv_r(arbint_t r, const arbint_t n, const arbint_t d) {
   return arbint_tdiv_qr_impl(NULL, r, n, d);
 }
 
-/* ------------------------------------------------------------------ */
-/*  arbint / u32 truncated division.                                  */
-/* ------------------------------------------------------------------ */
+/*  arbint / u32 truncated division.  */
 
 arbint_err_t arbint_tdiv_qr_u32(arbint_t q, arbint_t r, const arbint_t n,
                                 uint32_t d) {
@@ -64,9 +60,7 @@ arbint_err_t arbint_tdiv_r_u32(arbint_t r, const arbint_t n, uint32_t d) {
   return arbint_div_qr_u32_dispatch(NULL, r, n, d, 1);
 }
 
-/* ------------------------------------------------------------------ */
-/*  arbint / i32 truncated division.                                  */
-/* ------------------------------------------------------------------ */
+/*  arbint / i32 truncated division.  */
 
 arbint_err_t arbint_tdiv_qr_i32(arbint_t q, arbint_t r, const arbint_t n,
                                 int32_t d) {
