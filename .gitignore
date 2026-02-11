@@ -66,3 +66,5 @@ perf.*
 
 # Miscellany
 release-assets/
+src/platform-objects.txt
+src/Makefile.platform-rules.am

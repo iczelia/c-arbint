@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+# Generate platform-specific Makefile rules before automake runs.
+# This is needed because automake parses include directives at autoreconf time.
+echo "Generating src/Makefile.platform-rules.am..."
+./build-aux/gen-platform-rules.sh src/platform-objects.txt > src/Makefile.platform-rules.am
+
 autoreconf -fi
 
 echo "Bootstrap complete. Now run: ./configure && make"

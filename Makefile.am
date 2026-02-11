@@ -27,7 +27,7 @@ pkgconfig_DATA = c-arbint.pc
 
 dist_doc_DATA = README.md
 
-EXTRA_DIST = bootstrap
+EXTRA_DIST = bootstrap build-aux/gen-platform-rules.sh
 
 .PHONY: clang-format tools
 
