@@ -659,6 +659,52 @@ static void test_gcd_large_binary(void) {
   arbint_ctx_clear(&ctx);
 }
 
+/*  Size-disparate binary GCD (tests the mod optimization).
+    Both operands > 4 limbs but one much larger than the other.  */
+
+static void test_gcd_binary_mod_opt(void) {
+  arbint_ctx_t ctx;
+  arbint_t big, medium, g, expected;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(big, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(medium, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+  /*  big = 2^2048 (32 limbs on 64-bit), medium = 7 * 2^320 (5 limbs).
+      gcd should be 2^320 since 2^2048 = 2^320 * 2^1728.  */
+  CHECK_EQ_I(arbint_set_u32(big, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(big, big), ARBINT_OK);  /* 2^2048 */
+
+  CHECK_EQ_I(arbint_set_u32(expected, 2u), ARBINT_OK);
+  for (int i = 0; i < 5; ++i)
+    CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK);
+  CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK);  /* 2^320 */
+
+  CHECK_EQ_I(arbint_mul_u32(medium, expected, 7u), ARBINT_OK);  /* 7 * 2^320 */
+
+  CHECK_EQ_I(arbint_gcd(g, big, medium), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, expected), 0);
+
+  /*  Also test reverse order.  */
+  CHECK_EQ_I(arbint_gcd(g, medium, big), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, expected), 0);
+
+  /*  Test coprime case: gcd(2^2048, 3 * 2^320 + 1) = 1.  */
+  CHECK_EQ_I(arbint_mul_u32(medium, expected, 3u), ARBINT_OK);
+  CHECK_EQ_I(arbint_add_u32(medium, medium, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, big, medium), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  arbint_clear(expected);
+  arbint_clear(g);
+  arbint_clear(medium);
+  arbint_clear(big);
+  arbint_ctx_clear(&ctx);
+}
+
 /*  Normalization test: result has no leading zeros and _sz >= 0.  */
 
 static void test_gcd_normalization(void) {
@@ -791,6 +837,7 @@ int main(void) {
   test_lcm_exactness();
   test_gcd_size_disparate();
   test_gcd_large_binary();
+  test_gcd_binary_mod_opt();
   test_gcd_normalization();
   test_gcd_large_single_limb();
   test_gcd_null_pointers();

@@ -17,6 +17,8 @@
 
 #include "arbint_gcd.h"
 
+#include "arbint_addsub.h"
+#include "arbint_shift.h"
 #include "config.h"
 
 #include <string.h>
@@ -63,8 +65,8 @@ static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
 
   max_n = (an > bn) ? an : bn;
 
-  /* Allocate workspace for u and v.
-     Need extra space for the final left shift. */
+  /*  Allocate workspace for u and v.
+      Need extra space for the final left shift.  */
   cap = max_n + 1u;
   up = arbint_alloc_limbs(alloc, cap);
   if (up == NULL) {
@@ -77,30 +79,32 @@ static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
     goto cleanup;
   }
 
-  /* Copy magnitudes to workspace. */
+  /*  Copy magnitudes to workspace.  */
   memcpy(up, ap, an * sizeof(arbint_limb_t));
   memcpy(vp, bp, bn * sizeof(arbint_limb_t));
   un = an;
   vn = bn;
 
-  /* Extract common power of 2. */
+  /*  Extract common power of 2.  */
   ctz_u = arbint_gcd_mag_ctz(up, un);
   ctz_v = arbint_gcd_mag_ctz(vp, vn);
   common = (ctz_u < ctz_v) ? ctz_u : ctz_v;
 
-  /* Divide both by their trailing zeros (make both odd). */
-  un = arbint_gcd_rshift_inplace(up, un, ctz_u);
-  vn = arbint_gcd_rshift_inplace(vp, vn, ctz_v);
+  /*  Divide both by their trailing zeros (make both odd).  */
+  un = arbint_rshift_limbs_inplace(up, un, ctz_u);
+  vn = arbint_rshift_limbs_inplace(vp, vn, ctz_v);
 
-  /* Main loop: both u and v are odd. */
+  /*  Main loop: both u and v are odd.  */
   while (vn != 0u) {
-    int cmp = arbint_gcd_cmp_mag(up, un, vp, vn);
+    int cmp;
+    size_t shift;
 
+    /*  Ensure u >= v (swap if needed).  */
+    cmp = arbint_cmp_mag_limbs(up, un, vp, vn);
     if (cmp == 0)
       break;
 
     if (cmp < 0) {
-      /* Swap pointers (cheap, no data copy). */
       tmp = up;
       up = vp;
       vp = tmp;
@@ -111,21 +115,21 @@ static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
       }
     }
 
-    /* u = u - v (u > v, both odd, so result is even and nonzero). */
-    un = arbint_gcd_sub_inplace(up, un, vp, vn);
+    /*  u = u - v (u > v, both odd, so result is even and nonzero).  */
+    un = arbint__sub_mag(up, up, un, vp, vn);
 
-    /* Strip trailing zeros from u (guaranteed at least 1). */
+    /*  Strip trailing zeros from u (guaranteed at least 1).  */
     if (un > 0u) {
-      size_t shift = arbint_gcd_mag_ctz(up, un);
-      un = arbint_gcd_rshift_inplace(up, un, shift);
+      shift = arbint_gcd_mag_ctz(up, un);
+      un = arbint_rshift_limbs_inplace(up, un, shift);
     }
   }
 
-  /* Result = u << common. */
+  /*  Result = u << common.  */
   if (common > 0u)
-    un = arbint_gcd_lshift_inplace(up, un, common, cap);
+    un = arbint_lshift_limbs_inplace(up, un, common, cap);
 
-  /* Copy result to g. */
+  /*  Copy result to g.  */
   rc = arbint_resize(g, un);
   if (rc != ARBINT_OK)
     goto cleanup;
@@ -168,7 +172,7 @@ static arbint_err_t arbint_gcd_euclid(arbint_t g, const arbint_t a,
     goto cleanup;
   init_r = 1;
 
-  /* Set u = |a|, v = |b|. */
+  /*  Set u = |a|, v = |b|.  */
   rc = arbint_abs(u, a);
   if (rc != ARBINT_OK)
     goto cleanup;
@@ -176,7 +180,7 @@ static arbint_err_t arbint_gcd_euclid(arbint_t g, const arbint_t a,
   if (rc != ARBINT_OK)
     goto cleanup;
 
-  /* Euclidean algorithm: gcd(u, v) = gcd(v, u mod v). */
+  /*  Euclidean algorithm: gcd(u, v) = gcd(v, u mod v).  */
   while (!arbint_is_zero(v)) {
     rc = arbint_tdiv_r(r, u, v);
     if (rc != ARBINT_OK)
@@ -185,7 +189,7 @@ static arbint_err_t arbint_gcd_euclid(arbint_t g, const arbint_t a,
     arbint_swap(v, r);
   }
 
-  /* Result is in u. */
+  /*  Result is in u.  */
   rc = arbint_set(g, u);
 
 cleanup:
@@ -218,7 +222,7 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
   an = arbint_abs_sz(a[0]._sz);
   bn = arbint_abs_sz(b[0]._sz);
 
-  /* Edge cases: gcd(0, x) = |x|, gcd(x, 0) = |x|. */
+  /*  Edge cases: gcd(0, x) = |x|, gcd(x, 0) = |x|.  */
   if (an == 0u)
     return arbint_abs(g, b);
   if (bn == 0u)
@@ -227,7 +231,7 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
   ap = ARBINT_CLIMBS(a);
   bp = ARBINT_CLIMBS(b);
 
-  /* Single-limb fast path. */
+  /*  Single-limb fast path.  */
   if (an == 1u && bn == 1u) {
     arbint_limb_t result = arbint_gcd_limb(ap[0], bp[0]);
     rc = arbint_resize(g, 1u);
@@ -244,16 +248,16 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
 
   min_n = (an < bn) ? an : bn;
 
-  /* Small operand path: use Euclidean with tdiv_r. */
+  /*  Small operand path: use Euclidean with tdiv_r.  */
   if (min_n <= ARBINT_GCD_EUCLID_THRESHOLD)
     return arbint_gcd_euclid(g, a, b);
 
-  /* Large operand path: binary GCD with internal limb ops. */
+  /*  Large operand path: binary GCD with internal limb ops.  */
   alloc = arbint_gcd_pick_alloc(g, a, b);
   if (alloc == NULL)
     return ARBINT_EINVAL;
 
-  /* Handle aliasing: copy operands if they alias g. */
+  /*  Handle aliasing: copy operands if they alias g.  */
   if (g == a) {
     a_copy = arbint_alloc_limbs(alloc, an);
     if (a_copy == NULL)
@@ -293,7 +297,7 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
 
   an = arbint_abs_sz(a[0]._sz);
 
-  /* Edge cases. */
+  /*  Edge cases.  */
   if (b == 0u)
     return arbint_abs(g, a);
   if (an == 0u)
@@ -301,7 +305,7 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
   if (b == 1u)
     return arbint_set_u32(g, 1u);
 
-  /* Reduce |a| mod b to get a uint32_t remainder. */
+  /*  Reduce |a| mod b to get a uint32_t remainder.  */
   rc = arbint_init(rem, g[0]._ctx);
   if (rc != ARBINT_OK)
     return rc;
@@ -316,7 +320,7 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
     return arbint_set_u32(g, b);
   }
 
-  /* Get absolute value of remainder as u32. */
+  /*  Get absolute value of remainder as u32.  */
   rc = arbint_abs(rem, rem);
   if (rc != ARBINT_OK)
     goto cleanup;
@@ -328,7 +332,7 @@ ARBINT_API arbint_err_t arbint_gcd_u32(arbint_t g, const arbint_t a,
   arbint_clear(rem);
   init_rem = 0;
 
-  /* Now compute gcd(r, b) with hardware division. */
+  /*  Now compute gcd(r, b) with hardware division.  */
   return arbint_set_u32(g, arbint_gcd_u32u32(r, b));
 
 cleanup:
@@ -356,7 +360,7 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
   an = arbint_abs_sz(a[0]._sz);
   bn = arbint_abs_sz(b[0]._sz);
 
-  /* lcm(0, x) = lcm(x, 0) = 0. */
+  /*  lcm(0, x) = lcm(x, 0) = 0.  */
   if (an == 0u || bn == 0u) {
     arbint_zero(l);
     return ARBINT_OK;
@@ -374,12 +378,12 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
     goto cleanup;
   init_quot = 1;
 
-  /* Compute gcd(a, b). */
+  /*  Compute gcd(a, b).  */
   rc = arbint_gcd(gcd_val, a, b);
   if (rc != ARBINT_OK)
     goto cleanup;
 
-  /* quotient = |a| / gcd (exact division). */
+  /*  quotient = |a| / gcd (exact division).  */
   rc = arbint_abs(quotient, a);
   if (rc != ARBINT_OK)
     goto cleanup;
@@ -388,13 +392,12 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
   if (rc != ARBINT_OK)
     goto cleanup;
 
-  /* l = quotient * |b|. */
+  /*  l = quotient * |b|.  */
   rc = arbint_abs(l, b);
   if (rc != ARBINT_OK)
     goto cleanup;
 
   rc = arbint_mul(l, quotient, l);
-  /* Result is positive; mul preserves sign so l should be non-negative. */
 
 cleanup:
   if (init_quot)
@@ -421,7 +424,7 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
 
   an = arbint_abs_sz(a[0]._sz);
 
-  /* lcm(0, b) = lcm(a, 0) = 0. */
+  /*  lcm(0, b) = lcm(a, 0) = 0.  */
   if (an == 0u || b == 0u) {
     arbint_zero(l);
     return ARBINT_OK;
@@ -429,7 +432,7 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
 
   ctx = l[0]._ctx;
 
-  /* Compute gcd(|a| mod b, b) to get a u32 gcd. */
+  /*  Compute gcd(|a| mod b, b) to get a u32 gcd.  */
   rc = arbint_init(rem, ctx);
   if (rc != ARBINT_OK)
     return rc;
@@ -442,7 +445,7 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
   if (arbint_is_zero(rem)) {
     g = b;
   } else {
-    /* Get absolute value of remainder as u32. */
+    /*  Get absolute value of remainder as u32.  */
     rc = arbint_abs(rem, rem);
     if (rc != ARBINT_OK)
       goto cleanup;
@@ -456,7 +459,7 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
   arbint_clear(rem);
   init_rem = 0;
 
-  /* l = (|a| / g) * b. */
+  /*  l = (|a| / g) * b.  */
   rc = arbint_init(tmp, ctx);
   if (rc != ARBINT_OK)
     return rc;
