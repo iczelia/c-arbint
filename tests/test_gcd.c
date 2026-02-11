@@ -816,31 +816,499 @@ static void test_gcd_null_pointers(void) {
   arbint_ctx_clear(&ctx);
 }
 
+/*  Fibonacci pairs: gcd(F_n, F_{n-1}) = 1.
+    Worst-case for Euclidean algorithm (maximum iterations).  */
+static void test_gcd_fibonacci(void) {
+  arbint_ctx_t ctx;
+  arbint_t f_prev, f_curr, f_next, g;
+  int i;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(f_prev, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(f_curr, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(f_next, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+
+  /*  F_0 = 0, F_1 = 1.  */
+  CHECK_EQ_I(arbint_set_u32(f_prev, 0u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(f_curr, 1u), ARBINT_OK);
+
+  /*  Compute up to F_100 (multi-limb).  */
+  for (i = 2; i <= 100; ++i) {
+    CHECK_EQ_I(arbint_add(f_next, f_curr, f_prev), ARBINT_OK);
+    CHECK_EQ_I(arbint_set(f_prev, f_curr), ARBINT_OK);
+    CHECK_EQ_I(arbint_set(f_curr, f_next), ARBINT_OK);
+  }
+
+  /*  gcd(F_100, F_99) = 1.  */
+  CHECK_EQ_I(arbint_gcd(g, f_curr, f_prev), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  gcd(F_99, F_100) = 1 (symmetry).  */
+  CHECK_EQ_I(arbint_gcd(g, f_prev, f_curr), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  arbint_clear(g);
+  arbint_clear(f_next);
+  arbint_clear(f_curr);
+  arbint_clear(f_prev);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Consecutive integers are always coprime: gcd(n, n+1) = 1.  */
+static void test_gcd_consecutive(void) {
+  arbint_ctx_t ctx;
+  arbint_t n, n_plus_1, g;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n_plus_1, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+
+  /*  Small consecutive.  */
+  CHECK_EQ_I(arbint_set_u32(n, 999u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(n_plus_1, 1000u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, n, n_plus_1), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  Large consecutive (multi-limb): n = 2^256, n+1 = 2^256 + 1.  */
+  CHECK_EQ_I(arbint_set_u32(n, 2u), ARBINT_OK);
+  for (int i = 0; i < 8; ++i)
+    CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);  /* 2^256 */
+  CHECK_EQ_I(arbint_add_u32(n_plus_1, n, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, n, n_plus_1), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  arbint_clear(g);
+  arbint_clear(n_plus_1);
+  arbint_clear(n);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Scaling property: gcd(k*a, k*b) = k * gcd(a, b).  */
+static void test_gcd_scaling(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, ka, kb, g_ab, g_kakb, expected;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(ka, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(kb, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g_ab, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g_kakb, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_set_u32(a, 48u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(b, 18u), ARBINT_OK);
+
+  /*  gcd(48, 18) = 6.  */
+  CHECK_EQ_I(arbint_gcd(g_ab, a, b), ARBINT_OK);
+  check_u32_value(g_ab, 6u);
+
+  /*  gcd(48*1000, 18*1000) = 6*1000 = 6000.  */
+  CHECK_EQ_I(arbint_mul_u32(ka, a, 1000u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(kb, b, 1000u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g_kakb, ka, kb), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(expected, g_ab, 1000u), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g_kakb, expected), 0);
+
+  /*  Large scale factor: k = 2^128.  */
+  CHECK_EQ_I(arbint_set_u32(expected, 2u), ARBINT_OK);
+  for (int i = 0; i < 7; ++i)
+    CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK);  /* k = 2^128 */
+
+  CHECK_EQ_I(arbint_mul(ka, a, expected), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul(kb, b, expected), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g_kakb, ka, kb), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul(expected, g_ab, expected), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g_kakb, expected), 0);
+
+  arbint_clear(expected);
+  arbint_clear(g_kakb);
+  arbint_clear(g_ab);
+  arbint_clear(kb);
+  arbint_clear(ka);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Threshold boundary tests: test around ARBINT_GCD_EUCLID_THRESHOLD (4).
+    Ensures correct dispatch between Euclidean and binary GCD paths.  */
+static void test_gcd_threshold_boundary(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g, r;
+  int i;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /*  Build numbers of exactly 3, 4, 5, 6 limbs (on 64-bit: 192, 256, 320, 384 bits).
+      Use 2^(64*n) - 1 which has exactly n limbs.  */
+  for (i = 3; i <= 6; ++i) {
+    /*  a = 2^(64*i) - 1 (all 1-bits, exactly i limbs on 64-bit).  */
+    CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
+    CHECK_EQ_I(arbint_shl(a, a, (unsigned) (ARBINT_LIMB_BITS * i)), ARBINT_OK);
+    CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK);
+
+    /*  b = a - 2 (same size, different value).  */
+    CHECK_EQ_I(arbint_sub_u32(b, a, 2u), ARBINT_OK);
+
+    CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+
+    /*  Verify gcd divides both operands.  */
+    CHECK_EQ_I(arbint_tdiv_r(r, a, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+    CHECK_EQ_I(arbint_tdiv_r(r, b, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+
+    /*  Result must be positive and normalized.  */
+    CHECK(g[0]._sz > 0);
+  }
+
+  arbint_clear(r);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  GCD with prime numbers.  */
+static void test_gcd_primes(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+
+  /*  Two distinct primes are always coprime.  */
+  CHECK_EQ_I(arbint_set_u32(a, 104729u), ARBINT_OK);  /* 10000th prime */
+  CHECK_EQ_I(arbint_set_u32(b, 1299709u), ARBINT_OK); /* 100000th prime */
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  gcd(p, p^2) = p.  */
+  CHECK_EQ_I(arbint_set_u32(a, 104729u), ARBINT_OK);
+  CHECK_EQ_I(arbint_sqr(b, a), ARBINT_OK);  /* b = p^2 */
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, a), 0);
+
+  /*  gcd(p*q, p) = p for distinct primes p, q.  */
+  CHECK_EQ_I(arbint_set_u32(a, 104729u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(b, a, 1299709u), ARBINT_OK);  /* b = p*q */
+  CHECK_EQ_I(arbint_gcd(g, b, a), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, a), 0);
+
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Stochastic GCD tests: verify properties over random-ish inputs.  */
+static void test_gcd_stochastic(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g1, g2, r;
+  int iter;
+  uint32_t seed = 12345u;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g1, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g2, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  for (iter = 0; iter < 50; ++iter) {
+    /*  Simple LCG for pseudo-random values.  */
+    seed = seed * 1103515245u + 12345u;
+    uint32_t av = (seed >> 16) | 1u;  /* Ensure nonzero, odd */
+    seed = seed * 1103515245u + 12345u;
+    uint32_t bv = (seed >> 16) | 1u;
+
+    CHECK_EQ_I(arbint_set_u32(a, av), ARBINT_OK);
+    CHECK_EQ_I(arbint_set_u32(b, bv), ARBINT_OK);
+
+    /*  Property 1: symmetry.  */
+    CHECK_EQ_I(arbint_gcd(g1, a, b), ARBINT_OK);
+    CHECK_EQ_I(arbint_gcd(g2, b, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_cmp(g1, g2), 0);
+
+    /*  Property 2: gcd divides both.  */
+    CHECK_EQ_I(arbint_tdiv_r(r, a, g1), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+    CHECK_EQ_I(arbint_tdiv_r(r, b, g1), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+
+    /*  Property 3: result is positive.  */
+    CHECK(g1[0]._sz >= 0);
+  }
+
+  arbint_clear(r);
+  arbint_clear(g2);
+  arbint_clear(g1);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Stochastic LCM tests.  */
+static void test_lcm_stochastic(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, l, g, prod1, prod2, r;
+  int iter;
+  uint32_t seed = 54321u;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(l, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(prod1, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(prod2, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  for (iter = 0; iter < 50; ++iter) {
+    seed = seed * 1103515245u + 12345u;
+    uint32_t av = ((seed >> 16) % 10000u) + 1u;  /* 1 to 10000 */
+    seed = seed * 1103515245u + 12345u;
+    uint32_t bv = ((seed >> 16) % 10000u) + 1u;
+
+    CHECK_EQ_I(arbint_set_u32(a, av), ARBINT_OK);
+    CHECK_EQ_I(arbint_set_u32(b, bv), ARBINT_OK);
+
+    CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+    CHECK_EQ_I(arbint_lcm(l, a, b), ARBINT_OK);
+
+    /*  Property 1: lcm divides by both |a| and |b|.  */
+    CHECK_EQ_I(arbint_tdiv_r(r, l, a), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+    CHECK_EQ_I(arbint_tdiv_r(r, l, b), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+
+    /*  Property 2: gcd * lcm = |a| * |b|.  */
+    CHECK_EQ_I(arbint_mul(prod1, g, l), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul(prod2, a, b), ARBINT_OK);
+    CHECK_EQ_I(arbint_cmp(prod1, prod2), 0);
+
+    /*  Property 3: result is positive.  */
+    CHECK(l[0]._sz >= 0);
+  }
+
+  arbint_clear(r);
+  arbint_clear(prod2);
+  arbint_clear(prod1);
+  arbint_clear(g);
+  arbint_clear(l);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Large multi-limb stochastic test.  */
+static void test_gcd_large_stochastic(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, factor, g, r;
+  int iter;
+  uint32_t seed = 99999u;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(factor, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /*  Build base factor = 2^256.  */
+  CHECK_EQ_I(arbint_set_u32(factor, 2u), ARBINT_OK);
+  for (int i = 0; i < 8; ++i)
+    CHECK_EQ_I(arbint_sqr(factor, factor), ARBINT_OK);
+
+  for (iter = 0; iter < 20; ++iter) {
+    seed = seed * 1103515245u + 12345u;
+    uint32_t av = ((seed >> 16) % 1000u) + 1u;
+    seed = seed * 1103515245u + 12345u;
+    uint32_t bv = ((seed >> 16) % 1000u) + 1u;
+
+    /*  a = av * factor, b = bv * factor.  */
+    CHECK_EQ_I(arbint_mul_u32(a, factor, av), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul_u32(b, factor, bv), ARBINT_OK);
+
+    CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+
+    /*  gcd should divide both.  */
+    CHECK_EQ_I(arbint_tdiv_r(r, a, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+    CHECK_EQ_I(arbint_tdiv_r(r, b, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+
+    /*  gcd(av * factor, bv * factor) >= factor (since factor divides both).  */
+    CHECK(arbint_cmpabs(g, factor) >= 0);
+  }
+
+  arbint_clear(r);
+  arbint_clear(g);
+  arbint_clear(factor);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  LCM u32 aliasing: l = a case.  */
+static void test_lcm_u32_aliasing(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_set_u32(a, 4u), ARBINT_OK);
+  CHECK_EQ_I(arbint_lcm_u32(a, a, 6u), ARBINT_OK);
+  check_u32_value(a, 12u);
+
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  GCD u32 aliasing: g = a case.  */
+static void test_gcd_u32_aliasing(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_set_u32(a, 48u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd_u32(a, a, 18u), ARBINT_OK);
+  check_u32_value(a, 6u);
+
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Edge case: gcd(1, n) = 1 and gcd(n, 1) = 1.  */
+static void test_gcd_with_one(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+
+  /*  Small case.  */
+  CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(b, 123456789u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  CHECK_EQ_I(arbint_gcd(g, b, a), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  Large multi-limb case.  */
+  CHECK_EQ_I(arbint_set_u32(b, 2u), ARBINT_OK);
+  for (int i = 0; i < 10; ++i)
+    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK);  /* b = 2^1024 */
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Perfect powers: gcd(n^k, n^m) = n^min(k,m).  */
+static void test_gcd_perfect_powers(void) {
+  arbint_ctx_t ctx;
+  arbint_t n2, n3, n5, g;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n2, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n3, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n5, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+
+  /*  n = 7: compute 7^2, 7^3, 7^5.  */
+  CHECK_EQ_I(arbint_set_u32(n2, 49u), ARBINT_OK);    /* 7^2 = 49 */
+  CHECK_EQ_I(arbint_set_u32(n3, 343u), ARBINT_OK);   /* 7^3 = 343 */
+  CHECK_EQ_I(arbint_set_u32(n5, 16807u), ARBINT_OK); /* 7^5 = 16807 */
+
+  /*  gcd(7^2, 7^3) = 7^2.  */
+  CHECK_EQ_I(arbint_gcd(g, n2, n3), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, n2), 0);
+
+  /*  gcd(7^3, 7^5) = 7^3.  */
+  CHECK_EQ_I(arbint_gcd(g, n3, n5), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, n3), 0);
+
+  /*  gcd(7^2, 7^5) = 7^2.  */
+  CHECK_EQ_I(arbint_gcd(g, n2, n5), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, n2), 0);
+
+  arbint_clear(g);
+  arbint_clear(n5);
+  arbint_clear(n3);
+  arbint_clear(n2);
+  arbint_ctx_clear(&ctx);
+}
+
 /*  Main entry point.  */
 
 int main(void) {
+  /*  Basic functionality.  */
   test_gcd_basic();
   test_gcd_zeros();
   test_gcd_negative();
   test_gcd_symmetry();
   test_gcd_aliasing();
   test_gcd_u32();
+  test_gcd_u32_aliasing();
+  test_gcd_with_one();
+
+  /*  LCM functionality.  */
   test_lcm_basic();
   test_lcm_zeros();
   test_lcm_negative();
   test_lcm_aliasing();
   test_lcm_u32();
+  test_lcm_u32_aliasing();
+
+  /*  Multi-limb tests.  */
   test_gcd_powers_of_two();
   test_gcd_shared_factors();
+  test_gcd_perfect_powers();
+
+  /*  Mathematical properties.  */
   test_gcd_divisibility();
   test_gcd_lcm_identity();
   test_lcm_exactness();
+  test_gcd_scaling();
+  test_gcd_primes();
+
+  /*  Algorithm-specific tests.  */
   test_gcd_size_disparate();
   test_gcd_large_binary();
   test_gcd_binary_mod_opt();
+  test_gcd_threshold_boundary();
+  test_gcd_fibonacci();
+  test_gcd_consecutive();
+
+  /*  Edge cases and validation.  */
   test_gcd_normalization();
   test_gcd_large_single_limb();
   test_gcd_null_pointers();
+
+  /*  Stochastic tests.  */
+  test_gcd_stochastic();
+  test_lcm_stochastic();
+  test_gcd_large_stochastic();
 
   ARBINT_TEST_FINISH("test_gcd");
 }
