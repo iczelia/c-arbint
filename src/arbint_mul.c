@@ -160,7 +160,7 @@ static void arbint_init_addmul_dispatch(void) {
     CRITICAL: Check ordering matters! The condition (an > SIZE_MAX - bn - 1u)
     relies on the previous check (bn > SIZE_MAX - 1u) having succeeded to avoid
     underflow. If bn == SIZE_MAX, then SIZE_MAX - bn == 0, and SIZE_MAX - bn -
-   1u would underflow to SIZE_MAX, making the check pass incorrectly. The prior
+    1u would underflow to SIZE_MAX, making the check pass incorrectly. The prior
     check catches bn >= SIZE_MAX, so this is safe.
 
     Parameters:
@@ -175,7 +175,7 @@ static void arbint_init_addmul_dispatch(void) {
 
     Overflow conditions detected:
       - out == NULL
-      - bn > SIZE_MAX - 1
+      - bn > SIZE_MAX - 1u
       - an > SIZE_MAX - bn - 1 (i.e., an + bn + 1 would overflow)  */
 int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
   if (out == NULL)

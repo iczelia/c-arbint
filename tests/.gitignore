@@ -17,6 +17,7 @@ test_addmul
 test_pow
 test_div_pow2
 test_divisible
+test_ntt
 compute_pi
 compute_e
 compute_bitops

@@ -83,6 +83,12 @@ size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
 #define ARBINT_KARATSUBA_THRESHOLD 15u
 #define ARBINT_TOOM3_THRESHOLD 20u
 
+/*  NTT multiplication threshold (limb counts).
+    NTT provides O(n log n) complexity vs Toom-3's O(n^1.465).
+    Below this threshold, Toom-3 is faster due to NTT overhead.
+    Dispatch condition: bn >= THRESH && an <= 2*bn (bn is smaller operand).  */
+#define ARBINT_NTT_THRESHOLD 1024u
+
 /*  Squaring thresholds (limb counts).
     Squaring exploits symmetry, so Karatsuba may be beneficial at smaller sizes
     than for general multiplication. Toom-3 squaring is simpler than Toom-3

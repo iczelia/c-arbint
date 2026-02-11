@@ -23,13 +23,14 @@ ARBINT_CORE_SOURCES = \
   arbint_div.c arbint_tdiv.c arbint_fdiv.c arbint_cdiv.c \
   arbint_iex.c arbint_cpu.c arbint_mul.c \
   arbint_mul_generic.c arbint_div_generic.c arbint_bitops.c \
-  arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c
+  arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c \
+  arbint_ntt.c arbint_ntt_generic.c
 
 noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
   arbint_div.h arbint_iex.h arbint_cpu.h arbint_mul.h \
   arbint_mul_core.inc arbint_bitops.h arbint_shift.h arbint_random.h \
-  arbint_hash.h
+  arbint_hash.h arbint_ntt.h
 
 # Platform-specific sources: distributed but compiled only via custom rules
 # (not EXTRA_*_SOURCES, which triggers broken automake 1.18 auto-rules).
@@ -38,7 +39,8 @@ EXTRA_DIST = \
   arbint_bitops_popcnt.c arbint_random_getentropy.c \
   arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c \
   arbint_hash_shani.c arbint_hash_sha2_neon.c \
-  arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c
+  arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c \
+  arbint_ntt_avx2.c
 
 # -----------------------------------------------------------------------
 #  Emscripten: bypass libtool's broken link mode.
@@ -68,7 +70,11 @@ libarbint_objs_la_LIBADD += libarbint_objs_la-arbint_random_getentropy.lo
 endif
 
 libarbint_objs_la-arbint_random_getentropy.lo: arbint_random_getentropy.c
-	$(ARBINT_LTCOMPILE_EMCC) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE_EMCC) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_objs_la-arbint_random_getentropy.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_objs_la-arbint_random_getentropy.Tpo \
+	  $(DEPDIR)/libarbint_objs_la-arbint_random_getentropy.Plo
 
 # Link the convenience archive into a wasm side module directly with emcc,
 # bypassing libtool's broken --mode=link for emscripten.
@@ -86,6 +92,10 @@ install-exec-local: libarbint.wasm
 
 uninstall-local:
 	-rm -f '$(DESTDIR)$(libdir)/libarbint.wasm'
+
+if AMDEP
+-include $(DEPDIR)/libarbint_objs_la-arbint_random_getentropy.Plo
+endif
 
 else
 # -----------------------------------------------------------------------
@@ -108,7 +118,7 @@ libarbint_la_LIBADD += libarbint_la-arbint_mul_bmi2.lo libarbint_la-arbint_div_b
 endif
 
 if ARBINT_BUILD_AVX2
-libarbint_la_LIBADD += libarbint_la-arbint_addsub_avx2.lo
+libarbint_la_LIBADD += libarbint_la-arbint_addsub_avx2.lo libarbint_la-arbint_ntt_avx2.lo
 endif
 
 if ARBINT_BUILD_POPCNT
@@ -148,39 +158,110 @@ libarbint_la_LIBADD += libarbint_la-arbint_hash_crc32c_neon.lo
 endif
 
 libarbint_la-arbint_mul_bmi2.lo: arbint_mul_bmi2.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_mul_bmi2.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_mul_bmi2.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_mul_bmi2.Plo
 
 libarbint_la-arbint_div_bmi2.lo: arbint_div_bmi2.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_BMI2_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_div_bmi2.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_div_bmi2.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_div_bmi2.Plo
 
 libarbint_la-arbint_addsub_avx2.lo: arbint_addsub_avx2.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_AVX2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_AVX2_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_addsub_avx2.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_addsub_avx2.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_addsub_avx2.Plo
+
+libarbint_la-arbint_ntt_avx2.lo: arbint_ntt_avx2.c
+	$(ARBINT_LTCOMPILE) $(ARBINT_AVX2_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_ntt_avx2.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_ntt_avx2.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_ntt_avx2.Plo
 
 libarbint_la-arbint_bitops_popcnt.lo: arbint_bitops_popcnt.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_POPCNT_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_POPCNT_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_bitops_popcnt.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_bitops_popcnt.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_bitops_popcnt.Plo
 
 libarbint_la-arbint_random_getentropy.lo: arbint_random_getentropy.c
-	$(ARBINT_LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_random_getentropy.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_random_getentropy.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_random_getentropy.Plo
 
 libarbint_la-arbint_random_urandom.lo: arbint_random_urandom.c
-	$(ARBINT_LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_random_urandom.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_random_urandom.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_random_urandom.Plo
 
 libarbint_la-arbint_random_winapi.lo: arbint_random_winapi.c
-	$(ARBINT_LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_random_winapi.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_random_winapi.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_random_winapi.Plo
 
 libarbint_la-arbint_random_arc4.lo: arbint_random_arc4.c
-	$(ARBINT_LTCOMPILE) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_random_arc4.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_random_arc4.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_random_arc4.Plo
 
 libarbint_la-arbint_hash_shani.lo: arbint_hash_shani.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_SHA_NI_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_SHA_NI_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_hash_shani.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_hash_shani.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_hash_shani.Plo
 
 libarbint_la-arbint_hash_crc32c_sse42.lo: arbint_hash_crc32c_sse42.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_SSE42_CRC32_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_SSE42_CRC32_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_hash_crc32c_sse42.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_hash_crc32c_sse42.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_hash_crc32c_sse42.Plo
 
 libarbint_la-arbint_hash_sha2_neon.lo: arbint_hash_sha2_neon.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_ARM_SHA2_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_ARM_SHA2_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_hash_sha2_neon.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_hash_sha2_neon.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_hash_sha2_neon.Plo
 
 libarbint_la-arbint_hash_crc32c_neon.lo: arbint_hash_crc32c_neon.c
-	$(ARBINT_LTCOMPILE) $(ARBINT_ARM_CRC32C_CFLAGS) -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$<
+	$(ARBINT_LTCOMPILE) $(ARBINT_ARM_CRC32C_CFLAGS) -MT $@ -MD -MP \
+	  -MF $(DEPDIR)/libarbint_la-arbint_hash_crc32c_neon.Tpo \
+	  -c -o $@ `test -f '$<' || echo '$(srcdir)/'`$< && \
+	mv -f $(DEPDIR)/libarbint_la-arbint_hash_crc32c_neon.Tpo \
+	  $(DEPDIR)/libarbint_la-arbint_hash_crc32c_neon.Plo
+
+if AMDEP
+-include $(DEPDIR)/libarbint_la-arbint_mul_bmi2.Plo
+-include $(DEPDIR)/libarbint_la-arbint_div_bmi2.Plo
+-include $(DEPDIR)/libarbint_la-arbint_addsub_avx2.Plo
+-include $(DEPDIR)/libarbint_la-arbint_ntt_avx2.Plo
+-include $(DEPDIR)/libarbint_la-arbint_bitops_popcnt.Plo
+-include $(DEPDIR)/libarbint_la-arbint_random_getentropy.Plo
+-include $(DEPDIR)/libarbint_la-arbint_random_urandom.Plo
+-include $(DEPDIR)/libarbint_la-arbint_random_winapi.Plo
+-include $(DEPDIR)/libarbint_la-arbint_random_arc4.Plo
+-include $(DEPDIR)/libarbint_la-arbint_hash_shani.Plo
+-include $(DEPDIR)/libarbint_la-arbint_hash_crc32c_sse42.Plo
+-include $(DEPDIR)/libarbint_la-arbint_hash_sha2_neon.Plo
+-include $(DEPDIR)/libarbint_la-arbint_hash_crc32c_neon.Plo
+endif
 
 endif

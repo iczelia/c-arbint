@@ -38,6 +38,7 @@ check_PROGRAMS = \
   test_isqrt \
   test_toom3 \
   test_addmul \
+  test_ntt \
   compute_pi \
   compute_e \
   compute_bitops
@@ -54,6 +55,19 @@ LDADD = $(top_builddir)/src/libarbint.wasm
 else
 LDADD = $(top_builddir)/src/libarbint.la
 endif
+
+# Standalone subdir builds (make -C tests ...) must refresh src first.
+# Use a FORCE-driven rule on the linked library path so src is checked every
+# time, but test binaries are relinked only if the library actually changed.
+.PHONY: FORCE
+if ARBINT_HOST_EMSCRIPTEN
+$(top_builddir)/src/libarbint.wasm: FORCE
+	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src libarbint.wasm
+else
+$(top_builddir)/src/libarbint.la: FORCE
+	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src libarbint.la
+endif
+FORCE:
 
 # Emscripten: libtool wrappers cannot exec wasm binaries directly.
 # Copy the side module into .libs/ so the emscripten runtime can find it,

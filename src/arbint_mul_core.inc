@@ -1003,6 +1003,13 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
     return ARBINT_OK;
   }
 
+  /*  NTT for very large balanced operands.
+      bn is the smaller operand (swap above guarantees an >= bn).
+      Ratio check: an <= 2*bn ensures reasonably balanced operands.
+      For highly unbalanced products, Toom-3 with unbalanced splitting is better.  */
+  if (bn >= ARBINT_NTT_THRESHOLD && an <= 2u * bn)
+    return arbint_mul_mag_ntt(dst, out_used, a, an, b, bn, alloc);
+
   /*  Toom-Cook-3 for large balanced operands (an <= 3*bn).
       Use subtraction form to avoid both division and multiplication overflow:
       an >= bn is guaranteed by the swap above, so an - bn >= 0.
