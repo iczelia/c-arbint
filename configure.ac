@@ -252,28 +252,37 @@ AS_IF([test "x$arbint_host_has_cpuid" = "xyes"], [
 AC_DEFINE_UNQUOTED([HAS_CPUID], [$arbint_has_cpuid],
   [Define to 1 if x86 CPUID is assumed available on the configured target.])
 
-ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
-  [BMI2 intrinsics], [arbint_cv_have_bmi2_plain], [arbint_cv_have_bmi2_mbmi2_v2],
-  [-mbmi2],
-  [[
+dnl BMI2 is only enabled on 64-bit platforms because our BMI2-optimized code
+dnl uses _mulx_u64 which is not available on 32-bit targets.
+AS_IF([test "$ac_cv_sizeof_void_p" = "8"], [
+  ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
+    [BMI2 intrinsics], [arbint_cv_have_bmi2_plain], [arbint_cv_have_bmi2_mbmi2_v2],
+    [-mbmi2],
+    [[
 #include <immintrin.h>
-  ]],
-  [[
-unsigned int x = _pdep_u32((unsigned int) 3u, (unsigned int) 5u);
-return (int) x;
-  ]],
-  [HAS_BMI2], [HAS_BMI2_ALWAYS],
-  [Define to 1 if BMI2 intrinsics are available (with or without -mbmi2).],
-  [Define to 1 if BMI2 intrinsics are available globally.]
-)
+    ]],
+    [[
+unsigned long long hi = 0;
+unsigned long long lo = _mulx_u64(3ULL, 5ULL, &hi);
+return (int)(lo + hi);
+    ]],
+    [HAS_BMI2], [HAS_BMI2_ALWAYS],
+    [Define to 1 if BMI2 intrinsics are available (with or without -mbmi2).],
+    [Define to 1 if BMI2 intrinsics are available globally.]
+  )
 
-arbint_build_bmi2=no
-ARBINT_BMI2_CFLAGS=""
-AS_IF([test "x$arbint_cv_have_bmi2_plain" = "xyes"], [
-  arbint_build_bmi2=yes
-], [test "x$arbint_cv_have_bmi2_mbmi2_v2" = "xyes"], [
-  arbint_build_bmi2=yes
-  ARBINT_BMI2_CFLAGS="-mbmi2"
+  arbint_build_bmi2=no
+  ARBINT_BMI2_CFLAGS=""
+  AS_IF([test "x$arbint_cv_have_bmi2_plain" = "xyes"], [
+    arbint_build_bmi2=yes
+  ], [test "x$arbint_cv_have_bmi2_mbmi2_v2" = "xyes"], [
+    arbint_build_bmi2=yes
+    ARBINT_BMI2_CFLAGS="-mbmi2"
+  ])
+], [
+  dnl 32-bit: disable BMI2 (our code uses _mulx_u64)
+  arbint_build_bmi2=no
+  ARBINT_BMI2_CFLAGS=""
 ])
 AM_CONDITIONAL([ARBINT_BUILD_BMI2], [test "x$arbint_build_bmi2" = "xyes"])
 AC_SUBST([ARBINT_BMI2_CFLAGS])
