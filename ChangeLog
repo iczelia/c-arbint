@@ -1,3 +1,50 @@
+2026-02-11  Kamila Szewczyk  <k@iczelia.net>
+
+	* Version 0.0.3 released.
+
+	* src/arbint_fdiv.c: New file. Implement floor division variants
+	(arbint_fdiv_qr, arbint_fdiv_q, arbint_fdiv_r) with i32/u32 scalar
+	variants. Quotient rounds toward negative infinity.
+	* src/arbint_cdiv.c: New file. Implement ceiling division variants
+	(arbint_cdiv_qr, arbint_cdiv_q, arbint_cdiv_r) with i32/u32 scalar
+	variants. Quotient rounds toward positive infinity.
+
+	* src/arbint_mul.c: Add fused multiply-accumulate operations
+	(arbint_addmul, arbint_submul, arbint_addmul_u32, arbint_addmul_i32,
+	arbint_submul_u32, arbint_submul_i32). Fused schoolbook loop for
+	small operands avoids temporary allocation.
+	* src/arbint_mul.c: Add modular exponentiation arbint_pow_u32u32_tmod
+	with precomputed Barrett reduction for efficiency.
+
+	* src/arbint_tdiv.c: Add divisibility testing (arbint_divisible,
+	arbint_divisible_u32) with Barrett reduction for scalar divisors.
+	Power-of-two divisibility checked in O(1) via trailing zero bits.
+	* src/arbint_div.c: Add power-of-two division fast paths. Division
+	by 2^k uses shifts/masks instead of full division algorithm. Applies
+	to all division modes (truncated, floor, ceiling).
+
+	* src/arbint_div.c, src/arbint_div.h: New files. Core multi-limb
+	division (Knuth Algorithm D) factored out of arbint_tdiv.c.
+	* src/arbint_div_generic.c: New file. Portable Knuth Algorithm D.
+	* src/arbint_div_bmi2.c: New file. BMI2-optimized Knuth Algorithm D.
+
+	* src/arbint_mul_generic.c, src/arbint_mul_bmi2.c: Add Toom-3
+	squaring path to multiplication core.
+	* src/arbint_mul.h: Retune thresholds based on benchmarking:
+	Karatsuba mul 15 (was 32), Toom-3 mul 20 (was 96), Karatsuba sqr 10
+	(was 24), Toom-3 sqr 18 (was 80).
+
+	* tools/tune_thresholds.c: Use arbint_urandomb for random operand
+	generation instead of deterministic squaring. Read threshold values
+	from arbint_mul.h via stringify macros.
+	* Makefile.am: tools/ no longer built by default; use 'make tools'.
+
+	* man/c-arbint.3: Reorganize for clarity. Document divisibility
+	testing, floor/ceiling division, fused multiply-accumulate.
+
+	* include/arbint.h: Add ~24 new API functions for division variants,
+	fused multiply-accumulate, divisibility testing, modular exponentiation.
+
 2026-02-10  Kamila Szewczyk  <k@iczelia.net>
 
 	* Version 0.0.2 released.

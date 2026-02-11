@@ -1,3 +1,77 @@
+c-arbint 0.0.3 (2026-02-11)
+===========================
+
+Third development release. Adds floor/ceiling division variants, fused
+multiply-accumulate operations, modular exponentiation, power-of-two division
+fast paths, divisibility testing, and Toom-3 squaring. Reorganizes internal
+division code for maintainability.
+
+New Features
+------------
+- Floor division (arbint_fdiv_*):
+  * arbint_fdiv_qr, arbint_fdiv_q, arbint_fdiv_r: quotient rounds toward -inf
+  * arbint_fdiv_qr_u32, arbint_fdiv_q_u32, arbint_fdiv_r_u32: 32-bit divisor
+  * arbint_fdiv_qr_i32, arbint_fdiv_q_i32, arbint_fdiv_r_i32: signed 32-bit
+
+- Ceiling division (arbint_cdiv_*):
+  * arbint_cdiv_qr, arbint_cdiv_q, arbint_cdiv_r: quotient rounds toward +inf
+  * arbint_cdiv_qr_u32, arbint_cdiv_q_u32, arbint_cdiv_r_u32: 32-bit divisor
+  * arbint_cdiv_qr_i32, arbint_cdiv_q_i32, arbint_cdiv_r_i32: signed 32-bit
+
+- Fused multiply-accumulate:
+  * arbint_addmul: a += b * c (fused schoolbook for small operands)
+  * arbint_submul: a -= b * c
+  * arbint_addmul_u32, arbint_addmul_i32: scalar variants
+  * arbint_submul_u32, arbint_submul_i32: scalar variants
+
+- Modular exponentiation:
+  * arbint_pow_u32u32_tmod: base^exp mod m with precomputed Barrett reduction
+
+- Divisibility testing:
+  * arbint_divisible: test if d divides n exactly
+  * arbint_divisible_u32: 32-bit divisor variant with Barrett reduction
+
+- Power-of-two division fast paths:
+  * Division by 2^k now uses shifts/masks instead of full division
+  * Applies to all division modes (truncated, floor, ceiling)
+  * Handles both single-limb and multi-limb power-of-two divisors
+
+Performance Optimizations
+-------------------------
+- Toom-3 squaring: dedicated squaring path in Toom-Cook 3-way algorithm
+- Threshold tuning tool (tools/tune_thresholds) for multiplication/squaring
+- Thresholds retuned based on benchmarking:
+  * Karatsuba multiplication: 15 limbs (was 32)
+  * Toom-3 multiplication: 20 limbs (was 96)
+  * Karatsuba squaring: 10 limbs (was 24)
+  * Toom-3 squaring: 18 limbs (was 80)
+
+Build System
+------------
+- tools/ directory no longer built by default; use 'make tools' explicitly
+- tune_thresholds now uses arbint_urandomb for random operand generation
+
+Code Organization
+-----------------
+- Division code reorganized into separate modules:
+  * arbint_div.c: core multi-limb division (Knuth Algorithm D)
+  * arbint_div_generic.c: portable implementation
+  * arbint_div_bmi2.c: BMI2-optimized implementation
+  * arbint_tdiv.c: truncated division wrappers
+  * arbint_fdiv.c: floor division wrappers
+  * arbint_cdiv.c: ceiling division wrappers
+
+Documentation
+-------------
+- Man page reorganized for clarity
+- New sections for divisibility testing and all division variants
+
+Known Limitations
+-----------------
+- String conversion (arbint_set_str, arbint_get_str) not yet implemented
+- Number-theoretic functions declared but not yet implemented
+
+
 c-arbint 0.0.2 (2026-02-10)
 ===========================
 
