@@ -36,6 +36,7 @@ check_PROGRAMS = \
   test_bitops \
   test_pow \
   test_isqrt \
+  test_root \
   test_toom3 \
   test_addmul \
   test_ntt \

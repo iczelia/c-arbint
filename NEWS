@@ -1,3 +1,27 @@
+c-arbint 0.0.4 (2026-02-11)
+===========================
+
+Fourth development release. Adds integer k-th root computation and
+combinatorial functions (factorial, binomial, Fibonacci, Lucas).
+
+New Features
+------------
+- Integer k-th root (arbint_root):
+  * Compute floor(a^(1/k)) for arbitrary positive k
+  * Newton's method with quadratic convergence
+  * Delegates to arbint_isqrt for k=2
+  * Initial guess from bit count ensures convergence from above
+
+- Combinatorial functions:
+  * arbint_fac_u32: factorial using binary splitting O(n log^2 n)
+  * arbint_bin_u32u32: binomial coefficient with GCD reduction
+  * arbint_fib_u32: Fibonacci via fast doubling O(log n)
+  * arbint_lucas_u32: Lucas numbers via fast doubling O(log n)
+
+- Internal optimization:
+  * Fast division by 3 using Barrett constants (for root iteration)
+
+
 c-arbint 0.0.3 (2026-02-11)
 ===========================
 

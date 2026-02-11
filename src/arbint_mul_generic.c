@@ -183,6 +183,63 @@ static size_t arbint_divexact3_generic(arbint_limb_t * x, size_t n) {
 
 #include "arbint_mul_core.inc"
 
+/*  Fast truncated quotient by 3 using fixed Barrett constants.
+    Computes q = trunc(n / 3) and discards the remainder.
+    Supports aliasing (q may be n).  */
+arbint_err_t arbint_tdiv_q_3_generic(arbint_t q, const arbint_t n) {
+  const arbint_limb_t * np;
+  size_t nn;
+  size_t i;
+  size_t q_used;
+  int nsign;
+  arbint_limb_t rem;
+  arbint_err_t rc;
+
+#if ARBINT_LIMB_BITS == 64
+  static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
+  static const arbint_limb_t di = UINT64_C(0x5555555555555555);
+  static const unsigned shift = 62u;
+#elif ARBINT_LIMB_BITS == 32
+  static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
+  static const arbint_limb_t di = UINT32_C(0x55555555);
+  static const unsigned shift = 30u;
+#else
+  #error "Unsupported ARBINT_LIMB_BITS for div3"
+#endif
+
+  if (q == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  nsign = (n[0]._sz > 0) - (n[0]._sz < 0);
+  if (nsign == 0) {
+    arbint_zero(q);
+    return ARBINT_OK;
+  }
+
+  nn = arbint_abs_sz(n[0]._sz);
+  rc = arbint_resize(q, nn);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  np = ARBINT_CLIMBS(n);
+  rem = np[nn - 1u] >> (ARBINT_LIMB_BITS - shift);
+
+  for (i = nn; i != 0u; --i) {
+    arbint_limb_t nl = np[i - 1u] << shift;
+    arbint_limb_t qi;
+    if (i >= 2u)
+      nl |= np[i - 2u] >> (ARBINT_LIMB_BITS - shift);
+
+    arbint_div3_barrett(&qi, &rem, rem, nl, d_norm, di);
+    ARBINT_LIMBS(q)[i - 1u] = qi;
+  }
+
+  q_used = arbint_norm_used(ARBINT_LIMBS(q), nn);
+  if (!arbint_set_signed_sz(q, q_used, (q_used == 0u) ? 0 : nsign))
+    return ARBINT_EOVERFLOW;
+  return ARBINT_OK;
+}
+
 /*  Exported wrappers for internal functions used by addmul/submul.  */
 
 arbint_err_t arbint_mul_mag_generic(arbint_limb_t * dst, size_t * out_used,

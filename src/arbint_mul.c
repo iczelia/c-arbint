@@ -46,6 +46,8 @@ typedef size_t (*arbint_mulacc_1_fn_t)(arbint_limb_t * dst, size_t dst_n,
                                        size_t dst_cap, const arbint_limb_t * a,
                                        size_t an, arbint_limb_t b);
 
+typedef arbint_err_t (*arbint_tdiv_q_3_fn_t)(arbint_t q, const arbint_t n);
+
 /*  Select optimal single-limb multiplication implementation.
     Prefers BMI2 when available for faster wide multiply.  */
 static arbint_mul_limb_1_fn_t arbint_select_mul_limb_1(void) {
@@ -124,6 +126,20 @@ static arbint_mulacc_1_fn_t arbint_select_mulacc_1(void) {
              : arbint_mulacc_1_generic;
 #else
   return arbint_mulacc_1_generic;
+#endif /* HAS_BMI2_ALWAYS */
+}
+
+/*  Select optimal /3 truncated quotient implementation.
+    Prefers BMI2 when available for faster wide multiply in Barrett step.  */
+static arbint_tdiv_q_3_fn_t arbint_select_tdiv_q_3(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_tdiv_q_3_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_tdiv_q_3_bmi2
+             : arbint_tdiv_q_3_generic;
+#else
+  return arbint_tdiv_q_3_generic;
 #endif /* HAS_BMI2_ALWAYS */
 }
 
@@ -228,6 +244,16 @@ static unsigned arbint_ctz32(uint32_t v) {
     return n;
   }
 #endif /* ARBINT_COMPILER_GNU_CLANG */
+}
+
+/*  Dispatch /3 truncated quotient to platform-specific implementation.  */
+static arbint_err_t arbint_tdiv_q_3(arbint_t q, const arbint_t n) {
+  static arbint_tdiv_q_3_fn_t impl = NULL;
+
+  if (impl == NULL)
+    impl = arbint_select_tdiv_q_3();
+
+  return impl(q, n);
 }
 
 /*  Multiply arbint by uint32_t (rop = a * b).
@@ -625,6 +651,192 @@ arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a) {
   rc = arbint_set(rop, x);
 
 cleanup:
+  arbint_clear(t);
+  arbint_clear(x);
+  return rc;
+}
+
+/*  Compute rop = floor(a^(1/k)) via integer Newton iteration.
+
+    General Newton iteration for k-th root of a positive number:
+      x_{n+1} = floor(((k-1)*x_n + floor(a / x_n^(k-1))) / k)
+
+    Converges quadratically from above when starting with x_0 >= a^(1/k).
+    Terminates when x_{n+1} >= x_n, at which point x_n is the answer.
+
+    Initial guess: x_0 = 1 << ceil(nbits(a) / k), which is always
+    >= floor(a^(1/k)).
+
+    Special cases:
+      - k=0: EDOM (undefined)
+      - k=1: rop = a (trivial)
+      - k=2: delegates to arbint_isqrt for efficiency
+      - a=0: rop = 0
+      - a=1: rop = 1
+      - a<0: EDOM (API specifies a >= 0)
+
+    Aliasing: rop may alias a. We work in temporaries and assign at the end.  */
+arbint_err_t arbint_root(arbint_t rop, const arbint_t a, uint32_t k) {
+  arbint_ctx_t * ctx;
+  arbint_t x, t, xk1;
+  arbint_err_t rc;
+  size_t nbits;
+  size_t shift;
+
+  /*  Input validation.  */
+  if (rop == NULL || a == NULL)
+    return ARBINT_EINVAL;
+
+  if (k == 0u)
+    return ARBINT_EDOM;
+
+  if (a[0]._sz < 0)
+    return ARBINT_EDOM;
+
+  /*  Trivial case: k=1 means rop = a.  */
+  if (k == 1u)
+    return arbint_set(rop, a);
+
+  /*  Delegate k=2 to the optimized square root.  */
+  if (k == 2u)
+    return arbint_isqrt(rop, a);
+
+  /*  root_k(0) = 0 for any k > 0.  */
+  if (a[0]._sz == 0) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+
+  /*  root_k(1) = 1 for any k > 0.  */
+  if (arbint_is_one(a))
+    return arbint_set_i32(rop, 1);
+
+  /*  Select context for temporaries.  */
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = a[0]._ctx;
+
+  /*  Initialize temporaries.  */
+  rc = arbint_init(x, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_init(t, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(x);
+    return rc;
+  }
+
+  rc = arbint_init(xk1, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(t);
+    arbint_clear(x);
+    return rc;
+  }
+
+  /*  Initial guess: x = 1 << ceil(nbits(a) / k).
+      Overflow-safe computation of ceil(nbits / k).  */
+  nbits = arbint_nbits(a);
+  if (nbits > SIZE_MAX - (size_t)(k - 1u)) {
+    /*  nbits + k - 1 would overflow; compute manually.  */
+    shift = nbits / (size_t) k;
+    if (nbits % (size_t) k != 0u)
+      shift += 1u;
+  } else {
+    shift = (nbits + (size_t)(k - 1u)) / (size_t) k;
+  }
+
+  if (shift > (size_t) UINT32_MAX) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  rc = arbint_set_i32(x, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_shl(x, x, (uint32_t) shift);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Newton iteration loop.
+      - k=3 specialized path:
+          t = floor((2*x + floor(a / x^2)) / 3)
+        Uses squaring and u32-division by 3 fast path.
+      - k=4 specialized path:
+          t = floor((3*x + floor(a / x^3)) / 4)
+        Uses final division by 4 via right shift by 2.
+      - generic path:
+          t = floor(((k-1)*x + floor(a / x^(k-1))) / k)
+      Terminate when t >= x.  */
+  for (;;) {
+    if (k == 3u) {
+      /*  Compute x^2.  */
+      rc = arbint_sqr(xk1, x);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  Compute floor(a / x^2).  */
+      rc = arbint_tdiv_q(t, a, xk1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  Compute 2*x and reuse xk1.  */
+      rc = arbint_shl(xk1, x, 1u);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  t = 2*x + floor(a / x^2).  */
+      rc = arbint_add(t, t, xk1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  t = floor(t / 3), specialized fixed-divisor Barrett path.  */
+      rc = arbint_tdiv_q_3(t, t);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    } else {
+      /*  Compute x^(k-1).  */
+      rc = arbint_pow_u32(xk1, x, k - 1u);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  Compute floor(a / x^(k-1)).  */
+      rc = arbint_tdiv_q(t, a, xk1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  Compute (k-1) * x and reuse xk1.  */
+      rc = arbint_mul_u32(xk1, x, k - 1u);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  t = (k-1)*x + floor(a / x^(k-1)).  */
+      rc = arbint_add(t, t, xk1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  t = floor(t / k).  */
+      rc = arbint_tdiv_q_u32(t, t, k);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+
+    /*  Check termination: if t >= x, we have converged.  */
+    if (arbint_cmp(t, x) >= 0)
+      break;
+
+    /*  Update x = t for next iteration.  */
+    rc = arbint_set(x, t);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /*  Store the result.  */
+  rc = arbint_set(rop, x);
+
+cleanup:
+  arbint_clear(xk1);
   arbint_clear(t);
   arbint_clear(x);
   return rc;

@@ -20,6 +20,7 @@ test_divisible
 test_gcd
 test_combin
 test_ntt
+test_root
 compute_pi
 compute_e
 compute_bitops

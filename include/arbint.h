@@ -20,7 +20,7 @@
       - arbint_moebius, arbint_totient, arbint_carmichael,
       - arbint_xgcd, arbint_legendre, arbint_jacobi,
       - arbint_kronecker, arbint_removefactor_u32,
-      - arbint_is_power, arbint_root, arbint_isprime,
+      - arbint_is_power, arbint_isprime,
       - arbint_nextprime, arbint_prevprime, arbint_inv_mod,
       - arbint_inv_mod_u32  */
 

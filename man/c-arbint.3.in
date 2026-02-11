@@ -418,7 +418,7 @@ may alias
 .IR base .
 .RE
 .\" -------------------------------------------------------------------------
-.SS Integer Square Root
+.SS Integer Roots
 .\" -------------------------------------------------------------------------
 .PP
 .BI "arbint_err_t arbint_isqrt(arbint_t " rop ", const arbint_t " a ")"
@@ -435,6 +435,34 @@ is negative.
 may alias
 .IR a .
 Uses Newton's method with quadratic convergence.
+.RE
+.PP
+.BI "arbint_err_t arbint_root(arbint_t " rop ", const arbint_t " a ", uint32_t " k ")"
+.RS 4
+.PP
+Compute the integer
+.IR k "-th root:"
+.IR rop " = floor(" a "^(1/" k "))."
+Returns
+.B ARBINT_EDOM
+if
+.I k
+is zero or if
+.I a
+is negative.
+For
+.IR k "=2,"
+delegates to
+.BR arbint_isqrt ()
+for efficiency.
+For
+.IR k "=1,"
+simply copies
+.IR a .
+Uses generalized Newton iteration with quadratic convergence.
+.I rop
+may alias
+.IR a .
 .RE
 .\" -------------------------------------------------------------------------
 .SS Combinatorial Functions

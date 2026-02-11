@@ -56,6 +56,9 @@ size_t arbint_mulacc_generic(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                              const arbint_limb_t * a, size_t an,
                              const arbint_limb_t * c, size_t cn);
 
+/*  Fast truncated quotient by 3 (q = trunc(n/3)).  */
+arbint_err_t arbint_tdiv_q_3_generic(arbint_t q, const arbint_t n);
+
 #if HAS_BMI2
 arbint_err_t arbint_mul_impl_bmi2(arbint_t rop, const arbint_t a,
                                   const arbint_t b);
@@ -77,6 +80,8 @@ size_t arbint_mulacc_1_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
 size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                           const arbint_limb_t * a, size_t an,
                           const arbint_limb_t * c, size_t cn);
+
+arbint_err_t arbint_tdiv_q_3_bmi2(arbint_t q, const arbint_t n);
 #endif /* HAS_BMI2 */
 
 /*  Multiplication thresholds (limb counts).  */
