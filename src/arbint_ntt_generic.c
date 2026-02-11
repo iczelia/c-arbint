@@ -697,11 +697,11 @@ static void ntt_crt_combine(arbint_limb_t * dst, size_t * dst_used,
     /*  Add carry from previous coefficient.  */
     crt_wide_add(&coeff, &coeff, &carry);
 
-    /*  Extract limbs and compute new carry.  */
+    /*  Extract one output limb in the active limb radix and keep the
+        remaining high part as carry for the next coefficient.  */
 #if ARBINT_LIMB_BITS == 64
     dst[out_idx++] = (arbint_limb_t) crt_wide_divmod_base64(&coeff);
 #elif ARBINT_LIMB_BITS == 32
-    dst[out_idx++] = (arbint_limb_t) crt_wide_divmod_base32(&coeff);
     dst[out_idx++] = (arbint_limb_t) crt_wide_divmod_base32(&coeff);
 #endif
 
@@ -812,14 +812,7 @@ arbint_err_t arbint_mul_mag_ntt_generic(arbint_limb_t * dst, size_t * out_used,
 #if ARBINT_LIMB_BITS == 64
       work_a[i] = to_mont(a[i], mont);
 #elif ARBINT_LIMB_BITS == 32
-      /*  Combine two 32-bit limbs into one 64-bit value for NTT.  */
-      uint64_t limb_val = a[i];
-      if (i + 1u < an) {
-        /*  This packing is only valid if we adjust the convolution
-            interpretation. For now, treat 32-bit as 64-bit slots
-            with high 32 bits zero.  */
-      }
-      work_a[i] = to_mont(limb_val, mont);
+      work_a[i] = to_mont((uint64_t) a[i], mont);
 #endif
     }
     memset(&work_a[an], 0, (ntt_size - an) * sizeof(uint64_t));
