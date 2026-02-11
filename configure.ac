@@ -338,6 +338,15 @@ __m256i b = _mm256_add_epi64(a, a);
 AM_CONDITIONAL([ARBINT_BUILD_AVX2], [test "x$arbint_build_avx2" = "xyes"])
 AC_SUBST([ARBINT_AVX2_CFLAGS])
 
+dnl Combined AVX2+BMI2 flags for files that need both (e.g., arbint_ntt_avx2.c
+dnl uses AVX2 intrinsics for future vectorization and BMI2 _mulx_u64 for wide
+dnl multiplication). Only set when both features are available.
+ARBINT_AVX2_BMI2_CFLAGS=""
+AS_IF([test "x$arbint_build_avx2" = "xyes" && test "x$arbint_build_bmi2" = "xyes"], [
+  ARBINT_AVX2_BMI2_CFLAGS="$ARBINT_AVX2_CFLAGS $ARBINT_BMI2_CFLAGS"
+])
+AC_SUBST([ARBINT_AVX2_BMI2_CFLAGS])
+
 ARBINT_CHECK_X86_FEATURE_WITH_FLAG(
   [SHA-NI intrinsics], [arbint_cv_have_sha_ni_plain], [arbint_cv_have_sha_ni_msha],
   [-msha -msse4.1],

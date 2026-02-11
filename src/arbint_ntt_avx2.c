@@ -17,33 +17,37 @@
 
 /*  AVX2-optimized NTT multiplication.
 
-    Current implementation: thin wrapper around generic.
-    Future optimization: vectorize butterfly add/sub operations while keeping
-    Montgomery multiplication scalar (since AVX2 lacks efficient 64x64->128
-    multiply, unless...).
+    AVX2 implies BMI2 on all modern CPUs (Intel Haswell, AMD Zen and later),
+    so we use _mulx_u64 for fast 64x64->128 multiplication.
 
-    Optimization strategy (for future work):
+    Future optimization opportunities:
     1. Vectorize mod_add/mod_sub: 4 parallel 64-bit additions with conditional
        subtraction using _mm256_cmpgt_epi64 or unsigned comparison trick.
     2. Vectorize butterfly memory access: _mm256_loadu_si256 for loading
        4 elements at once.
-    3. Keep Montgomery multiply scalar: use BMI2 _mulx_u64 or half-limb method.
-    4. Consider cache-friendly 4-step FFT for very large transforms.  */
+    3. Consider cache-friendly 4-step FFT for very large transforms.  */
 
 #include "arbint_ntt.h"
 #include "config.h"
 
 #include <immintrin.h>
+#include <stdlib.h>
+#include <string.h>
 
-/*  For now, delegate to generic implementation.
-    The three-tier dispatch in arbint_ntt.c will select this function when
-    AVX2 is available, but currently it provides no speedup over generic.
+/* ========== Wide Multiplication ========== */
 
-    TODO: Implement vectorized butterflies for actual performance benefit.  */
-arbint_err_t arbint_mul_mag_ntt_avx2(arbint_limb_t * dst, size_t * out_used,
-                                     const arbint_limb_t * a, size_t an,
-                                     const arbint_limb_t * b, size_t bn,
-                                     const arbint_alloc_t * alloc) {
-  /*  Delegate to generic implementation for now.  */
-  return arbint_mul_mag_ntt_generic(dst, out_used, a, an, b, bn, alloc);
+/*  Multiply two 64-bit integers producing full 128-bit result (hi:lo = a * b).
+
+    Uses BMI2 _mulx_u64 intrinsic. AVX2 CPUs always have BMI2 support, so
+    this is safe to use unconditionally in AVX2-compiled code.  */
+static inline void ntt_umul(uint64_t * hi, uint64_t * lo, uint64_t a,
+                            uint64_t b) {
+  unsigned long long hi64 = 0ull;
+  unsigned long long lo64 =
+      _mulx_u64((unsigned long long) a, (unsigned long long) b, &hi64);
+  *lo = (uint64_t) lo64;
+  *hi = (uint64_t) hi64;
 }
+
+#define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_avx2
+#include "arbint_ntt_core.inc"

@@ -134,6 +134,13 @@ arbint_err_t arbint_mul_mag_ntt_generic(arbint_limb_t * dst, size_t * out_used,
                                         const arbint_limb_t * b, size_t bn,
                                         const arbint_alloc_t * alloc);
 
+#if HAS_BMI2
+arbint_err_t arbint_mul_mag_ntt_bmi2(arbint_limb_t * dst, size_t * out_used,
+                                     const arbint_limb_t * a, size_t an,
+                                     const arbint_limb_t * b, size_t bn,
+                                     const arbint_alloc_t * alloc);
+#endif
+
 #if HAS_AVX2
 arbint_err_t arbint_mul_mag_ntt_avx2(arbint_limb_t * dst, size_t * out_used,
                                      const arbint_limb_t * a, size_t an,

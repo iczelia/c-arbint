@@ -11,13 +11,16 @@
 #   3. Add the .c file to EXTRA_DIST in src/Makefile.am
 #   4. Run autoreconf -fi
 
-# BMI2 optimizations (x86-64 multiply/divide)
+# BMI2 optimizations (x86-64 multiply/divide/NTT)
 arbint_mul_bmi2             ARBINT_BUILD_BMI2       ARBINT_BMI2_CFLAGS
 arbint_div_bmi2             ARBINT_BUILD_BMI2       ARBINT_BMI2_CFLAGS
+arbint_ntt_bmi2             ARBINT_BUILD_BMI2       ARBINT_BMI2_CFLAGS
 
-# AVX2 SIMD (doubling, NTT butterflies)
+# AVX2 SIMD (doubling)
 arbint_addsub_avx2          ARBINT_BUILD_AVX2       ARBINT_AVX2_CFLAGS
-arbint_ntt_avx2             ARBINT_BUILD_AVX2       ARBINT_AVX2_CFLAGS
+
+# AVX2 + BMI2 combined (NTT uses AVX2 for future vectorization, BMI2 for _mulx_u64)
+arbint_ntt_avx2             ARBINT_BUILD_AVX2       ARBINT_AVX2_BMI2_CFLAGS
 
 # POPCNT instruction
 arbint_bitops_popcnt        ARBINT_BUILD_POPCNT     ARBINT_POPCNT_CFLAGS
