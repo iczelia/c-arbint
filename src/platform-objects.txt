@@ -1,0 +1,37 @@
+# Platform-specific object files for arbint
+#
+# Format: name condition [cflags]
+#   name      - base name without .c extension
+#   condition - automake conditional (ARBINT_BUILD_* or ARBINT_HAS_*)
+#   cflags    - optional CFLAGS variable for special compiler flags
+#
+# To add a new platform-specific file:
+#   1. Add a line here
+#   2. Add detection in configure.ac (AM_CONDITIONAL + optional AC_SUBST for flags)
+#   3. Add the .c file to EXTRA_DIST in src/Makefile.am
+#   4. Run autoreconf -fi
+
+# BMI2 optimizations (x86-64 multiply/divide)
+arbint_mul_bmi2             ARBINT_BUILD_BMI2       ARBINT_BMI2_CFLAGS
+arbint_div_bmi2             ARBINT_BUILD_BMI2       ARBINT_BMI2_CFLAGS
+
+# AVX2 SIMD (doubling, NTT butterflies)
+arbint_addsub_avx2          ARBINT_BUILD_AVX2       ARBINT_AVX2_CFLAGS
+arbint_ntt_avx2             ARBINT_BUILD_AVX2       ARBINT_AVX2_CFLAGS
+
+# POPCNT instruction
+arbint_bitops_popcnt        ARBINT_BUILD_POPCNT     ARBINT_POPCNT_CFLAGS
+
+# Entropy sources (no special flags needed)
+arbint_random_getentropy    ARBINT_HAS_GETENTROPY
+arbint_random_urandom       ARBINT_HAS_URANDOM
+arbint_random_winapi        ARBINT_HAS_WINAPI_ENTROPY
+arbint_random_arc4          ARBINT_HAS_ARC4RANDOM
+
+# Hash accelerators - x86
+arbint_hash_shani           ARBINT_BUILD_SHA_NI     ARBINT_SHA_NI_CFLAGS
+arbint_hash_crc32c_sse42    ARBINT_BUILD_SSE42_CRC32 ARBINT_SSE42_CRC32_CFLAGS
+
+# Hash accelerators - ARM
+arbint_hash_sha2_neon       ARBINT_BUILD_ARM_SHA2   ARBINT_ARM_SHA2_CFLAGS
+arbint_hash_crc32c_neon     ARBINT_BUILD_ARM_CRC32C ARBINT_ARM_CRC32C_CFLAGS
