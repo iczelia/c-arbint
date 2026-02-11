@@ -1109,8 +1109,8 @@ arbint_err_t arbint_or(arbint_t rop, const arbint_t a, const arbint_t b) {
 /*  Two's-complement bitwise XOR with 4-case sign decomposition.
 
     (+a) ^ (+b) = a ^ b                                 (positive)
-    (+a) ^ (-b) = -((a ^ (b-1)) + 1)                   (negative)
-    (-a) ^ (+b) = -(((a-1) ^ b) + 1)                   (negative)
+    (+a) ^ (-b) = -((a ^ (b-1)) + 1)                    (negative)
+    (-a) ^ (+b) = -(((a-1) ^ b) + 1)                    (negative)
     (-a) ^ (-b) = (a-1) ^ (b-1)                         (positive)  */
 arbint_err_t arbint_xor(arbint_t rop, const arbint_t a, const arbint_t b) {
   size_t an;

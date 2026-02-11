@@ -377,11 +377,6 @@ static void test_sqr_toom3_identity(void) {
 
   CHECK_EQ_I(arbint_sqr(sqr_result, a), ARBINT_OK);
 
-  /*  Expected: (B^n - 1)^2 = B^(2n) - 2*B^n + 1.
-      This equals: limb[0] = 1, limbs[1..n-1] = 0, limbs[n..2n-2] = MAX-1,
-                   limb[2n-1] = MAX.
-
-      Actually, let's just verify sqr == mul.  */
   CHECK_EQ_I(arbint_mul(expected, a, a), ARBINT_OK);
   CHECK(arbint_eq(sqr_result, expected));
 

@@ -49,24 +49,6 @@ static void build_large_value(arbint_t x, size_t target_limbs) {
   }
 }
 
-/*  Build a large value with all limbs set to max (B-1).
-    This maximizes coefficient growth to stress-test CRT reconstruction.
-    NOTE: Unused for now but kept for future carry torture tests.  */
-#if 0
-static void build_max_value(arbint_t x, size_t n_limbs, arbint_ctx_t * ctx) {
-  /*  Start with 2^64 - 1 = all 1s in one limb.  */
-  CHECK_EQ_I(arbint_set_u32(x, 0xFFFFFFFFu), ARBINT_OK);
-
-  /*  Build up by multiplying: (2^64 - 1) * (2^64 + 1) = 2^128 - 1, etc.
-      Actually, easier: shift left and add max.  */
-  for (size_t i = 1; i < n_limbs; ++i) {
-    CHECK_EQ_I(arbint_mul_u32(x, x, 0xFFFFFFFFu), ARBINT_OK);
-    CHECK_EQ_I(arbint_add_u32(x, x, 0xFFFFFFFFu), ARBINT_OK);
-  }
-  (void) ctx;
-}
-#endif
-
 /*  Test NTT multiplication at threshold boundary.
     Tests sizes just below, at, and just above the NTT threshold (1024 limbs).  */
 static void test_ntt_threshold_boundary(void) {

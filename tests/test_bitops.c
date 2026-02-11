@@ -919,8 +919,6 @@ static void test_bitwise_stochastic(void) {
     CHECK_EQ_I(arbint_xor(r1, r1, b), ARBINT_OK);
     CHECK_EQ_I(arbint_cmp(r1, a), 0);
 
-    /*  Verify: (a | b) & a = a & (a | b) = a (absorption-like via OR).
-        Actually: a & (a | b) = a.  */
     CHECK_EQ_I(arbint_or(r1, a, b), ARBINT_OK);
     CHECK_EQ_I(arbint_and(r2, a, r1), ARBINT_OK);
     CHECK_EQ_I(arbint_cmp(r2, a), 0);

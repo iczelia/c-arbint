@@ -101,8 +101,8 @@ static inline uint64_t mont_mul(uint64_t a, uint64_t b,
   return mont_redc(hi, lo, m);
 }
 
-/*  Convert to Montgomery form: compute (x * R) mod p = (x * R^2 * R^(-1)) mod p.
- */
+/*  Convert to Montgomery form: compute (x * R) mod p
+    = (x * R^2 * R^(-1)) mod p.  */
 static inline uint64_t to_mont(uint64_t x, const arbint_mont_params_t * m) {
   return mont_mul(x, m->r_squared, m);
 }

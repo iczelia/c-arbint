@@ -39,21 +39,7 @@ static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
   *lo = (arbint_limb_t) lo64;
   *hi = (arbint_limb_t) hi64;
 #else
-  const arbint_limb_t mask = ARBINT_HALF_MASK;
-  arbint_limb_t x0 = x & mask;
-  arbint_limb_t x1 = x >> ARBINT_HALF_BITS;
-  arbint_limb_t y0 = y & mask;
-  arbint_limb_t y1 = y >> ARBINT_HALF_BITS;
-
-  arbint_limb_t w0 = x0 * y0;
-  arbint_limb_t t = x1 * y0 + (w0 >> ARBINT_HALF_BITS);
-  arbint_limb_t w1 = t & mask;
-  arbint_limb_t w2 = t >> ARBINT_HALF_BITS;
-
-  w1 = x0 * y1 + w1;
-
-  *hi = x1 * y1 + w2 + (w1 >> ARBINT_HALF_BITS);
-  *lo = (w1 << ARBINT_HALF_BITS) | (w0 & mask);
+  #error "Unsupported limb size"
 #endif /* ARBINT_LIMB_BITS */
 }
 

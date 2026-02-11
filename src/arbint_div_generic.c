@@ -24,8 +24,8 @@
 
 /*  Multiply two limbs producing full double-width result (hi:lo = a * b).
 
-    For 64-bit limbs without __uint128_t, uses half-limb (32x32) multiplication
-    to synthesize a 128-bit product via Karatsuba-like decomposition:
+    Uses half-limb (32x32) multiplication to synthesize a 128-bit
+    product via Karatsuba-like decomposition:
       a = a1*2^32 + a0,  b = b1*2^32 + b0
       a*b = a1*b1*2^64 + ((a1*b0 + a0*b1)*2^32) + a0*b0
 

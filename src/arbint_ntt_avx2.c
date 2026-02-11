@@ -20,7 +20,7 @@
     Current implementation: thin wrapper around generic.
     Future optimization: vectorize butterfly add/sub operations while keeping
     Montgomery multiplication scalar (since AVX2 lacks efficient 64x64->128
-    multiply).
+    multiply, unless...).
 
     Optimization strategy (for future work):
     1. Vectorize mod_add/mod_sub: 4 parallel 64-bit additions with conditional
