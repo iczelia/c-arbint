@@ -37,7 +37,7 @@ lb lb
 l l.
 Platform|Accelerated Operations
 _
-x86/x86-64|BMI2 (multiply), AVX2 (doubling), POPCNT, SHA-NI, SSE4.2
+x86/x86-64|BMI2 (multiply, NTT), AVX2 (doubling, NTT), POPCNT, SHA-NI, SSE4.2
 AArch64|CRC32, PMULL (hashing)
 .TE
 .RE
@@ -770,7 +770,7 @@ output (the remainder) remains.
 .\" -------------------------------------------------------------------------
 .SS Multiplication
 .\" -------------------------------------------------------------------------
-Three algorithms are selected based on operand size:
+Four algorithms are selected based on operand size:
 .PP
 .RS 4
 .TS
@@ -779,11 +779,19 @@ lb lb lb
 l l l.
 Algorithm|Threshold|Complexity
 _
-Schoolbook|< 32 limbs|O(n^2)
-Karatsuba|>= 32 limbs|O(n^1.585)
-Toom-Cook 3|>= 96 limbs|O(n^1.465)
+Schoolbook|< 15 limbs|O(n^2)
+Karatsuba|>= 15 limbs|O(n^1.585)
+Toom-Cook 3|>= 20 limbs|O(n^1.465)
+NTT|>= 1024 limbs|O(n log n)
 .TE
 .RE
+.PP
+The NTT (Number Theoretic Transform) algorithm uses 3-prime CRT reconstruction
+with Goldilocks-family primes (p1 = 2^64 - 2^32 + 1, p2, p3).
+Montgomery arithmetic enables efficient modular multiplication without division.
+Cooley-Tukey radix-2 decimation-in-time butterflies with precomputed roots of
+unity.
+Garner's algorithm reconstructs the final result from the three residues.
 .PP
 Scalar multiplication by a power of two is detected and delegated to
 .BR arbint_shl ()

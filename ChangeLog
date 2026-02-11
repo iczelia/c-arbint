@@ -2,6 +2,16 @@
 
 	* Version 0.0.3 released.
 
+	* src/arbint_ntt.c, src/arbint_ntt.h: New files. Implement NTT
+	(Number Theoretic Transform) multiplication using 3-prime CRT
+	reconstruction with Goldilocks-family primes. O(n log n) complexity
+	for very large operands (threshold: 1024 limbs).
+	* src/arbint_ntt_core.inc: Shared NTT core included by all backends.
+	Montgomery arithmetic, Cooley-Tukey butterflies, Garner CRT.
+	* src/arbint_ntt_generic.c: Portable NTT using half-limb multiply.
+	* src/arbint_ntt_bmi2.c: BMI2-optimized NTT using _mulx_u64.
+	* src/arbint_ntt_avx2.c: AVX2+BMI2 NTT (foundation for future SIMD).
+
 	* src/arbint_fdiv.c: New file. Implement floor division variants
 	(arbint_fdiv_qr, arbint_fdiv_q, arbint_fdiv_r) with i32/u32 scalar
 	variants. Quotient rounds toward negative infinity.
@@ -32,15 +42,27 @@
 	squaring path to multiplication core.
 	* src/arbint_mul.h: Retune thresholds based on benchmarking:
 	Karatsuba mul 15 (was 32), Toom-3 mul 20 (was 96), Karatsuba sqr 10
-	(was 24), Toom-3 sqr 18 (was 80).
+	(was 24), Toom-3 sqr 18 (was 80). Add NTT threshold (1024 limbs).
 
 	* tools/tune_thresholds.c: Use arbint_urandomb for random operand
 	generation instead of deterministic squaring. Read threshold values
-	from arbint_mul.h via stringify macros.
+	from arbint_mul.h via stringify macros. Add --ntt flag for NTT
+	threshold tuning with sizes 128-8192 limbs.
 	* Makefile.am: tools/ no longer built by default; use 'make tools'.
 
+	* src/platform-objects.txt: Data-driven platform-specific object
+	management. Generator in bootstrap produces Makefile.platform-rules.am
+	with conditional LIBADD and dependency tracking rules.
+
+	* tests/test_ntt.c: New file. NTT multiplication tests covering
+	threshold boundaries, power-of-two sizes, unbalanced operands,
+	algebraic identities, and stochastic verification.
+	* tests/test_mul.c: Fix 32-bit platform compatibility (avoid shift
+	by limb width).
+
 	* man/c-arbint.3: Reorganize for clarity. Document divisibility
-	testing, floor/ceiling division, fused multiply-accumulate.
+	testing, floor/ceiling division, fused multiply-accumulate, NTT
+	multiplication algorithm.
 
 	* include/arbint.h: Add ~24 new API functions for division variants,
 	fused multiply-accumulate, divisibility testing, modular exponentiation.

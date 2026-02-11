@@ -1,13 +1,23 @@
 c-arbint 0.0.3 (2026-02-11)
 ===========================
 
-Third development release. Adds floor/ceiling division variants, fused
-multiply-accumulate operations, modular exponentiation, power-of-two division
-fast paths, divisibility testing, and Toom-3 squaring. Reorganizes internal
-division code for maintainability.
+Third development release. Major addition: NTT (Number Theoretic Transform)
+multiplication for O(n log n) complexity on very large operands. Also adds
+floor/ceiling division variants, fused multiply-accumulate operations,
+modular exponentiation, power-of-two division fast paths, divisibility
+testing, and Toom-3 squaring. Reorganizes internal division and multiplication
+code for maintainability.
 
 New Features
 ------------
+- NTT multiplication (threshold: 1024 limbs):
+  * 3-prime CRT reconstruction with Goldilocks-family primes
+  * O(n log n) asymptotic complexity vs Toom-3's O(n^1.465)
+  * Montgomery arithmetic for efficient modular operations
+  * Cooley-Tukey radix-2 decimation-in-time butterflies
+  * Lazy-initialized global context with precomputed roots of unity
+  * Three-tier dispatch: generic (half-limb), BMI2 (_mulx_u64), AVX2
+
 - Floor division (arbint_fdiv_*):
   * arbint_fdiv_qr, arbint_fdiv_q, arbint_fdiv_r: quotient rounds toward -inf
   * arbint_fdiv_qr_u32, arbint_fdiv_q_u32, arbint_fdiv_r_u32: 32-bit divisor
@@ -38,11 +48,13 @@ New Features
 
 Performance Optimizations
 -------------------------
+- NTT multiplication: O(n log n) for operands >= 1024 limbs (8KB on 64-bit)
 - Toom-3 squaring: dedicated squaring path in Toom-Cook 3-way algorithm
-- Threshold tuning tool (tools/tune_thresholds) for multiplication/squaring
+- Threshold tuning tool (tools/tune_thresholds) now supports --ntt flag
 - Thresholds retuned based on benchmarking:
   * Karatsuba multiplication: 15 limbs (was 32)
   * Toom-3 multiplication: 20 limbs (was 96)
+  * NTT multiplication: 1024 limbs (new)
   * Karatsuba squaring: 10 limbs (was 24)
   * Toom-3 squaring: 18 limbs (was 80)
 
@@ -50,9 +62,18 @@ Build System
 ------------
 - tools/ directory no longer built by default; use 'make tools' explicitly
 - tune_thresholds now uses arbint_urandomb for random operand generation
+- Data-driven platform-specific object management via platform-objects.txt
+- Combined AVX2+BMI2 compiler flags for NTT AVX2 backend
 
 Code Organization
 -----------------
+- NTT code organized into modular components:
+  * arbint_ntt.c: dispatch layer with runtime CPU detection
+  * arbint_ntt_core.inc: shared implementation (Montgomery, butterflies, CRT)
+  * arbint_ntt_generic.c: portable half-limb multiplication
+  * arbint_ntt_bmi2.c: BMI2-optimized 64x64->128 multiply
+  * arbint_ntt_avx2.c: AVX2+BMI2 (foundation for future SIMD butterflies)
+
 - Division code reorganized into separate modules:
   * arbint_div.c: core multi-limb division (Knuth Algorithm D)
   * arbint_div_generic.c: portable implementation
@@ -61,15 +82,28 @@ Code Organization
   * arbint_fdiv.c: floor division wrappers
   * arbint_cdiv.c: ceiling division wrappers
 
+Testing
+-------
+- New test_ntt binary with comprehensive NTT coverage:
+  * Threshold boundary tests (below, at, above 1024 limbs)
+  * Power-of-two operand sizes
+  * Unbalanced operand sizes
+  * Algebraic identity verification (a*b == b*a, (a+b)*c == a*c + b*c)
+  * Aliasing tests
+  * Stochastic verification against reference multiplication
+
 Documentation
 -------------
 - Man page reorganized for clarity
-- New sections for divisibility testing and all division variants
+- New sections for divisibility testing, all division variants, NTT algorithm
+- Algorithm complexity table updated with NTT
 
 Known Limitations
 -----------------
 - String conversion (arbint_set_str, arbint_get_str) not yet implemented
 - Number-theoretic functions declared but not yet implemented
+- NTT on 32-bit platforms treats each 32-bit limb as a separate coefficient
+  (no limb packing optimization yet)
 
 
 c-arbint 0.0.2 (2026-02-10)
