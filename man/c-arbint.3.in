@@ -437,6 +437,68 @@ may alias
 Uses Newton's method with quadratic convergence.
 .RE
 .\" -------------------------------------------------------------------------
+.SS Combinatorial Functions
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_fac_u32(arbint_t " rop ", uint32_t " n ")"
+.RS 4
+.PP
+Compute
+.IR rop " = " n "!."
+Returns
+.B ARBINT_EINVAL
+if
+.I rop
+is NULL.
+.RE
+.PP
+.BI "arbint_err_t arbint_bin_u32u32(arbint_t " rop ", uint32_t " n ", uint32_t " k ")"
+.RS 4
+.PP
+Compute the binomial coefficient
+.IR rop " = C(" n ", " k ")."
+Returns 0 if
+.I k
+>
+.IR n .
+.RE
+.PP
+.BI "arbint_err_t arbint_fib_u32(arbint_t " rop ", uint32_t " n ")"
+.RS 4
+.PP
+Compute the
+.IR n "-th Fibonacci number F(" n ")."
+F(0) = 0, F(1) = 1.
+Uses O(log n) multiplications via fast doubling.
+.RE
+.PP
+.BI "arbint_err_t arbint_lucas_u32(arbint_t " rop ", uint32_t " n ")"
+.RS 4
+.PP
+Compute the
+.IR n "-th Lucas number L(" n ")."
+L(0) = 2, L(1) = 1.
+Uses O(log n) multiplications.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Perfect Square Test
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_is_square(const arbint_t " a ", int *" out ")"
+.RS 4
+.PP
+Set
+.I *out
+to 1 if
+.I a
+is a perfect square, 0 otherwise.
+Returns
+.B ARBINT_EDOM
+if
+.I a
+is negative.
+.RE
+.\" -------------------------------------------------------------------------
 .SS Division
 .\" -------------------------------------------------------------------------
 .PP

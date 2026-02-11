@@ -40,6 +40,7 @@ check_PROGRAMS = \
   test_addmul \
   test_ntt \
   test_gcd \
+  test_combin \
   compute_pi \
   compute_e \
   compute_bitops

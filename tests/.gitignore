@@ -18,6 +18,7 @@ test_pow
 test_div_pow2
 test_divisible
 test_gcd
+test_combin
 test_ntt
 compute_pi
 compute_e

@@ -24,7 +24,7 @@ ARBINT_CORE_SOURCES = \
   arbint_iex.c arbint_cpu.c arbint_mul.c \
   arbint_mul_generic.c arbint_div_generic.c arbint_bitops.c \
   arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c \
-  arbint_ntt.c arbint_ntt_generic.c arbint_gcd.c
+  arbint_ntt.c arbint_ntt_generic.c arbint_gcd.c arbint_combin.c
 
 noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
