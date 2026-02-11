@@ -60,12 +60,23 @@
 	* tests/test_mul.c: Fix 32-bit platform compatibility (avoid shift
 	by limb width).
 
+	* src/arbint_gcd.c, src/arbint_gcd.h: New files. Implement GCD and LCM
+	(arbint_gcd, arbint_lcm, arbint_gcd_u32, arbint_lcm_u32). Binary GCD
+	(Stein's algorithm) for large operands (> 4 limbs), Euclidean algorithm
+	with modular reduction for size-disparate operands. Result always
+	non-negative; operates on magnitudes (signs ignored).
+	* tests/test_gcd.c: New file. Comprehensive GCD/LCM tests covering
+	basic cases, zeros, negative inputs, aliasing, symmetry, multi-limb
+	operands, Fibonacci pairs (worst-case), scaling property, threshold
+	boundaries, and stochastic verification.
+
 	* man/c-arbint.3: Reorganize for clarity. Document divisibility
 	testing, floor/ceiling division, fused multiply-accumulate, NTT
-	multiplication algorithm.
+	multiplication algorithm, GCD/LCM functions.
 
-	* include/arbint.h: Add ~24 new API functions for division variants,
-	fused multiply-accumulate, divisibility testing, modular exponentiation.
+	* include/arbint.h: Add ~28 new API functions for division variants,
+	fused multiply-accumulate, divisibility testing, modular exponentiation,
+	GCD/LCM.
 
 2026-02-10  Kamila Szewczyk  <k@iczelia.net>
 

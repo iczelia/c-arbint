@@ -37,6 +37,12 @@ New Features
 - Modular exponentiation:
   * arbint_pow_u32u32_tmod: base^exp mod m with precomputed Barrett reduction
 
+- GCD and LCM:
+  * arbint_gcd, arbint_lcm: greatest common divisor and least common multiple
+  * arbint_gcd_u32, arbint_lcm_u32: 32-bit operand variants
+  * Binary GCD (Stein's algorithm) for large operands (> 4 limbs)
+  * Euclidean algorithm with modular reduction for size-disparate operands
+
 - Divisibility testing:
   * arbint_divisible: test if d divides n exactly
   * arbint_divisible_u32: 32-bit divisor variant with Barrett reduction
