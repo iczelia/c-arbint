@@ -17,7 +17,10 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = include src man tests tools
+SUBDIRS = include src man tests
+
+# tools/ is not built by default; use 'make tools' to build
+DIST_SUBDIRS = $(SUBDIRS) tools
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = c-arbint.pc
@@ -26,6 +29,11 @@ dist_doc_DATA = README.md
 
 EXTRA_DIST = bootstrap
 
-.PHONY: clang-format
+.PHONY: clang-format tools
+
 clang-format:
 	clang-format -i $$(find include src tests -type f \( -name '*.h' -o -name '*.c' \))
+
+# Build tools (tune_thresholds, etc.)
+tools:
+	$(MAKE) -C tools
