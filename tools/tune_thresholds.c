@@ -39,6 +39,12 @@
 #include <string.h>
 #include <time.h>
 
+#include "arbint_mul.h"
+
+/*  Stringify helper for printing current threshold values.  */
+#define ARBINT_STR_(x) #x
+#define ARBINT_STR(x) ARBINT_STR_(x)
+
 /*  Number of iterations for timing.  */
 #define WARMUP_ITERS 3
 #define MIN_ITERS 5
@@ -285,10 +291,13 @@ static void tune_multiplication(void) {
       printf("Toom-3 crossover: not detected (may need larger sizes)\n");
 
     printf("\nRecommendations:\n");
-    printf("  ARBINT_KARATSUBA_THRESHOLD: %zu (current: 32)\n",
-           karatsuba_crossover > 0 ? karatsuba_crossover : 32);
-    printf("  ARBINT_TOOM3_THRESHOLD: %zu (current: 96)\n",
-           toom3_crossover > 0 ? toom3_crossover : 96);
+    printf("  ARBINT_KARATSUBA_THRESHOLD: %zu (current: "
+           ARBINT_STR(ARBINT_KARATSUBA_THRESHOLD) ")\n",
+           karatsuba_crossover > 0 ? karatsuba_crossover
+                                   : ARBINT_KARATSUBA_THRESHOLD);
+    printf("  ARBINT_TOOM3_THRESHOLD: %zu (current: "
+           ARBINT_STR(ARBINT_TOOM3_THRESHOLD) ")\n",
+           toom3_crossover > 0 ? toom3_crossover : ARBINT_TOOM3_THRESHOLD);
   }
 
   arbint_clear(r);
@@ -357,10 +366,13 @@ static void tune_squaring(void) {
       printf("Toom-3 crossover: not detected (may need larger sizes)\n");
 
     printf("\nRecommendations:\n");
-    printf("  ARBINT_SQR_KARATSUBA_THRESHOLD: %zu (current: 24)\n",
-           karatsuba_crossover > 0 ? karatsuba_crossover : 24);
-    printf("  ARBINT_SQR_TOOM3_THRESHOLD: %zu (current: 80)\n",
-           toom3_crossover > 0 ? toom3_crossover : 80);
+    printf("  ARBINT_SQR_KARATSUBA_THRESHOLD: %zu (current: "
+           ARBINT_STR(ARBINT_SQR_KARATSUBA_THRESHOLD) ")\n",
+           karatsuba_crossover > 0 ? karatsuba_crossover
+                                   : ARBINT_SQR_KARATSUBA_THRESHOLD);
+    printf("  ARBINT_SQR_TOOM3_THRESHOLD: %zu (current: "
+           ARBINT_STR(ARBINT_SQR_TOOM3_THRESHOLD) ")\n",
+           toom3_crossover > 0 ? toom3_crossover : ARBINT_SQR_TOOM3_THRESHOLD);
   }
 
   arbint_clear(r);
