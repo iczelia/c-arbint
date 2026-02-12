@@ -616,6 +616,7 @@ static void test_shl_null(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   /*  sizeinbase tests.  */
   test_sizeinbase_zero();
   test_sizeinbase_small();

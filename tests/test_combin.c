@@ -797,6 +797,7 @@ static void test_primorial_basic(void) {
 /*  Main.  */
 
 int main(void) {
+  ARBINT_TEST_START();
   /*  Factorial tests.  */
   test_fac_null();
   test_fac_basic();

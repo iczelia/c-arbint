@@ -138,6 +138,7 @@ static void test_inv_mod_u32_i32(arbint_t rop, arbint_t a, arbint_t tmp1,
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   arbint_ctx_t ctx;
   arbint_t rop, a, m, tmp1, tmp2;
 

@@ -500,6 +500,7 @@ static void test_large_tdiv_properties(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_large_add_sub_properties();
   test_large_mul_properties();
   test_large_tdiv_properties();

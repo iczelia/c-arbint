@@ -523,6 +523,7 @@ static void test_mul_i32(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_mul_basic_and_alias();
   test_mul_large_patterns();
   test_mul_carry_regression();

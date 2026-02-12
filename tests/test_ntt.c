@@ -335,6 +335,7 @@ static void test_ntt_aliasing(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_ntt_below_threshold();
   test_ntt_threshold_boundary();
   test_ntt_power_of_two();

@@ -25,8 +25,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
-#define ARBINT_TEST_DECLARE_FAILURES() static int g_failures = 0
+#define ARBINT_TEST_DECLARE_FAILURES()                                        \
+  static int g_failures = 0;                                                  \
+  static clock_t g_test_start_time = 0
+
+#define ARBINT_TEST_START() (g_test_start_time = clock())
 
 #define CHECK(cond)                                                           \
   do {                                                                        \
@@ -96,14 +101,26 @@ static inline int arbint_test_u32_eq(const arbint_t x, uint32_t expected) {
   return arbint_get_u32(x, &out) == ARBINT_OK && out == expected;
 }
 
-static inline int arbint_test_finish_impl(const char * test_name,
-                                          int failures) {
+static inline int arbint_test_finish_impl(const char * test_name, int failures,
+                                          clock_t start_time) {
+  double elapsed = 0.0;
+
+  if (start_time != 0)
+    elapsed = (double) (clock() - start_time) / (double) CLOCKS_PER_SEC;
+
   if (failures != 0) {
-    fprintf(stderr, "%s: %d failure(s)\n", test_name, failures);
+    if (start_time != 0)
+      fprintf(stderr, "%s: %d failure(s) (%.3fs)\n", test_name, failures,
+              elapsed);
+    else
+      fprintf(stderr, "%s: %d failure(s)\n", test_name, failures);
     return 1;
   }
 
-  printf("%s: all tests passed\n", test_name);
+  if (start_time != 0)
+    printf("%s: all tests passed (%.3fs)\n", test_name, elapsed);
+  else
+    printf("%s: all tests passed\n", test_name);
   return 0;
 }
 
@@ -118,6 +135,6 @@ static inline int arbint_test_finish_impl(const char * test_name,
 #define check_u32_value(x, expected) CHECK(arbint_test_u32_eq((x), (expected)))
 
 #define ARBINT_TEST_FINISH(test_name)                                         \
-  return arbint_test_finish_impl((test_name), g_failures)
+  return arbint_test_finish_impl((test_name), g_failures, g_test_start_time)
 
 #endif /* ARBINT_TEST_FRAMEWORK_H */

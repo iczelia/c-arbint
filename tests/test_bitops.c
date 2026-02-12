@@ -1502,6 +1502,7 @@ static void test_imm_multilimb(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_testbit_zero();
   test_testbit_positive();
   test_testbit_negative();

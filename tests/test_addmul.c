@@ -746,6 +746,7 @@ static void test_addmul_exact_cancellation(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_addmul_null_checks();
   test_addmul_zero_cases();
   test_addmul_basic();

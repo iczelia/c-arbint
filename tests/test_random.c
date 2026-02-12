@@ -22,6 +22,7 @@ static const uint32_t test_seed[4] = {0x123, 0x234, 0x345, 0x456};
 
 int main(void) {
   ARBINT_TEST_DECLARE_FAILURES();
+  ARBINT_TEST_START();
 
   arbint_ctx_t ctx;
   arbint_t a, b, bound;

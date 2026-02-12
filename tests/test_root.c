@@ -608,6 +608,7 @@ static void test_root_multilimb_result(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_root_edge_cases();
   test_root_perfect_powers();
   test_root_non_perfect();

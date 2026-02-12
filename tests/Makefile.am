@@ -48,6 +48,7 @@ check_PROGRAMS = \
   test_inv_mod \
   test_removefactor \
   test_numtheory \
+  test_str \
   compute_pi \
   compute_e \
   compute_bitops

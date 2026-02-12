@@ -1386,6 +1386,7 @@ static void test_add_shifted_indirect(void) {
 /* ===== Main ===== */
 
 int main(void) {
+  ARBINT_TEST_START();
   test_wide_limb_via_mul();
   test_muladd_via_mul();
   test_schoolbook_patterns();

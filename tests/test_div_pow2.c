@@ -835,6 +835,7 @@ static void test_tdiv_non_pow2_regression(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_tdiv_pow2_u32_small();
   test_tdiv_pow2_i32_signed();
   test_tdiv_pow2_arbint();

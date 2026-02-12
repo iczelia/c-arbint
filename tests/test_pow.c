@@ -476,6 +476,7 @@ static void test_pow_u32_mod_cross_verify(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_pow_edge_cases();
   test_pow_small_values();
   test_pow_aliasing();

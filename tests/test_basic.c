@@ -733,6 +733,7 @@ static void test_zero_div_mul_and_overlap_basics(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_ctx_and_base();
   test_set_ctx_and_allocators();
   test_assignment_get_fits();

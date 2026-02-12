@@ -79,6 +79,7 @@ static void verify_coprime(const arbint_t rest, uint32_t p,
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   arbint_ctx_t ctx;
   arbint_t a, rest, tmp;
   uint32_t k;

@@ -791,6 +791,7 @@ static void test_sqr_sign(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_sqr_null();
   test_sqr_trivial();
   test_sqr_vs_mul_small();

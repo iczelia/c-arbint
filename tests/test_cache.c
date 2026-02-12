@@ -26,6 +26,7 @@ static void build_large_operand(arbint_t x, uint32_t shift, uint32_t tail) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   arbint_ctx_t ctx;
   arbint_t a, b, c;
   int out = 0;

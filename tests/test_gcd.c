@@ -1594,6 +1594,7 @@ static void test_gcd_lehmer_stochastic(void) {
 /*  Main entry point.  */
 
 int main(void) {
+  ARBINT_TEST_START();
   /*  Basic functionality.  */
   test_gcd_basic();
   test_gcd_zeros();

@@ -547,6 +547,7 @@ static void test_divisible_edge_cases(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_divisible_u32_basic();
   test_divisible_u32_powers_of_two();
   test_divisible_u32_large_divisors();

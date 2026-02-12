@@ -25,7 +25,7 @@ ARBINT_CORE_SOURCES = \
   arbint_mul_generic.c arbint_div_generic.c arbint_bitops.c \
   arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c \
   arbint_ntt.c arbint_ntt_generic.c arbint_gcd.c arbint_gcd_lehmer_generic.c \
-  arbint_combin.c arbint_cache.c
+  arbint_combin.c arbint_cache.c arbint_str.c
 
 noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
@@ -33,7 +33,8 @@ noinst_HEADERS = \
   arbint_mul_core.inc arbint_div_barrett_core.inc \
   arbint_internal_util.h \
   arbint_bitops.h arbint_shift.h arbint_random.h \
-  arbint_hash.h arbint_ntt.h arbint_ntt_core.inc arbint_gcd.h arbint_cache.h
+  arbint_hash.h arbint_ntt.h arbint_ntt_core.inc arbint_gcd.h arbint_cache.h \
+  arbint_str.h
 
 # Platform-specific sources: distributed but compiled only via generated rules.
 # See platform-objects.txt for the data table and build-aux/gen-platform-rules.sh

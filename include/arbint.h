@@ -15,9 +15,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
-/*  The following features are currently unimplemented:
-      - arbint_set_str, arbint_get_str  */
-
 #ifndef ARBINT_H
 #define ARBINT_H
 

@@ -104,6 +104,7 @@ static void test_xgcd_i32(arbint_t a, arbint_t b, arbint_t g, arbint_t x,
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   arbint_ctx_t ctx;
   arbint_t a, b, g, x, y, tmp1, tmp2;
 

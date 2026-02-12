@@ -780,6 +780,7 @@ static void test_carmichael_divides_totient(arbint_ctx_t * ctx) {
     ================================================================  */
 
 int main(void) {
+  ARBINT_TEST_START();
   arbint_ctx_t ctx;
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);

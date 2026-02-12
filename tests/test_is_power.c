@@ -43,6 +43,7 @@ static void test_is_power_i32(arbint_t a, int32_t val, int expected_out,
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   arbint_ctx_t ctx;
   arbint_t a, b;
 

@@ -867,6 +867,7 @@ static void test_stochastic_arithmetic(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_stochastic_arithmetic();
   ARBINT_TEST_FINISH("test_stochastic");
 }

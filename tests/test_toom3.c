@@ -556,6 +556,7 @@ static void test_toom3_stochastic(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_toom3_known_squares();
   test_toom3_power_of_two();
   test_toom3_commutativity();

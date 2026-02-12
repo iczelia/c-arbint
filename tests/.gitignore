@@ -16,6 +16,7 @@ test_isqrt
 test_toom3
 test_addmul
 test_pow
+test_str
 test_div_pow2
 test_divisible
 test_gcd

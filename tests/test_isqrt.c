@@ -296,6 +296,7 @@ static void test_isqrt_consecutive(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_isqrt_edge_cases();
   test_isqrt_perfect_squares();
   test_isqrt_non_perfect();

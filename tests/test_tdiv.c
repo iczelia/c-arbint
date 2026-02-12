@@ -140,6 +140,7 @@ static void test_tdiv_multilimb(void) {
 }
 
 int main(void) {
+  ARBINT_TEST_START();
   test_tdiv_small_and_signs();
   test_tdiv_multilimb();
   ARBINT_TEST_FINISH("test_tdiv");

@@ -416,6 +416,7 @@ static char * load_reference_digits(const char * path) {
 
 int main(void) {
   ARBINT_TEST_DECLARE_FAILURES();
+  ARBINT_TEST_START();
 
   arbint_ctx_t ctx;
   arbint_t pi_scaled;

@@ -1338,6 +1338,7 @@ static void test_immediate_cross_validation(void) {
 /* ========== main ========== */
 
 int main(void) {
+  ARBINT_TEST_START();
   fprintf(stderr, "compute_bitops: comprehensive bitwise stress test\n");
 
   test_bitwise_adder();
