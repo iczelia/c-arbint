@@ -509,7 +509,7 @@ L(0) = 2, L(1) = 1.
 Uses O(log n) multiplications.
 .RE
 .\" -------------------------------------------------------------------------
-.SS Perfect Square Test
+.SS Perfect Power Tests
 .\" -------------------------------------------------------------------------
 .PP
 .BI "arbint_err_t arbint_is_square(const arbint_t " a ", int *" out ")"
@@ -525,6 +525,35 @@ Returns
 if
 .I a
 is negative.
+.RE
+.PP
+.BI "arbint_err_t arbint_is_power(const arbint_t " a ", uint32_t *" exp ")"
+.RS 4
+.PP
+Test whether |a| is a perfect power.
+If |a| = b^k for some integer b and k >= 2, sets
+.I *exp
+to the smallest such k.
+Otherwise, sets
+.I *exp
+to 0.
+.PP
+Special cases:
+.RS 4
+.IP \(bu 2
+0 and +/-1 are considered perfect powers (any exponent works);
+returns 1.
+.IP \(bu 2
+Negative inputs: only odd exponents are valid.
+Returns 0 for negative numbers that are only even powers.
+.IP \(bu 2
+Composite exponents are detected: 64 = 2^6 returns 6, not 2.
+.RE
+.PP
+The algorithm uses a static table of 97 primes (up to 521) for fast
+small-exponent testing, with a dynamically cached sieve for larger
+prime exponents.
+GMP-compatible interface.
 .RE
 .\" -------------------------------------------------------------------------
 .SS Division
@@ -848,6 +877,52 @@ or
 may alias
 .IR a .
 .RE
+.PP
+.BI "arbint_err_t arbint_xgcd(arbint_t " g ", arbint_t " x ", arbint_t " y ", const arbint_t " a ", const arbint_t " b ")"
+.RS 4
+.PP
+Extended GCD: compute
+.IR g " = gcd(" a ", " b ")"
+and Bezout coefficients
+.IR x ", " y
+such that
+.IR a "*" x " + " b "*" y " = " g .
+.PP
+Any of
+.IR g ", " x ", " y
+may be NULL if the corresponding output is not needed.
+When only
+.I g
+and
+.I x
+are requested (y is NULL), computes
+.IR x " = " a "^(-1) mod " b
+for coprime inputs.
+.PP
+The result
+.I g
+is always non-negative.
+Signs of
+.I x
+and
+.I y
+are determined by the extended Euclidean algorithm.
+.PP
+.B Aliasing:
+All output parameters may alias input parameters or each other.
+When outputs alias, "last write wins" semantics apply (the final
+value is whichever output is written last).
+.PP
+.B Special cases:
+.RS 4
+.IP \(bu 2
+gcd(0, 0) = 0, with x = y = 0.
+.IP \(bu 2
+gcd(a, 0) = |a|, with x = sign(a), y = 0.
+.IP \(bu 2
+gcd(0, b) = |b|, with x = 0, y = sign(b).
+.RE
+.RE
 .\" -------------------------------------------------------------------------
 .SS Random Number Generation
 .\" -------------------------------------------------------------------------
@@ -1067,10 +1142,22 @@ Euclidean algorithm with modular reduction.
 For size-disparate operands (one much larger than the other), a modular
 reduction step first brings them to similar size.
 .PP
-.B Large operands (> 4 limbs):
+.B Medium operands (5-31 limbs):
 Binary GCD (Stein's algorithm) exploiting the identity
 gcd(2a, 2b) = 2*gcd(a, b) and gcd(a, b) = gcd(a-b, b) for odd a, b.
 Requires only shifts and subtractions, avoiding expensive divisions.
+.PP
+.B Large operands (>= 32 limbs):
+Lehmer GCD algorithm extracts the top bits of both operands into machine
+words and computes a sequence of quotients using single-precision arithmetic.
+These quotients define a 2x2 matrix that is applied to the full-precision
+operands in one step, reducing their size by approximately one word per
+iteration.
+Asymptotically faster than binary GCD for very large operands.
+.PP
+.B Extended GCD:
+Uses the standard extended Euclidean algorithm, tracking the transformation
+matrix to compute Bezout coefficients alongside the GCD.
 .PP
 .B LCM:
 Computed as lcm(a, b) = |a| * |b| / gcd(a, b), with division performed

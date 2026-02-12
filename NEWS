@@ -1,3 +1,54 @@
+c-arbint 0.0.5 (2026-02-12)
+===========================
+
+Fifth development release. Adds extended GCD with Bezout coefficients,
+perfect power detection, and Lehmer GCD algorithm for large operands.
+
+New Features
+------------
+- Extended GCD (arbint_xgcd):
+  * Compute g = gcd(a, b) and Bezout coefficients x, y
+  * Satisfies identity: a*x + b*y = g
+  * Any output (g, x, y) may be NULL if not needed
+  * GMP-compatible: x alone gives modular inverse for coprime inputs
+  * Full aliasing support with "last write wins" semantics
+
+- Perfect power detection (arbint_is_power):
+  * Test if |a| = b^k for some integer b and k >= 2
+  * Returns smallest such exponent k, or 0 if not a perfect power
+  * Static table of 97 primes (up to exponent 521) for fast lookup
+  * Dynamically cached sieve for larger prime exponents
+  * Handles negative inputs (only odd exponents allowed)
+  * GMP-compatible interface
+
+Performance Optimizations
+-------------------------
+- Lehmer GCD algorithm for large operands (>= 32 limbs):
+  * Extracts top bits into machine words for fast quotient computation
+  * Reduces multi-limb GCD to sequence of single-limb matrix operations
+  * Asymptotically faster than binary GCD for very large operands
+  * Automatically selected based on operand size
+
+Testing
+-------
+- New test_xgcd binary with comprehensive coverage:
+  * Bezout identity verification for all test cases
+  * Coprime and non-coprime pairs
+  * Zero and negative inputs
+  * Complex aliasing scenarios (g==a, x==b, all outputs same)
+  * Fibonacci pairs (worst case for Euclidean algorithm)
+  * Large primes and highly composite numbers
+  * Stochastic verification
+
+- New test_is_power binary with comprehensive coverage:
+  * Perfect powers from squares through 7th powers
+  * Negative powers (odd exponents only)
+  * Composite exponent detection (e.g., 64 = 2^6 returns 6, not 2)
+  * Near-miss values (off by 1 from perfect powers)
+  * Static table boundary tests (exponent 521)
+  * Dynamic sieve tests (exponents 523, 541, 2003, 3001)
+
+
 c-arbint 0.0.4 (2026-02-11)
 ===========================
 

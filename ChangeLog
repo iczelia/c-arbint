@@ -1,3 +1,47 @@
+2026-02-12  Kamila Szewczyk  <k@iczelia.net>
+
+	* Version 0.0.5 released.
+
+	* src/arbint_gcd.c: Add arbint_xgcd (extended GCD with Bezout
+	coefficients). Computes g = gcd(a, b) and coefficients x, y such
+	that a*x + b*y = g. Any of g, x, y may be NULL if not needed.
+	GMP-compatible semantics: when only g and x are requested, computes
+	x = a^(-1) mod b for coprime inputs. Full aliasing support with
+	"last write wins" semantics for output parameters.
+
+	* src/arbint_gcd.c: Add Lehmer GCD algorithm for large operands
+	(>= 32 limbs). Reduces multi-limb GCD to a sequence of single-limb
+	matrix multiplications by extracting top bits into machine words.
+	Asymptotically faster than binary GCD for large operands while
+	maintaining numerical stability through careful quotient bounds.
+	Automatically selected based on operand size.
+
+	* src/arbint_combin.c: Add arbint_is_power (perfect power detection).
+	Determines if |a| = b^k for some integer b and k >= 2. Returns
+	the smallest such exponent k, or 0 if not a perfect power. Uses
+	static table of 97 primes (up to 521) for small exponents, with
+	dynamically cached sieve for larger prime exponents. Handles edge
+	cases: 0 and +/-1 specially, even exponents forbidden for negative
+	inputs. GMP-compatible interface.
+
+	* tests/test_xgcd.c: New file. Comprehensive tests for arbint_xgcd:
+	basic Bezout identity verification, coprime pairs, non-coprime
+	pairs, zero inputs, negative inputs, aliasing scenarios (g==a,
+	x==b, all outputs same), Fibonacci pairs (worst case), large
+	primes, highly composite numbers, and stochastic verification.
+
+	* tests/test_is_power.c: New file. Comprehensive tests for
+	arbint_is_power: small perfect powers (squares through 7th powers),
+	negative powers (odd exponents only), composite exponent detection,
+	near-miss values, semiprimes and non-powers, large base/small
+	exponent, prime base powers, static table boundaries (exponent 521),
+	dynamic sieve tests (exponents 523, 541, 2003, 3001).
+
+	* include/arbint.h: Add arbint_xgcd, arbint_is_power to public API.
+
+	* man/c-arbint.3.in: Document arbint_xgcd and arbint_is_power.
+	Update GCD algorithm section with Lehmer algorithm description.
+
 2026-02-11  Kamila Szewczyk  <k@iczelia.net>
 
 	* Version 0.0.4 released.
