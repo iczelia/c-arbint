@@ -20,6 +20,9 @@
 #include "arbint_div.h"
 #include "config.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 /*  Compute (F(n), F(n+1)) simultaneously via fast doubling.
 
     Uses the identities:
@@ -340,5 +343,265 @@ arbint_err_t arbint_is_square(const arbint_t a, int * out) {
 cleanup:
   arbint_clear(sq);
   arbint_clear(root);
+  return rc;
+}
+
+/*  Static prime table for is_power: primes up to 521 (97 entries).
+    Covers inputs up to 2^521 without needing dynamic prime generation.  */
+static const uint32_t arbint_is_power_primes[] = {
+  2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61,
+  67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137,
+  139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211,
+  223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283,
+  293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379,
+  383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461,
+  463, 467, 479, 487, 491, 499, 503, 509, 521
+};
+#define ARBINT_IS_POWER_NPRIMES \
+  (sizeof(arbint_is_power_primes) / sizeof(arbint_is_power_primes[0]))
+
+/*  Cached prime sieve state.
+    Initialized on first call needing primes > 521.
+    Grows as needed; never shrinks.  */
+static uint8_t * g_prime_sieve = NULL;
+static uint32_t g_prime_sieve_limit = 0;
+
+/*  Ensure sieve covers primes up to limit.
+    Grows the sieve if needed.  */
+static arbint_err_t arbint_ensure_prime_sieve(uint32_t limit) {
+  uint8_t * new_sieve;
+  size_t new_bytes;
+  uint32_t p;
+  uint32_t i;
+  uint32_t sqrt_limit;
+
+  if (g_prime_sieve_limit >= limit)
+    return ARBINT_OK;
+
+  new_bytes = ((size_t) limit + 1u + 7u) / 8u;
+  new_sieve = (uint8_t *) realloc(g_prime_sieve, new_bytes);
+  if (new_sieve == NULL)
+    return ARBINT_ENOMEM;
+
+  /*  Zero new portion if extending.  */
+  if (g_prime_sieve_limit > 0) {
+    size_t old_bytes = ((size_t) g_prime_sieve_limit + 1u + 7u) / 8u;
+    memset(new_sieve + old_bytes, 0, new_bytes - old_bytes);
+  } else {
+    memset(new_sieve, 0, new_bytes);
+  }
+
+  /*  Sieve: bit set = composite. Mark 0 and 1 as composite.  */
+  new_sieve[0] |= 0x03;
+
+  /*  Mark composites from 2 up to sqrt(limit).
+      Use i <= limit / i to avoid overflow.  */
+  sqrt_limit = 1u;
+  while (sqrt_limit <= limit / sqrt_limit)
+    ++sqrt_limit;
+
+  for (p = 2u; p < sqrt_limit; ++p) {
+    /*  Skip if p is already marked composite.  */
+    if ((new_sieve[p / 8u] & (1u << (p % 8u))) != 0)
+      continue;
+    /*  Mark multiples of p starting from p*p.  */
+    for (i = p * p; i <= limit; i += p)
+      new_sieve[i / 8u] |= (uint8_t) (1u << (i % 8u));
+  }
+
+  g_prime_sieve = new_sieve;
+  g_prime_sieve_limit = limit;
+  return ARBINT_OK;
+}
+
+/*  Test if n is prime using the cached sieve.
+    Caller must ensure sieve covers n via arbint_ensure_prime_sieve.  */
+static int arbint_sieve_is_prime(uint32_t n) {
+  if (n > g_prime_sieve_limit)
+    return 0;  /*  Safety: should not happen if caller ensured coverage.  */
+  return (g_prime_sieve[n / 8u] & (1u << (n % 8u))) == 0;
+}
+
+/*  Test if a is a perfect power (a = b^k for some integers b, k >= 2).
+
+    Sets *out = 1 if such b, k exist, 0 otherwise.
+
+    GMP-compatible semantics:
+    - 0: out=1 (0 = 0^k for any k >= 2)
+    - 1: out=1 (1 = 1^k for any k >= 2)
+    - -1: out=1 (-1 = (-1)^3 = (-1)^5 = ...)
+    - Negative odd powers: out=1 (e.g., -8 = (-2)^3)
+    - Negative even powers: out=0 (no real even root of negative)
+
+    Algorithm: Only check prime exponents k (composite k = p*q means
+    a = (b^q)^p is also a p-th power). Check all primes up to log2(|a|).
+
+    Note: arbint_root and arbint_pow_u32 use uint32_t exponents.
+    For inputs with |a| > 2^UINT32_MAX (requiring exponent checks beyond
+    UINT32_MAX), returns ARBINT_EOVERFLOW. Such inputs would have ~500M
+    limbs on 64-bit systems -- far beyond practical use.  */
+arbint_err_t arbint_is_power(const arbint_t a, int * out) {
+  arbint_ctx_t * ctx;
+  arbint_t abs_a, r, r_pow;
+  arbint_err_t rc;
+  size_t max_k;
+  size_t nbits;
+  size_t i;
+  int a_neg;
+  int is_sq;
+  int init_abs = 0;
+  int init_r = 0;
+  int init_rpow = 0;
+
+  if (a == NULL || out == NULL)
+    return ARBINT_EINVAL;
+
+  /*  Handle 0: 0 = 0^k for any k >= 2.  */
+  if (a[0]._sz == 0) {
+    *out = 1;
+    return ARBINT_OK;
+  }
+
+  a_neg = (a[0]._sz < 0);
+
+  /*  Handle 1 and -1.  */
+  {
+    size_t an = arbint_abs_sz(a[0]._sz);
+    if (an == 1u && ARBINT_CLIMBS(a)[0] == 1u) {
+      /*  1 = 1^k, -1 = (-1)^3.  */
+      *out = 1;
+      return ARBINT_OK;
+    }
+  }
+
+  ctx = a[0]._ctx;
+
+  /*  Allocate temporaries.  */
+  rc = arbint_init(abs_a, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+  init_abs = 1;
+
+  rc = arbint_init(r, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_r = 1;
+
+  rc = arbint_init(r_pow, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_rpow = 1;
+
+  /*  Get |a|.  */
+  rc = arbint_abs(abs_a, a);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Compute max exponent to check: floor(log2(|a|)).  */
+  nbits = arbint_nbits(abs_a);
+  max_k = nbits - 1u;
+
+  /*  Check if max_k exceeds API limit.  */
+  if (max_k > (size_t) UINT32_MAX) {
+    rc = ARBINT_EOVERFLOW;
+    goto cleanup;
+  }
+
+  /*  Fast path for positive: check if perfect square.  */
+  if (!a_neg) {
+    rc = arbint_is_square(a, &is_sq);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    if (is_sq) {
+      *out = 1;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+  }
+
+  /*  Check prime exponents from static table.
+      For positive a: start at index 1 (k=3) since squares already checked.
+      For negative a: start at index 1 (k=3) since even exponents skipped.  */
+  for (i = 1u; i < ARBINT_IS_POWER_NPRIMES; ++i) {
+    uint32_t k = arbint_is_power_primes[i];
+    if ((size_t) k > max_k)
+      break;
+
+    /*  Skip even exponents for negative a.  */
+    if (a_neg && (k % 2u == 0u))
+      continue;
+
+    /*  Compute r = floor(|a|^(1/k)).  */
+    rc = arbint_root(r, abs_a, k);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    /*  Skip if r < 2 (only 0, 1 have k-th roots < 2, already handled).  */
+    if (arbint_cmp_u32(r, 2u) < 0)
+      continue;
+
+    /*  Check if r^k == |a|.  */
+    rc = arbint_pow_u32(r_pow, r, k);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (arbint_eq(r_pow, abs_a)) {
+      *out = 1;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+  }
+
+  /*  Check primes beyond static table using cached sieve.  */
+  if (max_k > (size_t) arbint_is_power_primes[ARBINT_IS_POWER_NPRIMES - 1]) {
+    uint32_t k;
+    uint32_t max_k_u32 = (uint32_t) max_k;
+
+    rc = arbint_ensure_prime_sieve(max_k_u32);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    for (k = arbint_is_power_primes[ARBINT_IS_POWER_NPRIMES - 1] + 1u;
+         k <= max_k_u32; ++k) {
+      if (!arbint_sieve_is_prime(k))
+        continue;
+
+      /*  Skip even exponents for negative a.  */
+      if (a_neg && (k % 2u == 0u))
+        continue;
+
+      /*  Compute r = floor(|a|^(1/k)).  */
+      rc = arbint_root(r, abs_a, k);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  Skip if r < 2.  */
+      if (arbint_cmp_u32(r, 2u) < 0)
+        continue;
+
+      /*  Check if r^k == |a|.  */
+      rc = arbint_pow_u32(r_pow, r, k);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      if (arbint_eq(r_pow, abs_a)) {
+        *out = 1;
+        rc = ARBINT_OK;
+        goto cleanup;
+      }
+    }
+  }
+
+  /*  No perfect power found.  */
+  *out = 0;
+  rc = ARBINT_OK;
+
+cleanup:
+  if (init_rpow)
+    arbint_clear(r_pow);
+  if (init_r)
+    arbint_clear(r);
+  if (init_abs)
+    arbint_clear(abs_a);
   return rc;
 }

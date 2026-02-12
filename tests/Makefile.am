@@ -42,6 +42,8 @@ check_PROGRAMS = \
   test_ntt \
   test_gcd \
   test_combin \
+  test_is_power \
+  test_xgcd \
   compute_pi \
   compute_e \
   compute_bitops

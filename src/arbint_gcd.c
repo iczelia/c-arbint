@@ -567,3 +567,243 @@ cleanup:
     arbint_clear(tmp);
   return rc;
 }
+
+/*  Extended GCD: compute g = gcd(a, b) and Bezout coefficients x, y
+    such that a*x + b*y = g.
+
+    Uses the extended Euclidean algorithm:
+    - Track (r0, r1) = remainders, starting with (|a|, |b|)
+    - Track (s0, s1) = coefficients for first input
+    - Track (t0, t1) = coefficients for second input
+    - Each step: q = floor(r0/r1), then update all three pairs
+
+    Sign handling: we compute with |a|, |b|, then adjust signs at the end.
+    If a < 0: x = -s0. If b < 0: y = -t0.
+
+    Aliasing: per arbint.h lines 213-218, outputs are written in order
+    g, x, y. "The final value is whichever output is written last."
+    So g==x gets x's value, g==y gets y's value, x==y gets y's value.
+
+    Performance note: this uses plain Euclidean algorithm. For large
+    inputs (>= 32 limbs), arbint_gcd uses Lehmer's algorithm which is
+    faster. This xgcd does not use Lehmer tracking.  */
+ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
+                                    const arbint_t a, const arbint_t b) {
+  arbint_t r0, r1, s0, s1, t0, t1, q, tmp;
+  arbint_t res_g, res_x, res_y;
+  arbint_err_t rc;
+  arbint_ctx_t * ctx;
+  int a_neg, b_neg;
+  int init_r0 = 0, init_r1 = 0, init_s0 = 0, init_s1 = 0;
+  int init_t0 = 0, init_t1 = 0, init_q = 0, init_tmp = 0;
+  int init_res_g = 0, init_res_x = 0, init_res_y = 0;
+
+  if (g == NULL || x == NULL || y == NULL || a == NULL || b == NULL)
+    return ARBINT_EINVAL;
+
+  a_neg = (a[0]._sz < 0);
+  b_neg = (b[0]._sz < 0);
+
+  /*  Find context from any input.  */
+  ctx = g[0]._ctx;
+  if (ctx == NULL)
+    ctx = x[0]._ctx;
+  if (ctx == NULL)
+    ctx = y[0]._ctx;
+  if (ctx == NULL)
+    ctx = a[0]._ctx;
+  if (ctx == NULL)
+    ctx = b[0]._ctx;
+
+  /*  Handle gcd(0, 0) = 0 specially.  */
+  if (a[0]._sz == 0 && b[0]._sz == 0) {
+    arbint_zero(g);
+    arbint_zero(x);
+    arbint_zero(y);
+    return ARBINT_OK;
+  }
+
+  /*  Allocate result temporaries for aliasing safety.  */
+  rc = arbint_init(res_g, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+  init_res_g = 1;
+
+  rc = arbint_init(res_x, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_res_x = 1;
+
+  rc = arbint_init(res_y, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_res_y = 1;
+
+  /*  Handle gcd(0, b) = |b| with x=0, y=sign(b).  */
+  if (a[0]._sz == 0) {
+    rc = arbint_abs(res_g, b);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    arbint_zero(res_x);
+    rc = arbint_set_i32(res_y, b_neg ? -1 : 1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    goto copy_results;
+  }
+
+  /*  Handle gcd(a, 0) = |a| with x=sign(a), y=0.  */
+  if (b[0]._sz == 0) {
+    rc = arbint_abs(res_g, a);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_set_i32(res_x, a_neg ? -1 : 1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    arbint_zero(res_y);
+    goto copy_results;
+  }
+
+  /*  Initialize working temporaries.  */
+  rc = arbint_init(r0, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_r0 = 1;
+
+  rc = arbint_init(r1, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_r1 = 1;
+
+  rc = arbint_init(s0, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_s0 = 1;
+
+  rc = arbint_init(s1, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_s1 = 1;
+
+  rc = arbint_init(t0, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_t0 = 1;
+
+  rc = arbint_init(t1, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_t1 = 1;
+
+  rc = arbint_init(q, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_q = 1;
+
+  rc = arbint_init(tmp, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_tmp = 1;
+
+  /*  Set initial values: r0 = |a|, r1 = |b|, s0 = 1, s1 = 0, t0 = 0, t1 = 1.  */
+  rc = arbint_abs(r0, a);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_abs(r1, b);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_set_i32(s0, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  arbint_zero(s1);
+  arbint_zero(t0);
+  rc = arbint_set_i32(t1, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Extended Euclidean loop.  */
+  while (!arbint_is_zero(r1)) {
+    /*  q = floor(r0 / r1), r0 = r0 mod r1.  */
+    rc = arbint_tdiv_qr(q, r0, r0, r1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    arbint_swap(r0, r1);
+
+    /*  Update s: tmp = s0 - q*s1, (s0, s1) = (s1, tmp).  */
+    rc = arbint_mul(tmp, q, s1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_sub(tmp, s0, tmp);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    arbint_swap(s0, s1);
+    arbint_swap(s1, tmp);
+
+    /*  Update t: tmp = t0 - q*t1, (t0, t1) = (t1, tmp).  */
+    rc = arbint_mul(tmp, q, t1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_sub(tmp, t0, tmp);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    arbint_swap(t0, t1);
+    arbint_swap(t1, tmp);
+  }
+
+  /*  Copy results with sign adjustment.
+      We computed with |a|, |b|, so s0*|a| + t0*|b| = g.
+      For signed a, b: a*x + b*y = g where x = s0*(a<0?-1:1), y = t0*(b<0?-1:1).  */
+  rc = arbint_set(res_g, r0);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  if (a_neg)
+    rc = arbint_neg(res_x, s0);
+  else
+    rc = arbint_set(res_x, s0);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  if (b_neg)
+    rc = arbint_neg(res_y, t0);
+  else
+    rc = arbint_set(res_y, t0);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+copy_results:
+  /*  Write outputs in order: g, x, y.
+      Per aliasing contract, last write wins for overlapping outputs.  */
+  rc = arbint_set(g, res_g);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_set(x, res_x);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_set(y, res_y);
+  /*  Fall through to cleanup.  */
+
+cleanup:
+  if (init_tmp)
+    arbint_clear(tmp);
+  if (init_q)
+    arbint_clear(q);
+  if (init_t1)
+    arbint_clear(t1);
+  if (init_t0)
+    arbint_clear(t0);
+  if (init_s1)
+    arbint_clear(s1);
+  if (init_s0)
+    arbint_clear(s0);
+  if (init_r1)
+    arbint_clear(r1);
+  if (init_r0)
+    arbint_clear(r0);
+  if (init_res_y)
+    arbint_clear(res_y);
+  if (init_res_x)
+    arbint_clear(res_x);
+  if (init_res_g)
+    arbint_clear(res_g);
+  return rc;
+}
