@@ -6,4 +6,6 @@ test-suite.log
 # dc demo
 dc.trs
 dc.log
+run_dc_test.sh.trs
+run_dc_test.sh.log
 dc

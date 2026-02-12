@@ -915,94 +915,64 @@ jobs:
           - arch: ppc64le
             platform: linux/ppc64le
             image: debian:bookworm-slim
+            image_tag: debian-bookworm
             compiler: clang
-            debootstrap: false
           - arch: ppc64le
             platform: linux/ppc64le
             image: alpine:latest
+            image_tag: alpine
             compiler: gcc
-            debootstrap: false
           # s390x - IBM Z mainframe (big-endian)
           - arch: s390x
             platform: linux/s390x
             image: debian:bookworm-slim
+            image_tag: debian-bookworm
             compiler: clang
-            debootstrap: false
           - arch: s390x
             platform: linux/s390x
             image: alpine:latest
+            image_tag: alpine
             compiler: gcc
-            debootstrap: false
           # riscv64 - RISC-V 64-bit (only unstable images available)
           - arch: riscv64
             platform: linux/riscv64
             image: debian:sid-slim
+            image_tag: debian-sid
             compiler: gcc
-            debootstrap: false
           - arch: riscv64
             platform: linux/riscv64
             image: alpine:edge
+            image_tag: alpine-edge
             compiler: gcc
-            debootstrap: false
           # mips64le - MIPS 64-bit little-endian
           - arch: mips64le
             platform: linux/mips64le
             image: debian:bookworm-slim
+            image_tag: debian-bookworm
             compiler: gcc
-            debootstrap: false
           - arch: mips64le
             platform: linux/mips64le
             image: debian:bookworm-slim
+            image_tag: debian-bookworm
             compiler: clang
-            debootstrap: false
           # arm32v7 - ARMv7 32-bit (Raspberry Pi 2/3/4 in 32-bit mode)
           - arch: arm32v7
             platform: linux/arm/v7
             image: debian:bookworm-slim
+            image_tag: debian-bookworm
             compiler: gcc
-            debootstrap: false
           - arch: arm32v7
             platform: linux/arm/v7
             image: alpine:latest
+            image_tag: alpine
             compiler: gcc
-            debootstrap: false
           # arm32v5 - ARMv5TE (old embedded ARM)
           - arch: arm32v5
             platform: linux/arm/v5
             image: debian:bookworm-slim
+            image_tag: debian-bookworm
             compiler: gcc
-            debootstrap: false
-          # ppc64 - PowerPC 64-bit big-endian (debian-ports, debootstrap image)
-          - arch: ppc64
-            image: urbanogilson/debian-debootstrap-ports:ppc64-trixie-sid
-            compiler: gcc
-            debootstrap: true
-          # powerpc - PowerPC 32-bit (debian-ports, debootstrap image)
-          - arch: powerpc
-            image: urbanogilson/debian-debootstrap-ports:powerpc-trixie-sid
-            compiler: gcc
-            debootstrap: true
-          # hppa - HP PA-RISC (debian-ports, debootstrap image)
-          - arch: hppa
-            image: urbanogilson/debian-debootstrap-ports:hppa-trixie-sid
-            compiler: gcc
-            debootstrap: true
-          # m68k - Motorola 68000 series (debian-ports, debootstrap image)
-          - arch: m68k
-            image: urbanogilson/debian-debootstrap-ports:m68k-trixie-sid
-            compiler: gcc
-            debootstrap: true
-          # sh4 - Hitachi SuperH (debian-ports, debootstrap image)
-          - arch: sh4
-            image: urbanogilson/debian-debootstrap-ports:sh4-trixie-sid
-            compiler: gcc
-            debootstrap: true
-          # alpha - DEC Alpha (debian-ports, debootstrap image)
-          - arch: alpha
-            image: urbanogilson/debian-debootstrap-ports:alpha-trixie-sid
-            compiler: gcc
-            debootstrap: true
-    name: build-exotic (${{ matrix.arch }}, ${{ matrix.image }}, ${{ matrix.compiler }})
+    name: build-exotic (${{ matrix.arch }}, ${{ matrix.image_tag }}, ${{ matrix.compiler }})
 
     steps:
       - name: Set up QEMU
@@ -1014,20 +984,11 @@ jobs:
           name: c-arbint-dist
           path: dist
 
-      - name: Build and test in Docker
+      - name: Build and test in Docker (${{ matrix.platform }})
         run: |
           mkdir -p artifacts
-
-          # Debootstrap images (urbanogilson/debian-debootstrap-ports) are
-          # single-arch images that contain the foreign rootfs and rely on
-          # binfmt_misc + QEMU user-mode emulation. They must NOT use --platform.
-          # Multi-arch images (debian, alpine) use --platform for arch selection.
-          docker_args="--rm"
-          if [ "${{ matrix.debootstrap }}" != "true" ]; then
-            docker_args="$docker_args --platform ${{ matrix.platform }}"
-          fi
-
-          docker run $docker_args \
+          docker run --rm \
+            --platform ${{ matrix.platform }} \
             -e CC="${{ matrix.compiler }}" \
             -v "$PWD/dist:/work/dist" \
             -v "$PWD/artifacts:/work/artifacts" \
@@ -1072,7 +1033,101 @@ jobs:
       - name: Upload shared library artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-exotic-${{ matrix.arch }}-${{ matrix.compiler }}-${{ matrix.image }}
+          name: build-exotic-${{ matrix.arch }}-${{ matrix.compiler }}-${{ matrix.image_tag }}
+          path: artifacts/*
+          if-no-files-found: warn
+
+  # Exotic architectures from debian-ports that require special QEMU setup.
+  # These use urbanogilson/debian-debootstrap-ports images which are single-arch
+  # (not multi-arch manifests) and require manual binfmt_misc registration.
+  build-debian-ports:
+    runs-on: ubuntu-24.04
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: ppc64
+            qemu_arch: ppc64
+            image: urbanogilson/debian-debootstrap-ports:ppc64-trixie-sid
+          - arch: powerpc
+            qemu_arch: ppc
+            image: urbanogilson/debian-debootstrap-ports:powerpc-trixie-sid
+          - arch: hppa
+            qemu_arch: hppa
+            image: urbanogilson/debian-debootstrap-ports:hppa-trixie-sid
+          - arch: m68k
+            qemu_arch: m68k
+            image: urbanogilson/debian-debootstrap-ports:m68k-trixie-sid
+          - arch: sh4
+            qemu_arch: sh4
+            image: urbanogilson/debian-debootstrap-ports:sh4-trixie-sid
+          - arch: alpha
+            qemu_arch: alpha
+            image: urbanogilson/debian-debootstrap-ports:alpha-trixie-sid
+    name: build-debian-ports (${{ matrix.arch }})
+
+    steps:
+      - name: Install QEMU user-mode emulation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
+
+          # Register all QEMU user-mode handlers
+          sudo update-binfmts --enable
+
+          # Verify the target architecture is registered
+          echo "=== Registered binfmt handlers ==="
+          ls -la /proc/sys/fs/binfmt_misc/ || true
+          cat /proc/sys/fs/binfmt_misc/qemu-${{ matrix.qemu_arch }} 2>/dev/null || echo "Handler for ${{ matrix.qemu_arch }} not found"
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Build and test in Docker
+        run: |
+          mkdir -p artifacts
+
+          # Pull the image first (no --platform flag for debootstrap images)
+          docker pull "${{ matrix.image }}"
+
+          # Run with QEMU user-mode emulation via binfmt_misc
+          # The -v for qemu-user-static makes QEMU available inside the container
+          docker run --rm \
+            -v /usr/bin/qemu-${{ matrix.qemu_arch }}-static:/usr/bin/qemu-${{ matrix.qemu_arch }}-static:ro \
+            -e CC=gcc \
+            -v "$PWD/dist:/work/dist" \
+            -v "$PWD/artifacts:/work/artifacts" \
+            -w /work \
+            "${{ matrix.image }}" \
+            sh -eu -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get -o Acquire::Retries=5 update
+              apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+                build-essential pkg-config tar xz-utils groff
+
+              tarball="$(ls dist/*.tar.xz | head -n1)"
+              srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+              tar -xf "$tarball" -C dist
+              cd "dist/$srcdir"
+              ./configure --enable-lto=no
+              jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
+              make -j"$jobs"
+              make check
+              echo "=== Contents of src/.libs ==="
+              ls -la src/.libs/ || true
+
+              # Copy shared libraries to artifacts directory
+              find src/.libs -name "*.so*" -type f -exec cp {} /work/artifacts/ \; || true
+            '
+
+      - name: Upload shared library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-debian-ports-${{ matrix.arch }}-gcc
           path: artifacts/*
           if-no-files-found: warn
 
@@ -1228,7 +1283,7 @@ jobs:
 
   repack-artifacts:
     runs-on: ubuntu-24.04
-    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-macos, build-wasm]
+    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-debian-ports, build-macos, build-wasm]
     if: always()
 
     steps:
@@ -1317,29 +1372,30 @@ jobs:
               tuple="armv5te-linux"
               compiler="${BASH_REMATCH[1]}"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-exotic-ppc64-([^-]+)-.+ ]]; then
+            # debian-ports architectures (build-debian-ports-{arch}-gcc)
+            elif [[ "$artifact_name" =~ ^build-debian-ports-ppc64-gcc$ ]]; then
               tuple="ppc64-linux"
-              compiler="${BASH_REMATCH[1]}"
+              compiler="gcc"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-exotic-powerpc-([^-]+)-.+ ]]; then
+            elif [[ "$artifact_name" =~ ^build-debian-ports-powerpc-gcc$ ]]; then
               tuple="ppc-linux"
-              compiler="${BASH_REMATCH[1]}"
+              compiler="gcc"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-exotic-hppa-([^-]+)-.+ ]]; then
+            elif [[ "$artifact_name" =~ ^build-debian-ports-hppa-gcc$ ]]; then
               tuple="hppa-linux"
-              compiler="${BASH_REMATCH[1]}"
+              compiler="gcc"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-exotic-m68k-([^-]+)-.+ ]]; then
+            elif [[ "$artifact_name" =~ ^build-debian-ports-m68k-gcc$ ]]; then
               tuple="m68k-linux"
-              compiler="${BASH_REMATCH[1]}"
+              compiler="gcc"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-exotic-sh4-([^-]+)-.+ ]]; then
+            elif [[ "$artifact_name" =~ ^build-debian-ports-sh4-gcc$ ]]; then
               tuple="sh4-linux"
-              compiler="${BASH_REMATCH[1]}"
+              compiler="gcc"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-exotic-alpha-([^-]+)-.+ ]]; then
+            elif [[ "$artifact_name" =~ ^build-debian-ports-alpha-gcc$ ]]; then
               tuple="alpha-linux"
-              compiler="${BASH_REMATCH[1]}"
+              compiler="gcc"
               lto="off"
             elif [[ "$artifact_name" =~ ^build-macos-arm64-lto(on|off|auto)$ ]]; then
               tuple="arm64-darwin"
