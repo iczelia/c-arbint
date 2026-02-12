@@ -15,11 +15,12 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
+#define ARBINT_USE_BMI2_INTRIN 1
 #include "arbint_div.h"
+#include "arbint_mul.h"
 
 #include "config.h"
 
-#include <immintrin.h>
 #include <string.h>
 
 /*  Multiply two limbs producing full double-width result (hi:lo = a * b).
@@ -33,144 +34,16 @@
     multiply (32-bit).
 
     Precondition: hi and lo must point to valid writable limbs.  */
-#if ARBINT_LIMB_BITS == 64
 static inline void arbint_umul(arbint_limb_t * hi, arbint_limb_t * lo,
                                arbint_limb_t a, arbint_limb_t b) {
-  unsigned long long hi64 = 0ull;
-  unsigned long long lo64 =
-      _mulx_u64((unsigned long long) a, (unsigned long long) b, &hi64);
-  *lo = (arbint_limb_t) lo64;
-  *hi = (arbint_limb_t) hi64;
-}
-#elif ARBINT_LIMB_BITS == 32
-static inline void arbint_umul(arbint_limb_t * hi, arbint_limb_t * lo,
-                               arbint_limb_t a, arbint_limb_t b) {
-  uint64_t p = (uint64_t) a * (uint64_t) b;
-  *lo = (arbint_limb_t) p;
-  *hi = (arbint_limb_t) (p >> 32);
-}
-#else
-  #error "Unsupported limb size"
-#endif /* ARBINT_LIMB_BITS */
-
-/*  Compute reciprocal of a normalized limb for Barrett reduction.
-
-    Identical algorithm to arbint_tdiv_generic.c version. See detailed
-    documentation there for algorithm explanation and mathematical properties.
-
-    Uses BMI2-optimized arbint_umul for faster wide multiplications during
-    reciprocal computation, though the speedup here is minimal since this
-    function is called only once per division operation.
-
-    Parameters:
-      d - Normalized divisor (MSB must be set)
-
-    Returns:
-      Reciprocal v = floor((2^(2*LIMB_BITS) - 1) / d) - 2^LIMB_BITS
-
-    Precondition: d >= 2^(LIMB_BITS-1) (normalized, MSB set).  */
-static inline arbint_limb_t arbint_prepare_barrett(arbint_limb_t d) {
-  arbint_limb_t d0;
-  arbint_limb_t d1;
-  arbint_limb_t v;
-  arbint_limb_t p;
-  arbint_limb_t r;
-  arbint_limb_t t;
-  arbint_limb_t ql;
-
-  d1 = d >> ARBINT_HALF_BITS;
-  d0 = d & ARBINT_HALF_MASK;
-
-  /* Compute high half of reciprocal: qh = ~d / d1 (half-by-half). */
-  v = (arbint_limb_t) ((~d) / d1);
-  r = ((~d) - v * d1) << ARBINT_HALF_BITS;
-  r |= ARBINT_HALF_MASK;
-
-  /* Adjust for d0. */
-  p = v * d0;
-  if (r < p) {
-    v--;
-    r += d;
-    if (r >= d && r < p) {
-      v--;
-      r += d;
-    }
-  }
-  r -= p;
-
-  /* Compute low half of reciprocal. */
-  t = (r >> ARBINT_HALF_BITS) * v + r;
-  ql = (t >> ARBINT_HALF_BITS) + (arbint_limb_t) 1u;
-
-  r = (r << ARBINT_HALF_BITS) + ARBINT_HALF_MASK - ql * d;
-  if (r >= (t << ARBINT_HALF_BITS)) {
-    ql--;
-    r += d;
-  }
-
-  v = (v << ARBINT_HALF_BITS) + ql;
-  if (r >= d) {
-    v++;
-  }
-
-  return v;
+  arbint_umul_limb_bmi2(hi, lo, a, b);
 }
 
-/*  Perform single division step using precomputed reciprocal (Barrett
-    reduction).
-
-    BMI2-optimized variant of arbint_ubarrett from arbint_tdiv_generic.c.
-    Uses _mulx_u64 for faster wide multiplication in the reciprocal-multiply
-    step. Expected speedup: 1.5-2x over generic implementation on Haswell+
-    CPUs.
-
-    Algorithm and mathematical properties identical to generic version.
-    See arbint_tdiv_generic.c for detailed algorithm explanation.
-
-    Parameters:
-      q, r, nh, nl, d, di - Same semantics as arbint_ubarrett
-
-    Preconditions:
-      - nh < d (quotient fits in one limb)
-      - d normalized (MSB set)
-      - di = arbint_prepare_barrett(d)
-
-    Returns:
-      *q = floor((nh * 2^LIMB_BITS + nl) / d)
-      *r = (nh * 2^LIMB_BITS + nl) mod d
-
-    Performance: ~1.5-2x faster than generic version due to _mulx_u64.  */
-static inline void arbint_utdiv_barrett(arbint_limb_t * q, arbint_limb_t * r,
-                                        arbint_limb_t nh, arbint_limb_t nl,
-                                        arbint_limb_t d, arbint_limb_t di) {
-  arbint_limb_t qh;
-  arbint_limb_t ql;
-  arbint_limb_t _r;
-  arbint_limb_t mask;
-
-  arbint_umul(&qh, &ql, nh, di);
-
-  arbint_limb_t lo = ql + nl;
-  arbint_limb_t carry = (lo < ql) ? (arbint_limb_t) 1u : (arbint_limb_t) 0u;
-  ql = lo;
-  qh = qh + (nh + (arbint_limb_t) 1u) + carry;
-
-  _r = nl - qh * d;
-
-  /* First correction: if the estimate was 1 too high. */
-  mask = (arbint_limb_t) 0u - (arbint_limb_t) (_r > ql);
-  qh += mask;
-  _r += mask & d;
-
-  /* Second correction: if the estimate was 1 too low. */
-  if (_r >= d) {
-    _r -= d;
-    qh++;
-  }
-
-  *q = qh;
-  *r = _r;
-}
+/*  Shared reciprocal and division-step core.  */
+#define ARBINT_DIV_PREPARE_FN arbint_prepare_barrett
+#define ARBINT_DIV_STEP_FN arbint_utdiv_barrett
+#define ARBINT_DIV_UMUL_FN arbint_umul
+#include "arbint_div_barrett_core.inc"
 
 /*  BMI2-optimized single-limb division using reciprocal method.
     Uses _mulx_u64 for fast wide multiply in reciprocal-based division
@@ -397,5 +270,62 @@ arbint_err_t arbint_mod_u32_barrett_bmi2(arbint_t x, arbint_limb_t d_norm,
       return ARBINT_EOVERFLOW;
   }
 
+  return ARBINT_OK;
+}
+
+/*  Fast truncated quotient by 3 using fixed Barrett constants.
+    Computes q = trunc(n / 3) and discards the remainder.
+    Supports aliasing (q may be n).  */
+arbint_err_t arbint_tdiv_q_3_bmi2(arbint_t q, const arbint_t n) {
+  const arbint_limb_t * np;
+  size_t nn;
+  size_t i;
+  size_t q_used;
+  int nsign;
+  arbint_limb_t rem;
+  arbint_err_t rc;
+
+#if ARBINT_LIMB_BITS == 64
+  static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
+  static const arbint_limb_t di = UINT64_C(0x5555555555555555);
+  static const unsigned shift = 62u;
+#elif ARBINT_LIMB_BITS == 32
+  static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
+  static const arbint_limb_t di = UINT32_C(0x55555555);
+  static const unsigned shift = 30u;
+#else
+  #error "Unsupported ARBINT_LIMB_BITS for div3"
+#endif
+
+  if (q == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  nsign = (n[0]._sz > 0) - (n[0]._sz < 0);
+  if (nsign == 0) {
+    arbint_zero(q);
+    return ARBINT_OK;
+  }
+
+  nn = arbint_abs_sz(n[0]._sz);
+  rc = arbint_resize(q, nn);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  np = ARBINT_CLIMBS(n);
+  rem = np[nn - 1u] >> (ARBINT_LIMB_BITS - shift);
+
+  for (i = nn; i != 0u; --i) {
+    arbint_limb_t nl = np[i - 1u] << shift;
+    arbint_limb_t qi;
+    if (i >= 2u)
+      nl |= np[i - 2u] >> (ARBINT_LIMB_BITS - shift);
+
+    arbint_utdiv_barrett(&qi, &rem, rem, nl, d_norm, di);
+    ARBINT_LIMBS(q)[i - 1u] = qi;
+  }
+
+  q_used = arbint_norm_used(ARBINT_LIMBS(q), nn);
+  if (!arbint_set_signed_sz(q, q_used, (q_used == 0u) ? 0 : nsign))
+    return ARBINT_EOVERFLOW;
   return ARBINT_OK;
 }

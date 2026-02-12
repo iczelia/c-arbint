@@ -32,6 +32,7 @@ check_PROGRAMS = \
   test_addsub_avx2 \
   test_random \
   test_hash \
+  test_cache \
   test_shift \
   test_bitops \
   test_pow \

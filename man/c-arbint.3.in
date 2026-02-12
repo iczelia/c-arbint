@@ -130,6 +130,8 @@ values: boolean 0/1 for predicates, or three-way \-1/0/+1 for comparisons.
 .BI "arbint_err_t arbint_ctx_init(arbint_ctx_t *" ctx ", arbint_alloc_t " alloc ")"
 .br
 .BI "void arbint_ctx_clear(arbint_ctx_t *" ctx ")"
+.br
+.BI "void arbint_drop_caches(void)"
 .RS 4
 .PP
 Initialize or destroy an allocation context.
@@ -137,6 +139,8 @@ Initialize or destroy an allocation context.
 uses the standard C allocator (malloc/realloc/free).
 .BR arbint_ctx_init ()
 accepts a custom allocator.
+.BR arbint_drop_caches ()
+explicitly releases global runtime caches and is safe to call repeatedly.
 .RE
 .PP
 .BI "arbint_err_t arbint_init(arbint_t " x ", arbint_ctx_t *" ctx ")"

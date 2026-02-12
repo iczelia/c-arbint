@@ -308,6 +308,21 @@ static inline void crt_wide_set_u64(arbint_crt_wide_t * r, uint64_t v) {
 /*  Global NTT context - lazy initialized.  */
 static arbint_ntt_ctx_t g_ntt_ctx;
 static int g_ntt_initialized = 0;
+static arbint_alloc_t g_ntt_cache_alloc;
+static int g_ntt_cache_alloc_set = 0;
+
+static const arbint_alloc_t *
+arbint_ntt_get_cache_alloc(const arbint_alloc_t * alloc) {
+  if (!g_ntt_cache_alloc_set && alloc != NULL && alloc->realloc != NULL) {
+    g_ntt_cache_alloc = *alloc;
+    g_ntt_cache_alloc_set = 1;
+  }
+
+  if (!g_ntt_cache_alloc_set || g_ntt_cache_alloc.realloc == NULL)
+    return NULL;
+
+  return &g_ntt_cache_alloc;
+}
 
 /*  Initialize NTT context with precomputed parameters.
     Called once on first NTT use.  */
@@ -413,12 +428,61 @@ static arbint_err_t arbint_ntt_ensure_init(void) {
   return rc;
 }
 
+#ifndef ARBINT_NTT_CACHE_CLEAR_FN
+  #error "Including translation unit must define ARBINT_NTT_CACHE_CLEAR_FN"
+#endif
+
+void ARBINT_NTT_CACHE_CLEAR_FN(void) {
+  const arbint_alloc_t * alloc = arbint_ntt_get_cache_alloc(NULL);
+  size_t i;
+  size_t s;
+
+  if (alloc != NULL) {
+    for (i = 0u; i < 3u; ++i) {
+      arbint_ntt_roots_t * r = &g_ntt_ctx.roots[i];
+
+      if (r->omega_full != NULL) {
+        for (s = 0u; s < ARBINT_NTT_MAX_LOG2; ++s)
+          alloc->realloc(alloc->ud, r->omega_full[s], 0u);
+        alloc->realloc(alloc->ud, r->omega_full, 0u);
+      }
+
+      if (r->omega_inv_full != NULL) {
+        for (s = 0u; s < ARBINT_NTT_MAX_LOG2; ++s)
+          alloc->realloc(alloc->ud, r->omega_inv_full[s], 0u);
+        alloc->realloc(alloc->ud, r->omega_inv_full, 0u);
+      }
+
+      alloc->realloc(alloc->ud, r->omega, 0u);
+      alloc->realloc(alloc->ud, r->omega_inv, 0u);
+
+      r->omega = NULL;
+      r->omega_inv = NULL;
+      r->omega_full = NULL;
+      r->omega_inv_full = NULL;
+      r->max_log2 = 0u;
+      r->full_max_log2 = 0u;
+    }
+  }
+
+  memset(&g_ntt_ctx, 0, sizeof(g_ntt_ctx));
+  memset(&g_ntt_cache_alloc, 0, sizeof(g_ntt_cache_alloc));
+  g_ntt_cache_alloc_set = 0;
+  g_ntt_initialized = 0;
+}
+
 /* ========== Root Table Management ========== */
 
 /*  Ensure root tables are allocated for at least the given log2 size.  */
 static arbint_err_t ensure_roots(size_t log2_n, const arbint_alloc_t * alloc) {
+  const arbint_alloc_t * cache_alloc;
+
   if (log2_n > ARBINT_NTT_MAX_LOG2)
     return ARBINT_EOVERFLOW;
+
+  cache_alloc = arbint_ntt_get_cache_alloc(alloc);
+  if (cache_alloc == NULL)
+    return ARBINT_EINVAL;
 
   for (int i = 0; i < 3; ++i) {
     arbint_ntt_roots_t * r = &g_ntt_ctx.roots[i];
@@ -431,15 +495,15 @@ static arbint_err_t ensure_roots(size_t log2_n, const arbint_alloc_t * alloc) {
     size_t new_size = log2_n;
     if (new_size == 0u)
       new_size = 1u;
-    uint64_t * new_omega = (uint64_t *) alloc->realloc(
-        alloc->ud, r->omega, new_size * sizeof(uint64_t));
+    uint64_t * new_omega = (uint64_t *) cache_alloc->realloc(
+        cache_alloc->ud, r->omega, new_size * sizeof(uint64_t));
     if (new_omega == NULL)
       return ARBINT_ENOMEM;
 
-    uint64_t * new_omega_inv = (uint64_t *) alloc->realloc(
-        alloc->ud, r->omega_inv, new_size * sizeof(uint64_t));
+    uint64_t * new_omega_inv = (uint64_t *) cache_alloc->realloc(
+        cache_alloc->ud, r->omega_inv, new_size * sizeof(uint64_t));
     if (new_omega_inv == NULL) {
-      alloc->realloc(alloc->ud, new_omega, 0);
+      cache_alloc->realloc(cache_alloc->ud, new_omega, 0);
       return ARBINT_ENOMEM;
     }
 
@@ -484,6 +548,8 @@ static arbint_err_t ensure_roots(size_t log2_n, const arbint_alloc_t * alloc) {
 #ifdef NTT_USE_FULL_OMEGA_TABLES
 static arbint_err_t ensure_full_roots(size_t log2_n,
                                       const arbint_alloc_t * alloc) {
+  const arbint_alloc_t * cache_alloc;
+
   if (log2_n > ARBINT_NTT_MAX_LOG2)
     return ARBINT_EOVERFLOW;
 
@@ -491,6 +557,9 @@ static arbint_err_t ensure_full_roots(size_t log2_n,
   arbint_err_t rc = ensure_roots(log2_n, alloc);
   if (rc != ARBINT_OK)
     return rc;
+  cache_alloc = arbint_ntt_get_cache_alloc(alloc);
+  if (cache_alloc == NULL)
+    return ARBINT_EINVAL;
 
   for (int i = 0; i < 3; ++i) {
     arbint_ntt_roots_t * r = &g_ntt_ctx.roots[i];
@@ -502,8 +571,9 @@ static arbint_err_t ensure_full_roots(size_t log2_n,
     /*  Allocate array of pointers for full tables if needed.  */
     if (r->omega_full == NULL) {
       r->omega_full =
-          (uint64_t **) alloc->realloc(alloc->ud, NULL,
-                                       ARBINT_NTT_MAX_LOG2 * sizeof(uint64_t *));
+          (uint64_t **) cache_alloc->realloc(
+              cache_alloc->ud, NULL,
+              ARBINT_NTT_MAX_LOG2 * sizeof(uint64_t *));
       if (r->omega_full == NULL)
         return ARBINT_ENOMEM;
       for (size_t s = 0u; s < ARBINT_NTT_MAX_LOG2; ++s)
@@ -511,8 +581,9 @@ static arbint_err_t ensure_full_roots(size_t log2_n,
     }
     if (r->omega_inv_full == NULL) {
       r->omega_inv_full =
-          (uint64_t **) alloc->realloc(alloc->ud, NULL,
-                                       ARBINT_NTT_MAX_LOG2 * sizeof(uint64_t *));
+          (uint64_t **) cache_alloc->realloc(
+              cache_alloc->ud, NULL,
+              ARBINT_NTT_MAX_LOG2 * sizeof(uint64_t *));
       if (r->omega_inv_full == NULL)
         return ARBINT_ENOMEM;
       for (size_t s = 0u; s < ARBINT_NTT_MAX_LOG2; ++s)
@@ -530,8 +601,8 @@ static arbint_err_t ensure_full_roots(size_t log2_n,
       /*  Allocate omega_full[s].  */
       if (r->omega_full[s] == NULL) {
         r->omega_full[s] =
-            (uint64_t *) alloc->realloc(alloc->ud, NULL,
-                                        table_size * sizeof(uint64_t));
+            (uint64_t *) cache_alloc->realloc(
+                cache_alloc->ud, NULL, table_size * sizeof(uint64_t));
         if (r->omega_full[s] == NULL)
           return ARBINT_ENOMEM;
 
@@ -546,8 +617,8 @@ static arbint_err_t ensure_full_roots(size_t log2_n,
       /*  Allocate omega_inv_full[s].  */
       if (r->omega_inv_full[s] == NULL) {
         r->omega_inv_full[s] =
-            (uint64_t *) alloc->realloc(alloc->ud, NULL,
-                                        table_size * sizeof(uint64_t));
+            (uint64_t *) cache_alloc->realloc(
+                cache_alloc->ud, NULL, table_size * sizeof(uint64_t));
         if (r->omega_inv_full[s] == NULL)
           return ARBINT_ENOMEM;
 

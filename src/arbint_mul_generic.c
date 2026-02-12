@@ -17,6 +17,7 @@
 
 #include "arbint_mul.h"
 #include "arbint_ntt.h"
+#include "arbint_cpu.h"
 
 #include "config.h"
 
@@ -28,27 +29,7 @@
     unavailable.  */
 static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
                                  arbint_limb_t * hi, arbint_limb_t * lo) {
-#if ARBINT_LIMB_BITS == 32
-  uint64_t p = (uint64_t) x * (uint64_t) y;
-  *lo = (arbint_limb_t) p;
-  *hi = (arbint_limb_t) (p >> 32);
-#else
-  const arbint_limb_t mask = ARBINT_HALF_MASK;
-  arbint_limb_t x0 = x & mask;
-  arbint_limb_t x1 = x >> ARBINT_HALF_BITS;
-  arbint_limb_t y0 = y & mask;
-  arbint_limb_t y1 = y >> ARBINT_HALF_BITS;
-
-  arbint_limb_t w0 = x0 * y0;
-  arbint_limb_t t = x1 * y0 + (w0 >> ARBINT_HALF_BITS);
-  arbint_limb_t w1 = t & mask;
-  arbint_limb_t w2 = t >> ARBINT_HALF_BITS;
-
-  w1 = x0 * y1 + w1;
-
-  *hi = x1 * y1 + w2 + (w1 >> ARBINT_HALF_BITS);
-  *lo = (w1 << ARBINT_HALF_BITS) | (w0 & mask);
-#endif /* ARBINT_LIMB_BITS */
+  arbint_umul_limb_generic(hi, lo, x, y);
 }
 
 /*  Compute x*y + acc + carry, returning high limb in result and low limb
@@ -183,63 +164,6 @@ static size_t arbint_divexact3_generic(arbint_limb_t * x, size_t n) {
 
 #include "arbint_mul_core.inc"
 
-/*  Fast truncated quotient by 3 using fixed Barrett constants.
-    Computes q = trunc(n / 3) and discards the remainder.
-    Supports aliasing (q may be n).  */
-arbint_err_t arbint_tdiv_q_3_generic(arbint_t q, const arbint_t n) {
-  const arbint_limb_t * np;
-  size_t nn;
-  size_t i;
-  size_t q_used;
-  int nsign;
-  arbint_limb_t rem;
-  arbint_err_t rc;
-
-#if ARBINT_LIMB_BITS == 64
-  static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
-  static const arbint_limb_t di = UINT64_C(0x5555555555555555);
-  static const unsigned shift = 62u;
-#elif ARBINT_LIMB_BITS == 32
-  static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
-  static const arbint_limb_t di = UINT32_C(0x55555555);
-  static const unsigned shift = 30u;
-#else
-  #error "Unsupported ARBINT_LIMB_BITS for div3"
-#endif
-
-  if (q == NULL || n == NULL)
-    return ARBINT_EINVAL;
-
-  nsign = (n[0]._sz > 0) - (n[0]._sz < 0);
-  if (nsign == 0) {
-    arbint_zero(q);
-    return ARBINT_OK;
-  }
-
-  nn = arbint_abs_sz(n[0]._sz);
-  rc = arbint_resize(q, nn);
-  if (rc != ARBINT_OK)
-    return rc;
-
-  np = ARBINT_CLIMBS(n);
-  rem = np[nn - 1u] >> (ARBINT_LIMB_BITS - shift);
-
-  for (i = nn; i != 0u; --i) {
-    arbint_limb_t nl = np[i - 1u] << shift;
-    arbint_limb_t qi;
-    if (i >= 2u)
-      nl |= np[i - 2u] >> (ARBINT_LIMB_BITS - shift);
-
-    arbint_div3_barrett(&qi, &rem, rem, nl, d_norm, di);
-    ARBINT_LIMBS(q)[i - 1u] = qi;
-  }
-
-  q_used = arbint_norm_used(ARBINT_LIMBS(q), nn);
-  if (!arbint_set_signed_sz(q, q_used, (q_used == 0u) ? 0 : nsign))
-    return ARBINT_EOVERFLOW;
-  return ARBINT_OK;
-}
-
 /*  Exported wrappers for internal functions used by addmul/submul.  */
 
 arbint_err_t arbint_mul_mag_generic(arbint_limb_t * dst, size_t * out_used,
@@ -259,4 +183,46 @@ size_t arbint_mulacc_generic(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                              const arbint_limb_t * a, size_t an,
                              const arbint_limb_t * c, size_t cn) {
   return arbint_mulacc(dst, dst_n, dst_cap, a, an, c, cn);
+}
+
+const arbint_mul_kernel_table_t * arbint_mul_kernel_table_get(void) {
+  static arbint_mul_kernel_table_t table;
+  static int ready = 0;
+
+  if (!ready) {
+#if HAS_BMI2_ALWAYS
+    table.mul_impl = arbint_mul_impl_bmi2;
+    table.sqr_impl = arbint_sqr_impl_bmi2;
+    table.mul_limb_1 = arbint_mul_limb_1_bmi2;
+    table.mul_mag = arbint_mul_mag_bmi2;
+    table.mulacc = arbint_mulacc_bmi2;
+    table.mulacc_1 = arbint_mulacc_1_bmi2;
+#elif HAS_BMI2
+    if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)) {
+      table.mul_impl = arbint_mul_impl_bmi2;
+      table.sqr_impl = arbint_sqr_impl_bmi2;
+      table.mul_limb_1 = arbint_mul_limb_1_bmi2;
+      table.mul_mag = arbint_mul_mag_bmi2;
+      table.mulacc = arbint_mulacc_bmi2;
+      table.mulacc_1 = arbint_mulacc_1_bmi2;
+    } else {
+      table.mul_impl = arbint_mul_impl_generic;
+      table.sqr_impl = arbint_sqr_impl_generic;
+      table.mul_limb_1 = arbint_mul_limb_1_generic;
+      table.mul_mag = arbint_mul_mag_generic;
+      table.mulacc = arbint_mulacc_generic;
+      table.mulacc_1 = arbint_mulacc_1_generic;
+    }
+#else
+    table.mul_impl = arbint_mul_impl_generic;
+    table.sqr_impl = arbint_sqr_impl_generic;
+    table.mul_limb_1 = arbint_mul_limb_1_generic;
+    table.mul_mag = arbint_mul_mag_generic;
+    table.mulacc = arbint_mulacc_generic;
+    table.mulacc_1 = arbint_mulacc_1_generic;
+#endif
+    ready = 1;
+  }
+
+  return &table;
 }

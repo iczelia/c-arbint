@@ -42,7 +42,10 @@
       restructuring the stage loop to process pairs of stages.
     - AVX-512: 8 elements per vector, native 64-bit unsigned compare.  */
 
+#define ARBINT_USE_BMI2_INTRIN 1
+
 #include "arbint_ntt.h"
+#include "arbint_mul.h"
 #include "config.h"
 
 #include <immintrin.h>
@@ -57,11 +60,7 @@
     this is safe to use unconditionally in AVX2-compiled code.  */
 static inline void ntt_umul(uint64_t * hi, uint64_t * lo, uint64_t a,
                             uint64_t b) {
-  unsigned long long hi64 = 0ull;
-  unsigned long long lo64 =
-      _mulx_u64((unsigned long long) a, (unsigned long long) b, &hi64);
-  *lo = (uint64_t) lo64;
-  *hi = (uint64_t) hi64;
+  arbint_umul_u64_bmi2(hi, lo, a, b);
 }
 
 /*  Tell the core include that we provide custom transforms.  */
@@ -178,6 +177,7 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
 
 /*  Include the core for Montgomery arithmetic, CRT, etc.
     We need the helper functions before defining our custom transforms.  */
+#define ARBINT_NTT_CACHE_CLEAR_FN arbint_ntt_cache_clear_avx2
 #define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_avx2
 #include "arbint_ntt_core.inc"
 

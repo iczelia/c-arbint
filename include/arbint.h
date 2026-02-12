@@ -96,8 +96,10 @@ ARBINT_API arbint_err_t arbint_ctx_init_default(arbint_ctx_t * ctx);
 ARBINT_API arbint_err_t arbint_ctx_init(arbint_ctx_t * ctx,
                                         const arbint_alloc_t * a,
                                         uint32_t flags);
-/* Release context-owned transient state (currently expected to be a no-op). */
+/* Release context-owned transient state and drop global runtime caches. */
 ARBINT_API void arbint_ctx_clear(arbint_ctx_t * ctx);
+/* Drop global runtime caches (idempotent). */
+ARBINT_API void arbint_drop_caches(void);
 
 /* ---------------- Core type ---------------- */
 /*  Internal normalization invariant:

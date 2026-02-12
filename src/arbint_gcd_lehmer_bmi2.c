@@ -43,19 +43,18 @@
     2. HAS_BMI2: runtime check via CPUID, dispatch accordingly
     3. Otherwise: use generic implementation  */
 
+#define ARBINT_USE_BMI2_INTRIN 1
+
 #include "arbint_gcd.h"
 
 #include "arbint_addsub.h"
 #include "arbint_base.h"
 #include "arbint_div.h"
+#include "arbint_mul.h"
 #include "arbint_shift.h"
 #include "config.h"
 
 #include <string.h>
-
-#if HAS_BMI2 && ARBINT_LIMB_BITS == 64
-#include <immintrin.h>
-#endif
 
 /*  BMI2-optimized wide multiply: hi:lo = a * b.
 
@@ -66,7 +65,7 @@ static inline void arbint_lehmer_umul_bmi2(arbint_limb_t * hi,
                                            arbint_limb_t * lo,
                                            arbint_limb_t a,
                                            arbint_limb_t b) {
-  *lo = _mulx_u64(a, b, (unsigned long long *) hi);
+  arbint_umul_limb_bmi2(hi, lo, a, b);
 }
 
 /*  Multiply limb array by single limb: dst = src * mult.

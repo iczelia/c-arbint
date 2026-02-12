@@ -16,6 +16,7 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "arbint_div.h"
+#include "arbint_mul.h"
 
 #include "config.h"
 
@@ -34,190 +35,16 @@
     Algorithm complexity: O(1) with 4 half-limb multiplications (64-bit case)
 
     Precondition: hi and lo must point to valid writable limbs.  */
-#if ARBINT_LIMB_BITS == 64
 static inline void arbint_umul(arbint_limb_t * hi, arbint_limb_t * lo,
                                arbint_limb_t a, arbint_limb_t b) {
-  arbint_limb_t a0 = a & ARBINT_HALF_MASK;
-  arbint_limb_t a1 = a >> ARBINT_HALF_BITS;
-  arbint_limb_t b0 = b & ARBINT_HALF_MASK;
-  arbint_limb_t b1 = b >> ARBINT_HALF_BITS;
-  arbint_limb_t w0 = a0 * b0;
-  arbint_limb_t t = a1 * b0 + (w0 >> ARBINT_HALF_BITS);
-  arbint_limb_t w1 = t & ARBINT_HALF_MASK;
-  arbint_limb_t w2 = t >> ARBINT_HALF_BITS;
-  w1 = a0 * b1 + w1;
-  *hi = a1 * b1 + w2 + (w1 >> ARBINT_HALF_BITS);
-  *lo = (w1 << ARBINT_HALF_BITS) | (w0 & ARBINT_HALF_MASK);
-}
-#elif ARBINT_LIMB_BITS == 32
-static inline void arbint_umul(arbint_limb_t * hi, arbint_limb_t * lo,
-                               arbint_limb_t a, arbint_limb_t b) {
-  uint64_t p = (uint64_t) a * (uint64_t) b;
-  *lo = (arbint_limb_t) p;
-  *hi = (arbint_limb_t) (p >> 32);
-}
-#else
-  #error "Unsupported limb size"
-#endif /* ARBINT_LIMB_BITS */
-
-/*  Compute reciprocal of a normalized limb for Barrett reduction.
-
-    Given a normalized divisor d (MSB set, d >= beta/2 where beta =
-    2^LIMB_BITS), computes the reciprocal v = floor((beta^2 - 1) / d) - beta.
-
-    This reciprocal allows replacing expensive hardware division with two
-    multiplications in the division-by-reciprocal algorithm
-    (Granlund-Montgomery method). The normalization requirement (MSB set)
-    ensures sufficient precision in the reciprocal approximation.
-
-    Algorithm: Computes the reciprocal using half-limb arithmetic via Newton
-    iteration adapted from mini-gmp. First computes high half of reciprocal
-    via ~d / d1 (where d1 is the high half of d), then refines to full
-    precision by computing the low half with remainder tracking and correction
-    steps.
-
-    Parameters:
-      d - Normalized divisor (MSB must be set, i.e., d >= 2^(LIMB_BITS-1))
-
-    Returns:
-      Reciprocal v = floor((2^(2*LIMB_BITS) - 1) / d) - 2^LIMB_BITS
-
-    Precondition: d must be normalized (d >= 2^(LIMB_BITS-1)). If d is not
-    normalized, the reciprocal will have insufficient precision and division
-    results will be incorrect. Caller must normalize via left-shift before
-    calling this function.
-
-    Algorithm complexity: O(1) with ~10 half-limb operations.
-
-    Note: The returned reciprocal v satisfies beta <= v < beta + (beta^2 -
-    1)/d, where beta = 2^LIMB_BITS. This property is essential for the
-    correctness of the division-by-reciprocal algorithm.  */
-static inline arbint_limb_t arbint_prepare_barrett(arbint_limb_t d) {
-  arbint_limb_t d0;
-  arbint_limb_t d1;
-  arbint_limb_t v;
-  arbint_limb_t p;
-  arbint_limb_t r;
-  arbint_limb_t t;
-  arbint_limb_t ql;
-
-  d1 = d >> ARBINT_HALF_BITS;
-  d0 = d & ARBINT_HALF_MASK;
-
-  /* Compute high half of reciprocal: qh = ~d / d1 (half-by-half). */
-  v = (arbint_limb_t) ((~d) / d1);
-  r = ((~d) - v * d1) << ARBINT_HALF_BITS;
-  r |= ARBINT_HALF_MASK;
-
-  /* Adjust for d0. */
-  p = v * d0;
-  if (r < p) {
-    v--;
-    r += d;
-    if (r >= d && r < p) {
-      v--;
-      r += d;
-    }
-  }
-  r -= p;
-
-  /* Compute low half of reciprocal. */
-  t = (r >> ARBINT_HALF_BITS) * v + r;
-  ql = (t >> ARBINT_HALF_BITS) + (arbint_limb_t) 1u;
-
-  r = (r << ARBINT_HALF_BITS) + ARBINT_HALF_MASK - ql * d;
-  if (r >= (t << ARBINT_HALF_BITS)) {
-    ql--;
-    r += d;
-  }
-
-  v = (v << ARBINT_HALF_BITS) + ql;
-  if (r >= d) {
-    v++;
-  }
-
-  return v;
+  arbint_umul_limb_generic(hi, lo, a, b);
 }
 
-/*  Perform single division step using precomputed reciprocal (Barrett
-   reduction).
-
-    Divides the two-limb dividend (nh:nl) by the single-limb divisor d,
-    producing quotient q and remainder r. Uses precomputed reciprocal di to
-    replace the expensive hardware DIV instruction with two multiplications
-    plus a few ALU operations (~5-10 cycles instead of ~40-80 cycles for
-    hardware DIV on x86-64).
-
-    This is the core primitive of the Granlund-Montgomery division algorithm.
-    The reciprocal-based approach trades one expensive division (when computing
-    the reciprocal) for many cheap multiplications (when dividing each limb),
-    resulting in dramatic speedups for multi-limb division by a single limb.
-
-    Algorithm: Estimates the quotient via qh = (nh * di + nh + 1 + carry) >>
-    BITS, then applies two correction steps to handle the +/-1 error inherent
-    in the reciprocal approximation. The first correction uses branchless
-    arithmetic (mask trick) for better performance; the second uses a simple
-    conditional.
-
-    Parameters:
-      q  - Output pointer for quotient (single limb)
-      r  - Output pointer for remainder (single limb)
-      nh - High limb of two-limb dividend (most significant)
-      nl - Low limb of two-limb dividend (least significant)
-      d  - Normalized divisor (MSB set, i.e., d >= 2^(LIMB_BITS-1))
-      di - Precomputed reciprocal from arbint_prepare_barrett(d)
-
-    Returns:
-      *q = floor((nh * 2^LIMB_BITS + nl) / d)
-      *r = (nh * 2^LIMB_BITS + nl) mod d
-
-    Preconditions:
-      - nh < d (ensures quotient fits in one limb)
-      - d is normalized (MSB set, guaranteed by caller's shift)
-      - di = arbint_prepare_barrett(d) (correct reciprocal)
-      - q and r point to valid writable limbs
-
-    Algorithm complexity: O(1) with 2 wide multiplications + ~5-10 ALU ops.
-
-    Performance: On modern x86-64, this is ~5-8x faster than hardware DIV.
-    On ARM, speedup is even more dramatic (~10-15x) due to slow DIV
-    instruction.
-
-    Correctness: The reciprocal approximation may be off by +/-1, hence the two
-    correction steps. The first correction handles overestimation (quotient too
-    high), the second handles underestimation (quotient too low). After both
-    corrections, the result is always exact.  */
-static inline void arbint_ubarrett(arbint_limb_t * q, arbint_limb_t * r,
-                                   arbint_limb_t nh, arbint_limb_t nl,
-                                   arbint_limb_t d, arbint_limb_t di) {
-  arbint_limb_t qh;
-  arbint_limb_t ql;
-  arbint_limb_t _r;
-  arbint_limb_t mask;
-
-  arbint_umul(&qh, &ql, nh, di);
-
-  arbint_limb_t lo = ql + nl;
-  arbint_limb_t carry = (lo < ql) ? (arbint_limb_t) 1u : (arbint_limb_t) 0u;
-  ql = lo;
-  qh = qh + (nh + (arbint_limb_t) 1u) + carry;
-
-  _r = nl - qh * d;
-
-  /* First correction: if the estimate was 1 too high. */
-  mask = (arbint_limb_t) 0u - (arbint_limb_t) (_r > ql);
-  qh += mask;
-  _r += mask & d;
-
-  /* Second correction: if the estimate was 1 too low. */
-  if (_r >= d) {
-    _r -= d;
-    qh++;
-  }
-
-  *q = qh;
-  *r = _r;
-}
+/*  Shared reciprocal and division-step core.  */
+#define ARBINT_DIV_PREPARE_FN arbint_prepare_barrett
+#define ARBINT_DIV_STEP_FN arbint_ubarrett
+#define ARBINT_DIV_UMUL_FN arbint_umul
+#include "arbint_div_barrett_core.inc"
 
 /*  Generic truncated division by uint32_t (magnitude) using Barrett
     reduction.  */
@@ -398,6 +225,63 @@ arbint_err_t arbint_mod_u32_barrett_generic(arbint_t x, arbint_limb_t d_norm,
       return ARBINT_EOVERFLOW;
   }
 
+  return ARBINT_OK;
+}
+
+/*  Fast truncated quotient by 3 using fixed Barrett constants.
+    Computes q = trunc(n / 3) and discards the remainder.
+    Supports aliasing (q may be n).  */
+arbint_err_t arbint_tdiv_q_3_generic(arbint_t q, const arbint_t n) {
+  const arbint_limb_t * np;
+  size_t nn;
+  size_t i;
+  size_t q_used;
+  int nsign;
+  arbint_limb_t rem;
+  arbint_err_t rc;
+
+#if ARBINT_LIMB_BITS == 64
+  static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
+  static const arbint_limb_t di = UINT64_C(0x5555555555555555);
+  static const unsigned shift = 62u;
+#elif ARBINT_LIMB_BITS == 32
+  static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
+  static const arbint_limb_t di = UINT32_C(0x55555555);
+  static const unsigned shift = 30u;
+#else
+  #error "Unsupported ARBINT_LIMB_BITS for div3"
+#endif
+
+  if (q == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  nsign = (n[0]._sz > 0) - (n[0]._sz < 0);
+  if (nsign == 0) {
+    arbint_zero(q);
+    return ARBINT_OK;
+  }
+
+  nn = arbint_abs_sz(n[0]._sz);
+  rc = arbint_resize(q, nn);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  np = ARBINT_CLIMBS(n);
+  rem = np[nn - 1u] >> (ARBINT_LIMB_BITS - shift);
+
+  for (i = nn; i != 0u; --i) {
+    arbint_limb_t nl = np[i - 1u] << shift;
+    arbint_limb_t qi;
+    if (i >= 2u)
+      nl |= np[i - 2u] >> (ARBINT_LIMB_BITS - shift);
+
+    arbint_ubarrett(&qi, &rem, rem, nl, d_norm, di);
+    ARBINT_LIMBS(q)[i - 1u] = qi;
+  }
+
+  q_used = arbint_norm_used(ARBINT_LIMBS(q), nn);
+  if (!arbint_set_signed_sz(q, q_used, (q_used == 0u) ? 0 : nsign))
+    return ARBINT_EOVERFLOW;
   return ARBINT_OK;
 }
 

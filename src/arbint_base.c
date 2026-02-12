@@ -59,10 +59,12 @@ arbint_err_t arbint_ctx_init(arbint_ctx_t * ctx, const arbint_alloc_t * a,
   return ARBINT_OK;
 }
 
-/*  Clear context.  Currently a no-op since contexts hold no dynamic state,
-    but callers should always invoke this for forward compatibility: future
-    versions may cache RNG state or allocator pools that require cleanup.  */
-void arbint_ctx_clear(arbint_ctx_t * ctx) { (void) ctx; }
+/*  Clear context and release global runtime caches.
+    Context objects themselves currently hold no dynamic state.  */
+void arbint_ctx_clear(arbint_ctx_t * ctx) {
+  (void) ctx;
+  arbint_drop_caches();
+}
 
 /*  Initialize arbint to zero with given context.
     No memory allocated until first operation requiring capacity.  */

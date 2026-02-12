@@ -15,32 +15,20 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
+#define ARBINT_USE_BMI2_INTRIN 1
 #include "arbint_mul.h"
 #include "arbint_ntt.h"
 
 #include "config.h"
 
 #include <assert.h>
-#include <immintrin.h>
 #include <string.h>
 
 /*  Multiply two limbs without relying on 2x-width integer types.
     Split each limb into half-limbs and combine partial products.  */
 static void arbint_mul_wide_limb(arbint_limb_t x, arbint_limb_t y,
                                  arbint_limb_t * hi, arbint_limb_t * lo) {
-#if ARBINT_LIMB_BITS == 32
-  uint64_t p = (uint64_t) x * (uint64_t) y;
-  *lo = (arbint_limb_t) p;
-  *hi = (arbint_limb_t) (p >> 32);
-#elif ARBINT_LIMB_BITS == 64
-  unsigned long long hi64 = 0ull;
-  unsigned long long lo64 =
-      _mulx_u64((unsigned long long) x, (unsigned long long) y, &hi64);
-  *lo = (arbint_limb_t) lo64;
-  *hi = (arbint_limb_t) hi64;
-#else
-  #error "Unsupported limb size"
-#endif /* ARBINT_LIMB_BITS */
+  arbint_umul_limb_bmi2(hi, lo, x, y);
 }
 
 static arbint_limb_t arbint_muladd_limb(arbint_limb_t x, arbint_limb_t y,
@@ -169,63 +157,6 @@ static size_t arbint_divexact3_bmi2(arbint_limb_t * x, size_t n) {
 #define ARBINT_SQR_IMPL_FN arbint_sqr_impl_bmi2
 
 #include "arbint_mul_core.inc"
-
-/*  Fast truncated quotient by 3 using fixed Barrett constants.
-    Computes q = trunc(n / 3) and discards the remainder.
-    Supports aliasing (q may be n).  */
-arbint_err_t arbint_tdiv_q_3_bmi2(arbint_t q, const arbint_t n) {
-  const arbint_limb_t * np;
-  size_t nn;
-  size_t i;
-  size_t q_used;
-  int nsign;
-  arbint_limb_t rem;
-  arbint_err_t rc;
-
-#if ARBINT_LIMB_BITS == 64
-  static const arbint_limb_t d_norm = UINT64_C(0xC000000000000000);
-  static const arbint_limb_t di = UINT64_C(0x5555555555555555);
-  static const unsigned shift = 62u;
-#elif ARBINT_LIMB_BITS == 32
-  static const arbint_limb_t d_norm = UINT32_C(0xC0000000);
-  static const arbint_limb_t di = UINT32_C(0x55555555);
-  static const unsigned shift = 30u;
-#else
-  #error "Unsupported ARBINT_LIMB_BITS for div3"
-#endif
-
-  if (q == NULL || n == NULL)
-    return ARBINT_EINVAL;
-
-  nsign = (n[0]._sz > 0) - (n[0]._sz < 0);
-  if (nsign == 0) {
-    arbint_zero(q);
-    return ARBINT_OK;
-  }
-
-  nn = arbint_abs_sz(n[0]._sz);
-  rc = arbint_resize(q, nn);
-  if (rc != ARBINT_OK)
-    return rc;
-
-  np = ARBINT_CLIMBS(n);
-  rem = np[nn - 1u] >> (ARBINT_LIMB_BITS - shift);
-
-  for (i = nn; i != 0u; --i) {
-    arbint_limb_t nl = np[i - 1u] << shift;
-    arbint_limb_t qi;
-    if (i >= 2u)
-      nl |= np[i - 2u] >> (ARBINT_LIMB_BITS - shift);
-
-    arbint_div3_barrett(&qi, &rem, rem, nl, d_norm, di);
-    ARBINT_LIMBS(q)[i - 1u] = qi;
-  }
-
-  q_used = arbint_norm_used(ARBINT_LIMBS(q), nn);
-  if (!arbint_set_signed_sz(q, q_used, (q_used == 0u) ? 0 : nsign))
-    return ARBINT_EOVERFLOW;
-  return ARBINT_OK;
-}
 
 /*  Exported wrappers for internal functions used by addmul/submul.  */
 

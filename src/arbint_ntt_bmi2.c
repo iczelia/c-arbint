@@ -22,10 +22,12 @@
     This provides ~25-30% speedup in NTT operations on BMI2-capable CPUs
     (Intel Haswell/AMD Zen and later).  */
 
+#define ARBINT_USE_BMI2_INTRIN 1
+
 #include "arbint_ntt.h"
+#include "arbint_mul.h"
 #include "config.h"
 
-#include <immintrin.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,12 +39,9 @@
     This replaces 4 half-limb multiplications with one hardware multiply.  */
 static inline void ntt_umul(uint64_t * hi, uint64_t * lo, uint64_t a,
                             uint64_t b) {
-  unsigned long long hi64 = 0ull;
-  unsigned long long lo64 =
-      _mulx_u64((unsigned long long) a, (unsigned long long) b, &hi64);
-  *lo = (uint64_t) lo64;
-  *hi = (uint64_t) hi64;
+  arbint_umul_u64_bmi2(hi, lo, a, b);
 }
 
+#define ARBINT_NTT_CACHE_CLEAR_FN arbint_ntt_cache_clear_bmi2
 #define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_bmi2
 #include "arbint_ntt_core.inc"

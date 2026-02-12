@@ -21,6 +21,101 @@
 #include "arbint_addsub.h"
 #include "arbint_base.h"
 
+/*  Shared wide multiply helpers used by mul/div/gcd/ntt kernels.
+    The BMI2 variants use _mulx_u64 only when the including translation unit
+    defines ARBINT_USE_BMI2_INTRIN and is compiled with BMI2 support.  */
+
+static inline void arbint_umul_limb_generic(arbint_limb_t * hi,
+                                            arbint_limb_t * lo,
+                                            arbint_limb_t a,
+                                            arbint_limb_t b) {
+#if ARBINT_LIMB_BITS == 32
+  uint64_t p = (uint64_t) a * (uint64_t) b;
+  *lo = (arbint_limb_t) p;
+  *hi = (arbint_limb_t) (p >> 32);
+#else
+  arbint_limb_t a0 = a & ARBINT_HALF_MASK;
+  arbint_limb_t a1 = a >> ARBINT_HALF_BITS;
+  arbint_limb_t b0 = b & ARBINT_HALF_MASK;
+  arbint_limb_t b1 = b >> ARBINT_HALF_BITS;
+  arbint_limb_t w0 = a0 * b0;
+  arbint_limb_t t = a1 * b0 + (w0 >> ARBINT_HALF_BITS);
+  arbint_limb_t w1 = t & ARBINT_HALF_MASK;
+  arbint_limb_t w2 = t >> ARBINT_HALF_BITS;
+  w1 = a0 * b1 + w1;
+  *hi = a1 * b1 + w2 + (w1 >> ARBINT_HALF_BITS);
+  *lo = (w1 << ARBINT_HALF_BITS) | (w0 & ARBINT_HALF_MASK);
+#endif
+}
+
+static inline void arbint_umul_u64_generic(uint64_t * hi, uint64_t * lo,
+                                           uint64_t a, uint64_t b) {
+  uint64_t a0 = a & UINT64_C(0xFFFFFFFF);
+  uint64_t a1 = a >> 32;
+  uint64_t b0 = b & UINT64_C(0xFFFFFFFF);
+  uint64_t b1 = b >> 32;
+  uint64_t w0 = a0 * b0;
+  uint64_t t = a1 * b0 + (w0 >> 32);
+  uint64_t w1 = t & UINT64_C(0xFFFFFFFF);
+  uint64_t w2 = t >> 32;
+  w1 = a0 * b1 + w1;
+  *hi = a1 * b1 + w2 + (w1 >> 32);
+  *lo = (w1 << 32) | (w0 & UINT64_C(0xFFFFFFFF));
+}
+
+#if defined(ARBINT_USE_BMI2_INTRIN) && HAS_BMI2 && ARBINT_LIMB_BITS == 64
+  #include <immintrin.h>
+static inline void arbint_umul_limb_bmi2(arbint_limb_t * hi,
+                                         arbint_limb_t * lo,
+                                         arbint_limb_t a,
+                                         arbint_limb_t b) {
+  unsigned long long hi64 = 0ull;
+  unsigned long long lo64 =
+      _mulx_u64((unsigned long long) a, (unsigned long long) b, &hi64);
+  *lo = (arbint_limb_t) lo64;
+  *hi = (arbint_limb_t) hi64;
+}
+
+static inline void arbint_umul_u64_bmi2(uint64_t * hi, uint64_t * lo,
+                                        uint64_t a, uint64_t b) {
+  unsigned long long hi64 = 0ull;
+  unsigned long long lo64 = _mulx_u64((unsigned long long) a,
+                                      (unsigned long long) b, &hi64);
+  *lo = (uint64_t) lo64;
+  *hi = (uint64_t) hi64;
+}
+#else
+static inline void arbint_umul_limb_bmi2(arbint_limb_t * hi,
+                                         arbint_limb_t * lo,
+                                         arbint_limb_t a,
+                                         arbint_limb_t b) {
+  arbint_umul_limb_generic(hi, lo, a, b);
+}
+
+static inline void arbint_umul_u64_bmi2(uint64_t * hi, uint64_t * lo,
+                                        uint64_t a, uint64_t b) {
+  arbint_umul_u64_generic(hi, lo, a, b);
+}
+#endif
+
+typedef struct arbint_mul_kernel_table {
+  arbint_err_t (*mul_impl)(arbint_t rop, const arbint_t a, const arbint_t b);
+  arbint_err_t (*sqr_impl)(arbint_t rop, const arbint_t a);
+  size_t (*mul_limb_1)(arbint_limb_t * dst, const arbint_limb_t * a, size_t an,
+                       arbint_limb_t b);
+  arbint_err_t (*mul_mag)(arbint_limb_t * dst, size_t * out_used,
+                          const arbint_limb_t * a, size_t an,
+                          const arbint_limb_t * b, size_t bn,
+                          const arbint_alloc_t * alloc);
+  size_t (*mulacc)(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
+                   const arbint_limb_t * a, size_t an,
+                   const arbint_limb_t * c, size_t cn);
+  size_t (*mulacc_1)(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
+                     const arbint_limb_t * a, size_t an, arbint_limb_t b);
+} arbint_mul_kernel_table_t;
+
+const arbint_mul_kernel_table_t * arbint_mul_kernel_table_get(void);
+
 int arbint_mul_cap(size_t an, size_t bn, size_t * out);
 
 arbint_err_t arbint_mul_impl_generic(arbint_t rop, const arbint_t a,
@@ -56,9 +151,6 @@ size_t arbint_mulacc_generic(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                              const arbint_limb_t * a, size_t an,
                              const arbint_limb_t * c, size_t cn);
 
-/*  Fast truncated quotient by 3 (q = trunc(n/3)).  */
-arbint_err_t arbint_tdiv_q_3_generic(arbint_t q, const arbint_t n);
-
 #if HAS_BMI2
 arbint_err_t arbint_mul_impl_bmi2(arbint_t rop, const arbint_t a,
                                   const arbint_t b);
@@ -80,8 +172,6 @@ size_t arbint_mulacc_1_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
 size_t arbint_mulacc_bmi2(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                           const arbint_limb_t * a, size_t an,
                           const arbint_limb_t * c, size_t cn);
-
-arbint_err_t arbint_tdiv_q_3_bmi2(arbint_t q, const arbint_t n);
 #endif /* HAS_BMI2 */
 
 /*  Multiplication thresholds (limb counts).  */

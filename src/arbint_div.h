@@ -57,8 +57,13 @@ arbint_err_t arbint_div_mag_knuth(const arbint_limb_t * np, size_t nn,
 arbint_err_t arbint_mod_u32_barrett_generic(arbint_t x, arbint_limb_t d_norm,
                                             arbint_limb_t di, unsigned shift);
 
+arbint_limb_t arbint_div_prepare_barrett_limb(arbint_limb_t d_norm);
+
 arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
                                     arbint_limb_t di, unsigned shift);
+
+arbint_err_t arbint_tdiv_q_3_generic(arbint_t q, const arbint_t n);
+arbint_err_t arbint_tdiv_q_3_dispatch(arbint_t q, const arbint_t n);
 
 /*  Dispatched u32 division (selects optimal implementation).  */
 arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,
@@ -84,6 +89,7 @@ arbint_err_t arbint_div_mag_single_limb_bmi2(const arbint_limb_t * np,
 
 arbint_err_t arbint_mod_u32_barrett_bmi2(arbint_t x, arbint_limb_t d_norm,
                                          arbint_limb_t di, unsigned shift);
+arbint_err_t arbint_tdiv_q_3_bmi2(arbint_t q, const arbint_t n);
 #endif /* HAS_BMI2 */
 
 #endif /* ARBINT_DIV_H */

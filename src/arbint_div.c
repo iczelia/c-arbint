@@ -230,6 +230,14 @@ static arbint_err_t arbint_tdiv_qr_pow2(arbint_t q, arbint_t r,
   return ARBINT_OK;
 }
 
+#define ARBINT_DIV_PREPARE_FN arbint_div_prepare_barrett_limb_core
+#define ARBINT_DIV_OMIT_STEP 1
+#include "arbint_div_barrett_core.inc"
+
+arbint_limb_t arbint_div_prepare_barrett_limb(arbint_limb_t d_norm) {
+  return arbint_div_prepare_barrett_limb_core(d_norm);
+}
+
 /*  Function pointer types for runtime dispatch.  */
 
 typedef arbint_err_t (*arbint_div_qr_u32_impl_fn_t)(arbint_t q, arbint_t r,
@@ -244,6 +252,8 @@ typedef arbint_err_t (*arbint_mod_u32_barrett_fn_t)(arbint_t x,
                                                     arbint_limb_t d_norm,
                                                     arbint_limb_t di,
                                                     unsigned shift);
+
+typedef arbint_err_t (*arbint_tdiv_q_3_fn_t)(arbint_t q, const arbint_t n);
 
 /*  Runtime dispatch selectors.  */
 
@@ -284,6 +294,18 @@ static arbint_mod_u32_barrett_fn_t arbint_select_mod_u32_barrett(void) {
 #endif
 }
 
+static arbint_tdiv_q_3_fn_t arbint_select_tdiv_q_3(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_tdiv_q_3_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_tdiv_q_3_bmi2
+             : arbint_tdiv_q_3_generic;
+#else
+  return arbint_tdiv_q_3_generic;
+#endif
+}
+
 /*  Dispatched Barrett reduction.  */
 
 arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
@@ -294,6 +316,15 @@ arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
     impl = arbint_select_mod_u32_barrett();
 
   return impl(x, d_norm, di, shift);
+}
+
+arbint_err_t arbint_tdiv_q_3_dispatch(arbint_t q, const arbint_t n) {
+  static arbint_tdiv_q_3_fn_t impl = NULL;
+
+  if (impl == NULL)
+    impl = arbint_select_tdiv_q_3();
+
+  return impl(q, n);
 }
 
 /*  Dispatched single-limb remainder (no quotient).  */

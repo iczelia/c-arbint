@@ -169,4 +169,13 @@ arbint_err_t arbint_mul_mag_ntt(arbint_limb_t * dst, size_t * out_used,
                                 const arbint_limb_t * b, size_t bn,
                                 const arbint_alloc_t * alloc);
 
+/*  Drop per-variant NTT global caches (idempotent).  */
+void arbint_ntt_cache_clear_generic(void);
+#if HAS_BMI2
+void arbint_ntt_cache_clear_bmi2(void);
+#endif
+#if HAS_AVX2
+void arbint_ntt_cache_clear_avx2(void);
+#endif
+
 #endif /* ARBINT_NTT_H */

@@ -15,25 +15,14 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
-#include "arbint_ntt.h"
-#include "arbint_mul.h"
-#include "config.h"
+#ifndef ARBINT_CACHE_H
+#define ARBINT_CACHE_H
 
-#include <stdlib.h>
-#include <string.h>
+#include "arbint_base.h"
 
-/* ========== Wide Multiplication ========== */
+arbint_err_t arbint_cache_prime_sieve_ensure(uint32_t limit);
+int arbint_cache_prime_sieve_is_prime(uint32_t n);
 
-/*  Multiply two 64-bit integers producing full 128-bit result (hi:lo = a * b).
+void arbint_cache_drop_all(void);
 
-    Uses half-limb (32x32) multiplication to synthesize 128-bit product
-    via Karatsuba-like decomposition (same pattern as seen in
-    arbint_div_generic.c).  */
-static inline void ntt_umul(uint64_t * hi, uint64_t * lo, uint64_t a,
-                            uint64_t b) {
-  arbint_umul_u64_generic(hi, lo, a, b);
-}
-
-#define ARBINT_NTT_CACHE_CLEAR_FN arbint_ntt_cache_clear_generic
-#define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_generic
-#include "arbint_ntt_core.inc"
+#endif /* ARBINT_CACHE_H */

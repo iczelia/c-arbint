@@ -167,6 +167,12 @@ int main(void) {
   CHECK_EQ_I(arbint_pow_u32(a, a, 1009), ARBINT_OK);
   test_is_power_value(a, 1, "2^1009");
 
+  /*  Drop caches and verify dynamic sieve path still works after rebuild.  */
+  arbint_drop_caches();
+  CHECK_EQ_I(arbint_set_i32(a, 2), ARBINT_OK);
+  CHECK_EQ_I(arbint_pow_u32(a, a, 541), ARBINT_OK);
+  test_is_power_value(a, 1, "2^541 after cache drop");
+
   /*  Test large non-powers.  */
   /*  2^127 + 1.  */
   CHECK_EQ_I(arbint_set_i32(a, 2), ARBINT_OK);

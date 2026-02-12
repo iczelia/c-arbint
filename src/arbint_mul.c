@@ -19,13 +19,7 @@
 
 #include "config.h"
 
-#include "arbint_cpu.h"
 #include "arbint_div.h"
-
-typedef arbint_err_t (*arbint_mul_impl_fn_t)(arbint_t rop, const arbint_t a,
-                                             const arbint_t b);
-
-typedef arbint_err_t (*arbint_sqr_impl_fn_t)(arbint_t rop, const arbint_t a);
 
 typedef size_t (*arbint_mul_limb_1_fn_t)(arbint_limb_t * dst,
                                          const arbint_limb_t * a, size_t an,
@@ -46,101 +40,12 @@ typedef size_t (*arbint_mulacc_1_fn_t)(arbint_limb_t * dst, size_t dst_n,
                                        size_t dst_cap, const arbint_limb_t * a,
                                        size_t an, arbint_limb_t b);
 
-typedef arbint_err_t (*arbint_tdiv_q_3_fn_t)(arbint_t q, const arbint_t n);
+static const arbint_mul_kernel_table_t * g_mul_kernels = NULL;
 
-/*  Select optimal single-limb multiplication implementation.
-    Prefers BMI2 when available for faster wide multiply.  */
-static arbint_mul_limb_1_fn_t arbint_select_mul_limb_1(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_mul_limb_1_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_mul_limb_1_bmi2
-             : arbint_mul_limb_1_generic;
-#else
-  return arbint_mul_limb_1_generic;
-#endif /* HAS_BMI2_ALWAYS */
-}
-
-/*  Select optimal multi-limb multiplication implementation.
-    Prefers BMI2 when available (uses _mulx_u64 for faster multiply).  */
-static arbint_mul_impl_fn_t arbint_select_mul_impl(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_mul_impl_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_mul_impl_bmi2
-             : arbint_mul_impl_generic;
-#else
-  return arbint_mul_impl_generic;
-#endif /* HAS_BMI2_ALWAYS */
-}
-
-/*  Select optimal squaring implementation.
-    Prefers BMI2 when available for faster wide multiply.  */
-static arbint_sqr_impl_fn_t arbint_select_sqr_impl(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_sqr_impl_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_sqr_impl_bmi2
-             : arbint_sqr_impl_generic;
-#else
-  return arbint_sqr_impl_generic;
-#endif /* HAS_BMI2_ALWAYS */
-}
-
-/*  Select optimal magnitude multiplication (schoolbook/Karatsuba/Toom-3).  */
-static arbint_mul_mag_fn_t arbint_select_mul_mag(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_mul_mag_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_mul_mag_bmi2
-             : arbint_mul_mag_generic;
-#else
-  return arbint_mul_mag_generic;
-#endif /* HAS_BMI2_ALWAYS */
-}
-
-/*  Select optimal fused multiply-accumulate (multi-limb).  */
-static arbint_mulacc_fn_t arbint_select_mulacc(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_mulacc_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_mulacc_bmi2
-             : arbint_mulacc_generic;
-#else
-  return arbint_mulacc_generic;
-#endif /* HAS_BMI2_ALWAYS */
-}
-
-/*  Select optimal fused multiply-accumulate (single limb).  */
-static arbint_mulacc_1_fn_t arbint_select_mulacc_1(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_mulacc_1_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_mulacc_1_bmi2
-             : arbint_mulacc_1_generic;
-#else
-  return arbint_mulacc_1_generic;
-#endif /* HAS_BMI2_ALWAYS */
-}
-
-/*  Select optimal /3 truncated quotient implementation.
-    Prefers BMI2 when available for faster wide multiply in Barrett step.  */
-static arbint_tdiv_q_3_fn_t arbint_select_tdiv_q_3(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_tdiv_q_3_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_tdiv_q_3_bmi2
-             : arbint_tdiv_q_3_generic;
-#else
-  return arbint_tdiv_q_3_generic;
-#endif /* HAS_BMI2_ALWAYS */
+static const arbint_mul_kernel_table_t * arbint_get_mul_kernels(void) {
+  if (g_mul_kernels == NULL)
+    g_mul_kernels = arbint_mul_kernel_table_get();
+  return g_mul_kernels;
 }
 
 /*  Cached function pointers for addmul/submul dispatch.
@@ -152,14 +57,22 @@ static arbint_mul_limb_1_fn_t g_mul_limb_1 = NULL;
 
 /*  Ensure all addmul dispatch function pointers are initialized.  */
 static void arbint_init_addmul_dispatch(void) {
+  const arbint_mul_kernel_table_t * k;
+
+  if (g_mul_mag != NULL && g_mulacc != NULL && g_mulacc_1 != NULL &&
+      g_mul_limb_1 != NULL)
+    return;
+
+  k = arbint_get_mul_kernels();
+
   if (g_mul_mag == NULL)
-    g_mul_mag = arbint_select_mul_mag();
+    g_mul_mag = k->mul_mag;
   if (g_mulacc == NULL)
-    g_mulacc = arbint_select_mulacc();
+    g_mulacc = k->mulacc;
   if (g_mulacc_1 == NULL)
-    g_mulacc_1 = arbint_select_mulacc_1();
+    g_mulacc_1 = k->mulacc_1;
   if (g_mul_limb_1 == NULL)
-    g_mul_limb_1 = arbint_select_mul_limb_1();
+    g_mul_limb_1 = k->mul_limb_1;
 }
 
 /*  Compute required capacity for multiplication result with overflow check.
@@ -206,21 +119,11 @@ int arbint_mul_cap(size_t an, size_t bn, size_t * out) {
 }
 
 arbint_err_t arbint_mul(arbint_t rop, const arbint_t a, const arbint_t b) {
-  static arbint_mul_impl_fn_t impl = NULL;
-
-  if (impl == NULL)
-    impl = arbint_select_mul_impl();
-
-  return impl(rop, a, b);
+  return arbint_get_mul_kernels()->mul_impl(rop, a, b);
 }
 
 arbint_err_t arbint_sqr(arbint_t rop, const arbint_t a) {
-  static arbint_sqr_impl_fn_t impl = NULL;
-
-  if (impl == NULL)
-    impl = arbint_select_sqr_impl();
-
-  return impl(rop, a);
+  return arbint_get_mul_kernels()->sqr_impl(rop, a);
 }
 
 /*  Count trailing zeros in a 32-bit unsigned integer.
@@ -248,19 +151,14 @@ static unsigned arbint_ctz32(uint32_t v) {
 
 /*  Dispatch /3 truncated quotient to platform-specific implementation.  */
 static arbint_err_t arbint_tdiv_q_3(arbint_t q, const arbint_t n) {
-  static arbint_tdiv_q_3_fn_t impl = NULL;
-
-  if (impl == NULL)
-    impl = arbint_select_tdiv_q_3();
-
-  return impl(q, n);
+  return arbint_tdiv_q_3_dispatch(q, n);
 }
 
 /*  Multiply arbint by uint32_t (rop = a * b).
     Optimized path for single-limb multiplier with early exit for 0, 1,
     and powers of two (delegated to shift).  */
 arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
-  static arbint_mul_limb_1_fn_t impl = NULL;
+  const arbint_mul_kernel_table_t * k;
   int as;
   int sign;
   size_t an;
@@ -297,11 +195,8 @@ arbint_err_t arbint_mul_u32(arbint_t rop, const arbint_t a, uint32_t b) {
 
   ap = ARBINT_CLIMBS(a);
   rp = ARBINT_LIMBS(rop);
-
-  if (impl == NULL)
-    impl = arbint_select_mul_limb_1();
-
-  used = impl(rp, ap, an, (arbint_limb_t) b);
+  k = arbint_get_mul_kernels();
+  used = k->mul_limb_1(rp, ap, an, (arbint_limb_t) b);
 
   sign = as;
   if (!arbint_set_signed_sz(rop, used, sign))
@@ -398,63 +293,6 @@ cleanup:
   return rc;
 }
 
-/*  Local copy of Barrett reciprocal computation for modular exponentiation.
-
-    Given a normalized divisor d (MSB set, d >= beta/2), computes the
-    reciprocal v = floor((beta^2 - 1) / d) - beta. Used to precompute
-    the reciprocal once and reuse for all reductions in the exponentiation
-    loop.
-
-    See arbint_tdiv_generic.c arbint_prepare_barrett() for full algorithm
-    documentation.
-
-    Precondition: d must be normalized (d >= 2^(LIMB_BITS-1)).  */
-static inline arbint_limb_t arbint_pow_prepare_barrett(arbint_limb_t d) {
-  arbint_limb_t d0;
-  arbint_limb_t d1;
-  arbint_limb_t v;
-  arbint_limb_t p;
-  arbint_limb_t r;
-  arbint_limb_t t;
-  arbint_limb_t ql;
-
-  d1 = d >> ARBINT_HALF_BITS;
-  d0 = d & ARBINT_HALF_MASK;
-
-  /* Compute high half of reciprocal: qh = ~d / d1 (half-by-half). */
-  v = (arbint_limb_t) ((~d) / d1);
-  r = ((~d) - v * d1) << ARBINT_HALF_BITS;
-  r |= ARBINT_HALF_MASK;
-
-  /* Adjust for d0. */
-  p = v * d0;
-  if (r < p) {
-    v--;
-    r += d;
-    if (r >= d && r < p) {
-      v--;
-      r += d;
-    }
-  }
-  r -= p;
-
-  /* Compute low half of reciprocal. */
-  t = (r >> ARBINT_HALF_BITS) * v + r;
-  ql = (t >> ARBINT_HALF_BITS) + (arbint_limb_t) 1u;
-
-  r = (r << ARBINT_HALF_BITS) + ARBINT_HALF_MASK - ql * d;
-  if (r >= (t << ARBINT_HALF_BITS)) {
-    ql--;
-    r += d;
-  }
-
-  v = (v << ARBINT_HALF_BITS) + ql;
-  if (r >= d)
-    v++;
-
-  return v;
-}
-
 /*  Modular exponentiation with u32 modulus: rop = base^exp mod mod.
 
     Uses precomputed Barrett reduction - computes reciprocal once and
@@ -509,7 +347,7 @@ arbint_err_t arbint_pow_u32u32_tmod(arbint_t rop, const arbint_t base,
   d_norm = (arbint_limb_t) mod;
   shift = arbint_clz_limb(d_norm);
   d_norm <<= shift;
-  di = arbint_pow_prepare_barrett(d_norm);
+  di = arbint_div_prepare_barrett_limb(d_norm);
 
   ctx = rop[0]._ctx;
   if (ctx == NULL)

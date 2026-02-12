@@ -16,12 +16,10 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "arbint_base.h"
+#include "arbint_cache.h"
 #include "arbint_mul.h"
 #include "arbint_div.h"
 #include "config.h"
-
-#include <stdlib.h>
-#include <string.h>
 
 /*  Compute (F(n), F(n+1)) simultaneously via fast doubling.
 
@@ -360,68 +358,6 @@ static const uint32_t arbint_is_power_primes[] = {
 #define ARBINT_IS_POWER_NPRIMES \
   (sizeof(arbint_is_power_primes) / sizeof(arbint_is_power_primes[0]))
 
-/*  Cached prime sieve state.
-    Initialized on first call needing primes > 521.
-    Grows as needed; never shrinks.  */
-static uint8_t * g_prime_sieve = NULL;
-static uint32_t g_prime_sieve_limit = 0;
-
-/*  Ensure sieve covers primes up to limit.
-    Grows the sieve if needed.  */
-static arbint_err_t arbint_ensure_prime_sieve(uint32_t limit) {
-  uint8_t * new_sieve;
-  size_t new_bytes;
-  uint32_t p;
-  uint32_t i;
-  uint32_t sqrt_limit;
-
-  if (g_prime_sieve_limit >= limit)
-    return ARBINT_OK;
-
-  new_bytes = ((size_t) limit + 1u + 7u) / 8u;
-  new_sieve = (uint8_t *) realloc(g_prime_sieve, new_bytes);
-  if (new_sieve == NULL)
-    return ARBINT_ENOMEM;
-
-  /*  Zero new portion if extending.  */
-  if (g_prime_sieve_limit > 0) {
-    size_t old_bytes = ((size_t) g_prime_sieve_limit + 1u + 7u) / 8u;
-    memset(new_sieve + old_bytes, 0, new_bytes - old_bytes);
-  } else {
-    memset(new_sieve, 0, new_bytes);
-  }
-
-  /*  Sieve: bit set = composite. Mark 0 and 1 as composite.  */
-  new_sieve[0] |= 0x03;
-
-  /*  Mark composites from 2 up to sqrt(limit).
-      Use i <= limit / i to avoid overflow.  */
-  sqrt_limit = 1u;
-  while (sqrt_limit <= limit / sqrt_limit)
-    ++sqrt_limit;
-
-  for (p = 2u; p < sqrt_limit; ++p) {
-    /*  Skip if p is already marked composite.  */
-    if ((new_sieve[p / 8u] & (1u << (p % 8u))) != 0)
-      continue;
-    /*  Mark multiples of p starting from p*p.  */
-    for (i = p * p; i <= limit; i += p)
-      new_sieve[i / 8u] |= (uint8_t) (1u << (i % 8u));
-  }
-
-  g_prime_sieve = new_sieve;
-  g_prime_sieve_limit = limit;
-  return ARBINT_OK;
-}
-
-/*  Test if n is prime using the cached sieve.
-    Caller must ensure sieve covers n via arbint_ensure_prime_sieve.  */
-static int arbint_sieve_is_prime(uint32_t n) {
-  if (n > g_prime_sieve_limit)
-    return 0;  /*  Safety: should not happen if caller ensured coverage.  */
-  return (g_prime_sieve[n / 8u] & (1u << (n % 8u))) == 0;
-}
-
 /*  Test if a is a perfect power (a = b^k for some integers b, k >= 2).
 
     Sets *out = 1 if such b, k exist, 0 otherwise.
@@ -557,13 +493,13 @@ arbint_err_t arbint_is_power(const arbint_t a, int * out) {
     uint32_t k;
     uint32_t max_k_u32 = (uint32_t) max_k;
 
-    rc = arbint_ensure_prime_sieve(max_k_u32);
+    rc = arbint_cache_prime_sieve_ensure(max_k_u32);
     if (rc != ARBINT_OK)
       goto cleanup;
 
     for (k = arbint_is_power_primes[ARBINT_IS_POWER_NPRIMES - 1] + 1u;
          k <= max_k_u32; ++k) {
-      if (!arbint_sieve_is_prime(k))
+      if (!arbint_cache_prime_sieve_is_prime(k))
         continue;
 
       /*  Skip even exponents for negative a.  */
