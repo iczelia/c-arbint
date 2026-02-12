@@ -51,5 +51,3 @@ endif
 
 # dc demo: a reverse-polish calculator using c-arbint
 dc_SOURCES = dc.c
-
-EXTRA_DIST = dc_tests.sh
