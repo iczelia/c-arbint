@@ -916,81 +916,92 @@ jobs:
             platform: linux/ppc64le
             image: debian:bookworm-slim
             compiler: clang
+            debootstrap: false
           - arch: ppc64le
             platform: linux/ppc64le
             image: alpine:latest
             compiler: gcc
+            debootstrap: false
           # s390x - IBM Z mainframe (big-endian)
           - arch: s390x
             platform: linux/s390x
             image: debian:bookworm-slim
             compiler: clang
+            debootstrap: false
           - arch: s390x
             platform: linux/s390x
             image: alpine:latest
             compiler: gcc
+            debootstrap: false
           # riscv64 - RISC-V 64-bit (only unstable images available)
           - arch: riscv64
             platform: linux/riscv64
             image: debian:sid-slim
             compiler: gcc
+            debootstrap: false
           - arch: riscv64
             platform: linux/riscv64
             image: alpine:edge
             compiler: gcc
+            debootstrap: false
           # mips64le - MIPS 64-bit little-endian
           - arch: mips64le
             platform: linux/mips64le
             image: debian:bookworm-slim
             compiler: gcc
+            debootstrap: false
           - arch: mips64le
             platform: linux/mips64le
             image: debian:bookworm-slim
             compiler: clang
+            debootstrap: false
           # arm32v7 - ARMv7 32-bit (Raspberry Pi 2/3/4 in 32-bit mode)
           - arch: arm32v7
             platform: linux/arm/v7
             image: debian:bookworm-slim
             compiler: gcc
+            debootstrap: false
           - arch: arm32v7
             platform: linux/arm/v7
             image: alpine:latest
             compiler: gcc
+            debootstrap: false
           # arm32v5 - ARMv5TE (old embedded ARM)
           - arch: arm32v5
             platform: linux/arm/v5
             image: debian:bookworm-slim
             compiler: gcc
-          # ppc64 - PowerPC 64-bit big-endian (debian-ports)
+            debootstrap: false
+          # ppc64 - PowerPC 64-bit big-endian (debian-ports, debootstrap image)
           - arch: ppc64
-            platform: linux/ppc64
             image: urbanogilson/debian-debootstrap-ports:ppc64-trixie-sid
             compiler: gcc
-          # powerpc - PowerPC 32-bit (debian-ports)
+            debootstrap: true
+          # powerpc - PowerPC 32-bit (debian-ports, debootstrap image)
           - arch: powerpc
-            platform: linux/ppc
             image: urbanogilson/debian-debootstrap-ports:powerpc-trixie-sid
             compiler: gcc
-          # hppa - HP PA-RISC (debian-ports)
+            debootstrap: true
+          # hppa - HP PA-RISC (debian-ports, debootstrap image)
           - arch: hppa
-            platform: linux/hppa
             image: urbanogilson/debian-debootstrap-ports:hppa-trixie-sid
             compiler: gcc
-          # m68k - Motorola 68000 series (debian-ports)
+            debootstrap: true
+          # m68k - Motorola 68000 series (debian-ports, debootstrap image)
           - arch: m68k
-            platform: linux/m68k
             image: urbanogilson/debian-debootstrap-ports:m68k-trixie-sid
             compiler: gcc
-          # sh4 - Hitachi SuperH (debian-ports)
+            debootstrap: true
+          # sh4 - Hitachi SuperH (debian-ports, debootstrap image)
           - arch: sh4
-            platform: linux/sh4
             image: urbanogilson/debian-debootstrap-ports:sh4-trixie-sid
             compiler: gcc
-          # alpha - DEC Alpha (debian-ports)
+            debootstrap: true
+          # alpha - DEC Alpha (debian-ports, debootstrap image)
           - arch: alpha
-            platform: linux/alpha
             image: urbanogilson/debian-debootstrap-ports:alpha-trixie-sid
             compiler: gcc
+            debootstrap: true
     name: build-exotic (${{ matrix.arch }}, ${{ matrix.image }}, ${{ matrix.compiler }})
 
     steps:
@@ -1003,11 +1014,20 @@ jobs:
           name: c-arbint-dist
           path: dist
 
-      - name: Build and test in Docker (${{ matrix.platform }})
+      - name: Build and test in Docker
         run: |
           mkdir -p artifacts
-          docker run --rm \
-            --platform ${{ matrix.platform }} \
+
+          # Debootstrap images (urbanogilson/debian-debootstrap-ports) are
+          # single-arch images that contain the foreign rootfs and rely on
+          # binfmt_misc + QEMU user-mode emulation. They must NOT use --platform.
+          # Multi-arch images (debian, alpine) use --platform for arch selection.
+          docker_args="--rm"
+          if [ "${{ matrix.debootstrap }}" != "true" ]; then
+            docker_args="$docker_args --platform ${{ matrix.platform }}"
+          fi
+
+          docker run $docker_args \
             -e CC="${{ matrix.compiler }}" \
             -v "$PWD/dist:/work/dist" \
             -v "$PWD/artifacts:/work/artifacts" \
