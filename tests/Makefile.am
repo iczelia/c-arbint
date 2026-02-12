@@ -46,6 +46,7 @@ check_PROGRAMS = \
   test_is_power \
   test_xgcd \
   test_inv_mod \
+  test_removefactor \
   compute_pi \
   compute_e \
   compute_bitops

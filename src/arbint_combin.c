@@ -1154,3 +1154,66 @@ cleanup:
     arbint_clear(abs_a);
   return rc;
 }
+
+/*  Remove all factors of p from a: write a = p^k * rest.
+    Returns rest and k.  For a == 0, returns rest = 0, k = 0.  */
+ARBINT_API arbint_err_t arbint_removefactor_u32(arbint_t rest, const arbint_t a,
+                                                uint32_t p, uint32_t * k) {
+  arbint_t cur, q, r;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+  uint32_t count = 0;
+
+  if (rest == NULL || a == NULL || k == NULL)
+    return ARBINT_EINVAL;
+
+  if (p == 0u)
+    return ARBINT_EZERO;
+
+  /*  p == 1 divides everything infinitely; treat as removing 0 factors.  */
+  if (p == 1u) {
+    *k = 0;
+    return arbint_set(rest, a);
+  }
+
+  /*  a == 0: no factors to remove.  */
+  if (arbint_is_zero(a)) {
+    *k = 0;
+    arbint_zero(rest);
+    return ARBINT_OK;
+  }
+
+  ctx = rest[0]._ctx;
+  if (ctx == NULL)
+    ctx = a[0]._ctx;
+
+  rc = arbint_init_all(ctx, cur, q, r, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  /*  cur = a (handles aliasing with rest).  */
+  rc = arbint_set(cur, a);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Repeatedly divide by p while remainder is zero.  */
+  for (;;) {
+    rc = arbint_tdiv_qr_u32(q, r, cur, p);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (!arbint_is_zero(r))
+      break;
+
+    /*  cur <- q for next iteration.  */
+    arbint_swap(cur, q);
+    ++count;
+  }
+
+  rc = arbint_set(rest, cur);
+  *k = count;
+
+cleanup:
+  arbint_clear_all(cur, q, r, (arbint_t *) NULL);
+  return rc;
+}
