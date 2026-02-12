@@ -457,32 +457,40 @@ jobs:
             if [ -n "$dll_path" ] && [ ! -f src/.libs/libarbint.lib ]; then
               cp "$dll_path" src/.libs/libarbint.lib
             fi
-            test_bins_raw="$(awk '
-              BEGIN { collecting=0; line="" }
-              /^check_PROGRAMS[[:space:]]*=/ {
-                collecting=1
-                sub(/^[^=]*=[[:space:]]*/, "", $0)
-              }
-              collecting {
-                gsub(/[[:space:]]+$/, "", $0)
-                if (line != "") line = line " "
-                line = line $0
-                if ($0 ~ /\\$/) {
-                  sub(/\\$/, "", line)
-                  next
+
+            # Helper to extract check_PROGRAMS from a Makefile
+            extract_check_programs() {
+              awk '
+                BEGIN { collecting=0; line="" }
+                /^check_PROGRAMS[[:space:]]*=/ {
+                  collecting=1
+                  sub(/^[^=]*=[[:space:]]*/, "", $0)
                 }
-                print line
-                exit
-              }
-            ' tests/Makefile)"
+                collecting {
+                  gsub(/[[:space:]]+$/, "", $0)
+                  if (line != "") line = line " "
+                  line = line $0
+                  if ($0 ~ /\\$/) {
+                    sub(/\\$/, "", line)
+                    next
+                  }
+                  print line
+                  exit
+                }
+              ' "$1"
+            }
+
             exeext="$(sed -n 's/^EXEEXT = //p' tests/Makefile | sed -n '1p')"
+
+            # Build and run tests
+            test_bins_raw="$(extract_check_programs tests/Makefile)"
             test_bins="$(printf '%s\n' "$test_bins_raw" | awk -v e="$exeext" '{ gsub(/\$\(EXEEXT\)/, e); print }')"
             if [ -z "$test_bins" ]; then
               echo "Unable to resolve \$(check_PROGRAMS) from tests/Makefile" | tee -a check.log
               exit 1
             fi
             make -C tests -j"$jobs" $test_bins 2>&1 | tee check.log
-            export PATH="$PWD/src/.libs:$PWD/tests/.libs:$PATH"
+            export PATH="$PWD/src/.libs:$PWD/tests/.libs:$PWD/demos/.libs:$PATH"
             for test_name in $test_bins; do
               test_bin="tests/.libs/${test_name}"
               if [ ! -x "$test_bin" ]; then
@@ -491,6 +499,21 @@ jobs:
               echo "Running $test_bin" | tee -a check.log
               "$test_bin" 2>&1 | tee -a check.log
             done
+
+            # Build and run demos
+            demo_bins_raw="$(extract_check_programs demos/Makefile)"
+            demo_bins="$(printf '%s\n' "$demo_bins_raw" | awk -v e="$exeext" '{ gsub(/\$\(EXEEXT\)/, e); print }')"
+            if [ -n "$demo_bins" ]; then
+              make -C demos -j"$jobs" $demo_bins 2>&1 | tee -a check.log
+              for demo_name in $demo_bins; do
+                demo_bin="demos/.libs/${demo_name}"
+                if [ ! -x "$demo_bin" ]; then
+                  demo_bin="demos/.libs/${demo_name%.exe}"
+                fi
+                echo "Running $demo_bin" | tee -a check.log
+                "$demo_bin" 2>&1 | tee -a check.log
+              done
+            fi
           else
             make check 2>&1 | tee check.log
           fi
@@ -699,32 +722,40 @@ jobs:
             if [ -n "$dll_path" ] && [ ! -f src/.libs/libarbint.lib ]; then
               cp "$dll_path" src/.libs/libarbint.lib
             fi
-            test_bins_raw="$(awk '
-              BEGIN { collecting=0; line="" }
-              /^check_PROGRAMS[[:space:]]*=/ {
-                collecting=1
-                sub(/^[^=]*=[[:space:]]*/, "", $0)
-              }
-              collecting {
-                gsub(/[[:space:]]+$/, "", $0)
-                if (line != "") line = line " "
-                line = line $0
-                if ($0 ~ /\\$/) {
-                  sub(/\\$/, "", line)
-                  next
+
+            # Helper to extract check_PROGRAMS from a Makefile
+            extract_check_programs() {
+              awk '
+                BEGIN { collecting=0; line="" }
+                /^check_PROGRAMS[[:space:]]*=/ {
+                  collecting=1
+                  sub(/^[^=]*=[[:space:]]*/, "", $0)
                 }
-                print line
-                exit
-              }
-            ' tests/Makefile)"
+                collecting {
+                  gsub(/[[:space:]]+$/, "", $0)
+                  if (line != "") line = line " "
+                  line = line $0
+                  if ($0 ~ /\\$/) {
+                    sub(/\\$/, "", line)
+                    next
+                  }
+                  print line
+                  exit
+                }
+              ' "$1"
+            }
+
             exeext="$(sed -n 's/^EXEEXT = //p' tests/Makefile | sed -n '1p')"
+
+            # Build and run tests
+            test_bins_raw="$(extract_check_programs tests/Makefile)"
             test_bins="$(printf '%s\n' "$test_bins_raw" | awk -v e="$exeext" '{ gsub(/\$\(EXEEXT\)/, e); print }')"
             if [ -z "$test_bins" ]; then
               echo "Unable to resolve \$(check_PROGRAMS) from tests/Makefile" | tee -a check.log
               exit 1
             fi
             make -C tests -j"$jobs" $test_bins 2>&1 | tee check.log
-            export PATH="$PWD/src/.libs:$PWD/tests/.libs:$PATH"
+            export PATH="$PWD/src/.libs:$PWD/tests/.libs:$PWD/demos/.libs:$PATH"
             for test_name in $test_bins; do
               test_bin="tests/.libs/${test_name}"
               if [ ! -x "$test_bin" ]; then
@@ -733,6 +764,21 @@ jobs:
               echo "Running $test_bin" | tee -a check.log
               "$test_bin" 2>&1 | tee -a check.log
             done
+
+            # Build and run demos
+            demo_bins_raw="$(extract_check_programs demos/Makefile)"
+            demo_bins="$(printf '%s\n' "$demo_bins_raw" | awk -v e="$exeext" '{ gsub(/\$\(EXEEXT\)/, e); print }')"
+            if [ -n "$demo_bins" ]; then
+              make -C demos -j"$jobs" $demo_bins 2>&1 | tee -a check.log
+              for demo_name in $demo_bins; do
+                demo_bin="demos/.libs/${demo_name}"
+                if [ ! -x "$demo_bin" ]; then
+                  demo_bin="demos/.libs/${demo_name%.exe}"
+                fi
+                echo "Running $demo_bin" | tee -a check.log
+                "$demo_bin" 2>&1 | tee -a check.log
+              done
+            fi
           else
             make check 2>&1 | tee check.log
           fi

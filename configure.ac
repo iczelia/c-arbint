@@ -674,6 +674,7 @@ AC_CONFIG_FILES([
   man/Makefile
   man/c-arbint.3
   tests/Makefile
+  demos/Makefile
   tools/Makefile
   c-arbint.pc
 ])

@@ -1,0 +1,9 @@
+# general
+Makefile
+Makefile.in
+test-suite.log
+
+# dc demo
+dc.trs
+dc.log
+dc

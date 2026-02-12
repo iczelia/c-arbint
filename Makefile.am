@@ -17,7 +17,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = include src man tests
+SUBDIRS = include src man tests demos
 
 # tools/ is not built by default; use 'make tools' to build
 DIST_SUBDIRS = $(SUBDIRS) tools
