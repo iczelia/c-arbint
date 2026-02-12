@@ -47,6 +47,7 @@ check_PROGRAMS = \
   test_xgcd \
   test_inv_mod \
   test_removefactor \
+  test_numtheory \
   compute_pi \
   compute_e \
   compute_bitops

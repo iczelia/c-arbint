@@ -25,6 +25,7 @@ test_root
 test_is_power
 test_xgcd
 test_inv_mod
+test_numtheory
 test_removefactor
 compute_pi
 compute_e

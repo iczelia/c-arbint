@@ -155,6 +155,16 @@ cleanup_a:
   return rc;
 }
 
+/*  Small-value lookup tables to avoid setup overhead for tiny n.  */
+static const uint32_t arbint_fib_small_u32[] = {0u, 1u,  1u,  2u,  3u, 5u,
+                                                8u, 13u, 21u, 34u, 55u};
+static const uint32_t arbint_lucas_small_u32[] = {2u,  1u,  3u,  4u,  7u,  11u,
+                                                  18u, 29u, 47u, 76u, 123u};
+#define ARBINT_FIB_SMALL_U32_COUNT                                            \
+  (sizeof(arbint_fib_small_u32) / sizeof(arbint_fib_small_u32[0]))
+#define ARBINT_LUCAS_SMALL_U32_COUNT                                          \
+  (sizeof(arbint_lucas_small_u32) / sizeof(arbint_lucas_small_u32[0]))
+
 /*  Compute rop = n! (factorial).
 
     Uses simple iterative multiplication: rop = 1 * 2 * 3 * ... * n.
@@ -238,6 +248,9 @@ arbint_err_t arbint_fib_u32(arbint_t rop, uint32_t n) {
   if (rop == NULL)
     return ARBINT_EINVAL;
 
+  if ((size_t) n < ARBINT_FIB_SMALL_U32_COUNT)
+    return arbint_set_u32(rop, arbint_fib_small_u32[n]);
+
   ctx = rop[0]._ctx;
 
   rc = arbint_init(fn1, ctx);
@@ -261,6 +274,9 @@ arbint_err_t arbint_lucas_u32(arbint_t rop, uint32_t n) {
 
   if (rop == NULL)
     return ARBINT_EINVAL;
+
+  if ((size_t) n < ARBINT_LUCAS_SMALL_U32_COUNT)
+    return arbint_set_u32(rop, arbint_lucas_small_u32[n]);
 
   ctx = rop[0]._ctx;
 
@@ -1157,8 +1173,9 @@ cleanup:
 
 /*  Remove all factors of p from a: write a = p^k * rest.
     Returns rest and k.  For a == 0, returns rest = 0, k = 0.  */
-ARBINT_API arbint_err_t arbint_removefactor_u32(arbint_t rest, const arbint_t a,
-                                                uint32_t p, uint32_t * k) {
+ARBINT_API arbint_err_t arbint_removefactor_u32(arbint_t rest,
+                                                const arbint_t a, uint32_t p,
+                                                uint32_t * k) {
   arbint_t cur, q, r;
   arbint_ctx_t * ctx;
   arbint_err_t rc;
@@ -1215,5 +1232,643 @@ ARBINT_API arbint_err_t arbint_removefactor_u32(arbint_t rest, const arbint_t a,
 
 cleanup:
   arbint_clear_all(cur, q, r, (arbint_t *) NULL);
+  return rc;
+}
+
+/*  Jacobi symbol for u32 operands.  Uses binary algorithm.  */
+static int arbint_jacobi_u32u32(uint32_t a, uint32_t n) {
+  int result = 1;
+  uint32_t u = a % n;
+  uint32_t v = n;
+  uint32_t t;
+
+  while (u != 0u) {
+    /*  Factor out powers of 2 from u.  */
+    while ((u & 1u) == 0u) {
+      u >>= 1u;
+      /*  (2/v) = (-1)^((v^2-1)/8) = -1 iff v == 3 or 5 (mod 8).  */
+      t = v & 7u;
+      if (t == 3u || t == 5u)
+        result = -result;
+    }
+
+    /*  Quadratic reciprocity: (u/v)(v/u) = (-1)^((u-1)/2 * (v-1)/2).  */
+    if ((u & 3u) == 3u && (v & 3u) == 3u)
+      result = -result;
+
+    /*  Swap u and v, then reduce u mod v.  */
+    t = u;
+    u = v % t;
+    v = t;
+  }
+
+  return (v == 1u) ? result : 0;
+}
+
+/*  Jacobi symbol (a/n).  n must be odd and positive.  */
+ARBINT_API arbint_err_t arbint_jacobi(const arbint_t a, const arbint_t n,
+                                      int * out) {
+  arbint_t u, v;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+  int result = 1;
+  size_t ctz_val;
+
+  if (a == NULL || n == NULL || out == NULL)
+    return ARBINT_EINVAL;
+
+  /*  n must be positive and odd.  */
+  if (n[0]._sz <= 0)
+    return ARBINT_EDOM;
+  if ((ARBINT_CLIMBS(n)[0] & 1u) == 0u)
+    return ARBINT_EDOM;
+
+  /*  (a/1) = 1 for all a.  */
+  if (n[0]._sz == 1 && ARBINT_CLIMBS(n)[0] == 1u) {
+    *out = 1;
+    return ARBINT_OK;
+  }
+
+  /*  Fast u32 path: if n fits in u32, reduce a mod n and compute directly.  */
+  {
+    uint32_t n_u32;
+    if (arbint_get_u32(n, &n_u32) == ARBINT_OK) {
+      arbint_t tmp;
+      uint32_t a_u32;
+
+      ctx = a[0]._ctx;
+      if (ctx == NULL)
+        ctx = n[0]._ctx;
+
+      rc = arbint_init(tmp, ctx);
+      if (rc != ARBINT_OK)
+        return rc;
+
+      rc = arbint_fdiv_r(tmp, a, n);
+      if (rc != ARBINT_OK) {
+        arbint_clear(tmp);
+        return rc;
+      }
+
+      /*  tmp is now in [0, n), which fits in u32.  */
+      rc = arbint_get_u32(tmp, &a_u32);
+      arbint_clear(tmp);
+      if (rc != ARBINT_OK)
+        return rc;
+
+      *out = arbint_jacobi_u32u32(a_u32, n_u32);
+      return ARBINT_OK;
+    }
+  }
+
+  /*  General big-int path using binary Jacobi algorithm.  */
+  ctx = a[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init_all(ctx, u, v, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  /*  u = a mod n (floor division for canonical [0, n) result).  */
+  rc = arbint_fdiv_r(u, a, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set(v, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  while (!arbint_is_zero(u)) {
+    /*  Factor out powers of 2 from u.  */
+    rc = arbint_ctz(u, &ctz_val);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (ctz_val > 0u) {
+      rc = arbint_shr(u, u, (uint32_t) ctz_val);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      /*  (2/v)^ctz_val: flip result for each odd power of 2.  */
+      if (ctz_val & 1u) {
+        arbint_limb_t v8 = ARBINT_CLIMBS(v)[0] & 7u;
+        if (v8 == 3u || v8 == 5u)
+          result = -result;
+      }
+    }
+
+    /*  Quadratic reciprocity.  */
+    {
+      arbint_limb_t u4 = ARBINT_CLIMBS(u)[0] & 3u;
+      arbint_limb_t v4 = ARBINT_CLIMBS(v)[0] & 3u;
+      if (u4 == 3u && v4 == 3u)
+        result = -result;
+    }
+
+    /*  Swap u and v, then reduce u mod v.  */
+    arbint_swap(u, v);
+    rc = arbint_fdiv_r(u, u, v);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /*  If v == 1, gcd(a,n) == 1; otherwise gcd > 1.  */
+  *out = (v[0]._sz == 1 && ARBINT_CLIMBS(v)[0] == 1u) ? result : 0;
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_clear_all(u, v, (arbint_t *) NULL);
+  return rc;
+}
+
+/*  Legendre symbol (a/p) where p is an odd prime.
+    This is just the Jacobi symbol; primality is caller's responsibility.  */
+ARBINT_API arbint_err_t arbint_legendre(const arbint_t a, const arbint_t p,
+                                        int * out) {
+  return arbint_jacobi(a, p, out);
+}
+
+/*  Kronecker symbol (a/n).  Extends Jacobi to all integers n.  */
+ARBINT_API arbint_err_t arbint_kronecker(const arbint_t a, const arbint_t n,
+                                         int * out) {
+  arbint_t abs_n, odd_part;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+  int result = 1;
+  size_t v2;
+
+  if (a == NULL || n == NULL || out == NULL)
+    return ARBINT_EINVAL;
+
+  /*  (a/0) = 1 if |a| = 1, else 0.  */
+  if (arbint_is_zero(n)) {
+    size_t an = arbint_abs_sz(a[0]._sz);
+    *out = (an == 1u && ARBINT_CLIMBS(a)[0] == 1u) ? 1 : 0;
+    return ARBINT_OK;
+  }
+
+  ctx = a[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init_all(ctx, abs_n, odd_part, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  /*  Handle negative n: (a/-1) = -1 if a < 0.  */
+  if (n[0]._sz < 0) {
+    if (a[0]._sz < 0)
+      result = -result;
+    rc = arbint_abs(abs_n, n);
+  } else {
+    rc = arbint_set(abs_n, n);
+  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Handle the case |n| == 1 early.  */
+  if (abs_n[0]._sz == 1 && ARBINT_CLIMBS(abs_n)[0] == 1u) {
+    *out = result;
+    rc = ARBINT_OK;
+    goto cleanup;
+  }
+
+  /*  Extract 2^v2 from |n|.  */
+  rc = arbint_ctz(abs_n, &v2);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  if (v2 > 0u) {
+    rc = arbint_shr(odd_part, abs_n, (uint32_t) v2);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    /*  (a/2) = 0 if a is even and a != 0.  */
+    if (a[0]._sz != 0 && (ARBINT_CLIMBS(a)[0] & 1u) == 0u) {
+      *out = 0;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+
+    /*  (a/2^v2): for each 2, flip if a == 3 or 5 (mod 8).  */
+    if (v2 & 1u) {
+      arbint_limb_t a8 = (a[0]._sz != 0) ? (ARBINT_CLIMBS(a)[0] & 7u) : 0u;
+      if (a8 == 3u || a8 == 5u)
+        result = -result;
+    }
+  } else {
+    rc = arbint_set(odd_part, abs_n);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  /*  If odd_part == 1, we are done.  */
+  if (odd_part[0]._sz == 1 && ARBINT_CLIMBS(odd_part)[0] == 1u) {
+    *out = result;
+    rc = ARBINT_OK;
+    goto cleanup;
+  }
+
+  /*  Delegate odd part to Jacobi.  */
+  {
+    int jac;
+    rc = arbint_jacobi(a, odd_part, &jac);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    result *= jac;
+  }
+
+  *out = result;
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_clear_all(abs_n, odd_part, (arbint_t *) NULL);
+  return rc;
+}
+
+/*  Moebius function for u32.  */
+static int arbint_moebius_u32(uint32_t n) {
+  int omega = 0;
+  uint32_t p;
+
+  if (n == 1u)
+    return 1;
+
+  /*  Handle factor of 2.  */
+  if ((n & 1u) == 0u) {
+    if ((n & 3u) == 0u)
+      return 0; /*  4 | n  */
+    n >>= 1u;
+    ++omega;
+  }
+
+  /*  Trial divide by odd primes.  */
+  for (p = 3u; p <= n / p; p += 2u) {
+    if (n % p == 0u) {
+      n /= p;
+      if (n % p == 0u)
+        return 0; /*  p^2 | n  */
+      ++omega;
+    }
+  }
+
+  /*  If n > 1, it is a prime factor.  */
+  if (n > 1u)
+    ++omega;
+
+  return (omega & 1) ? -1 : 1;
+}
+
+/*  Moebius function mu(n).
+    mu(n) = 0 if n has a squared prime factor.
+    mu(n) = (-1)^k if n is product of k distinct primes.  */
+ARBINT_API arbint_err_t arbint_moebius(int * out, const arbint_t n) {
+  arbint_t m;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+  int omega = 0;
+  size_t i;
+
+  if (out == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  /*  mu(n) is only defined for positive integers.  */
+  if (n[0]._sz <= 0)
+    return ARBINT_EDOM;
+
+  /*  mu(1) = 1.  */
+  if (n[0]._sz == 1 && ARBINT_CLIMBS(n)[0] == 1u) {
+    *out = 1;
+    return ARBINT_OK;
+  }
+
+  /*  Fast u32 path.  */
+  {
+    uint32_t n_u32;
+    if (arbint_get_u32(n, &n_u32) == ARBINT_OK) {
+      *out = arbint_moebius_u32(n_u32);
+      return ARBINT_OK;
+    }
+  }
+
+  /*  General path: trial division with early exit on squared factors.  */
+  ctx = n[0]._ctx;
+  rc = arbint_init(m, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_set(m, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Trial divide by small primes from table.  */
+  for (i = 0u; i < ARBINT_IS_POWER_NPRIMES; ++i) {
+    uint32_t prime = arbint_is_power_primes[i];
+    uint32_t k;
+
+    rc = arbint_removefactor_u32(m, m, prime, &k);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (k >= 2u) {
+      *out = 0;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+    if (k == 1u)
+      ++omega;
+
+    /*  Early exit if m == 1.  */
+    if (m[0]._sz == 1 && ARBINT_CLIMBS(m)[0] == 1u)
+      break;
+  }
+
+  /*  If m > 1 after trial division, it is either prime or has large factors.
+   */
+  if (arbint_cmp_u32(m, 1u) > 0) {
+    arbint_t p, p2, q, r;
+    uint32_t p_start;
+
+    rc = arbint_init_all(ctx, p, p2, q, r, (arbint_t *) NULL);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    p_start = arbint_is_power_primes[ARBINT_IS_POWER_NPRIMES - 1] + 2u;
+    rc = arbint_set_u32(p, p_start);
+    if (rc != ARBINT_OK) {
+      arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+      goto cleanup;
+    }
+
+    while (arbint_cmp_u32(m, 1u) > 0) {
+      rc = arbint_sqr(p2, p);
+      if (rc != ARBINT_OK) {
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        goto cleanup;
+      }
+
+      /*  If p^2 > m, then m is prime.  */
+      if (arbint_cmp(p2, m) > 0) {
+        ++omega;
+        break;
+      }
+
+      rc = arbint_tdiv_qr(q, r, m, p);
+      if (rc != ARBINT_OK) {
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        goto cleanup;
+      }
+
+      if (arbint_is_zero(r)) {
+        /*  p divides m; check for p^2.  */
+        rc = arbint_set(m, q);
+        if (rc != ARBINT_OK) {
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          goto cleanup;
+        }
+
+        rc = arbint_tdiv_r(r, m, p);
+        if (rc != ARBINT_OK) {
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          goto cleanup;
+        }
+
+        if (arbint_is_zero(r)) {
+          /*  p^2 | original n.  */
+          *out = 0;
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          rc = ARBINT_OK;
+          goto cleanup;
+        }
+        ++omega;
+      }
+
+      rc = arbint_add_u32(p, p, 2u);
+      if (rc != ARBINT_OK) {
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        goto cleanup;
+      }
+    }
+
+    arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+  }
+
+  *out = (omega & 1) ? -1 : 1;
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_clear(m);
+  return rc;
+}
+
+/*  Carmichael function lambda(n).
+    lambda(2) = 1, lambda(4) = 2, lambda(2^k) = 2^(k-2) for k >= 3.
+    lambda(p^k) = p^(k-1) * (p-1) for odd prime p.
+    lambda(n) = lcm of lambda(p_i^{k_i}) for prime factorization.  */
+ARBINT_API arbint_err_t arbint_carmichael(arbint_t rop, const arbint_t n) {
+  arbint_t m, lambda, contrib;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+  size_t i;
+
+  if (rop == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  /*  Carmichael is only defined for positive integers.  */
+  if (n[0]._sz <= 0)
+    return ARBINT_EDOM;
+
+  /*  lambda(1) = 1.  */
+  if (n[0]._sz == 1 && ARBINT_CLIMBS(n)[0] == 1u)
+    return arbint_set_u32(rop, 1u);
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init_all(ctx, m, lambda, contrib, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_set(m, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set_u32(lambda, 1u);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Handle factor of 2 specially.  */
+  {
+    uint32_t k2;
+    rc = arbint_removefactor_u32(m, m, 2u, &k2);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (k2 > 0u) {
+      uint32_t lam2;
+      /*  lambda(2) = 1, lambda(4) = 2, lambda(2^k) = 2^(k-2) for k >= 3.  */
+      if (k2 == 1u)
+        lam2 = 1u;
+      else if (k2 == 2u)
+        lam2 = 2u;
+      else
+        lam2 = 1u << (k2 - 2u);
+
+      rc = arbint_set_u32(contrib, lam2);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      rc = arbint_lcm(lambda, lambda, contrib);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+  }
+
+  /*  Handle odd primes from the small primes table.  */
+  for (i = 1u; i < ARBINT_IS_POWER_NPRIMES; ++i) {
+    uint32_t prime = arbint_is_power_primes[i];
+    uint32_t k;
+    uint32_t j;
+
+    if (m[0]._sz == 1 && ARBINT_CLIMBS(m)[0] == 1u)
+      break;
+
+    rc = arbint_removefactor_u32(m, m, prime, &k);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (k > 0u) {
+      /*  lambda(p^k) = p^(k-1) * (p-1).  */
+      rc = arbint_set_u32(contrib, prime - 1u);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+
+      for (j = 1u; j < k; ++j) {
+        rc = arbint_mul_u32(contrib, contrib, prime);
+        if (rc != ARBINT_OK)
+          goto cleanup;
+      }
+
+      rc = arbint_lcm(lambda, lambda, contrib);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+  }
+
+  /*  Handle remaining large prime factors.  */
+  if (arbint_cmp_u32(m, 1u) > 0) {
+    arbint_t p, p2, q, r;
+    uint32_t p_start;
+
+    rc = arbint_init_all(ctx, p, p2, q, r, (arbint_t *) NULL);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    p_start = arbint_is_power_primes[ARBINT_IS_POWER_NPRIMES - 1] + 2u;
+    rc = arbint_set_u32(p, p_start);
+    if (rc != ARBINT_OK) {
+      arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+      goto cleanup;
+    }
+
+    while (arbint_cmp_u32(m, 1u) > 0) {
+      rc = arbint_sqr(p2, p);
+      if (rc != ARBINT_OK) {
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        goto cleanup;
+      }
+
+      /*  If p^2 > m, then m is prime: lambda(m) = m - 1.  */
+      if (arbint_cmp(p2, m) > 0) {
+        rc = arbint_sub_i32(contrib, m, 1);
+        if (rc != ARBINT_OK) {
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          goto cleanup;
+        }
+
+        rc = arbint_lcm(lambda, lambda, contrib);
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        if (rc != ARBINT_OK)
+          goto cleanup;
+        break;
+      }
+
+      rc = arbint_tdiv_qr(q, r, m, p);
+      if (rc != ARBINT_OK) {
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        goto cleanup;
+      }
+
+      if (arbint_is_zero(r)) {
+        uint32_t k = 1u;
+        rc = arbint_set(m, q);
+        if (rc != ARBINT_OK) {
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          goto cleanup;
+        }
+
+        /*  Count additional factors of p.  */
+        for (;;) {
+          rc = arbint_tdiv_qr(q, r, m, p);
+          if (rc != ARBINT_OK) {
+            arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+            goto cleanup;
+          }
+          if (!arbint_is_zero(r))
+            break;
+          rc = arbint_set(m, q);
+          if (rc != ARBINT_OK) {
+            arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+            goto cleanup;
+          }
+          ++k;
+        }
+
+        /*  lambda(p^k) = p^(k-1) * (p-1).  */
+        rc = arbint_sub_i32(contrib, p, 1);
+        if (rc != ARBINT_OK) {
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          goto cleanup;
+        }
+
+        if (k > 1u) {
+          rc = arbint_pow_u32(p2, p, k - 1u);
+          if (rc != ARBINT_OK) {
+            arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+            goto cleanup;
+          }
+
+          rc = arbint_mul(contrib, contrib, p2);
+          if (rc != ARBINT_OK) {
+            arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+            goto cleanup;
+          }
+        }
+
+        rc = arbint_lcm(lambda, lambda, contrib);
+        if (rc != ARBINT_OK) {
+          arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+          goto cleanup;
+        }
+      }
+
+      rc = arbint_add_u32(p, p, 2u);
+      if (rc != ARBINT_OK) {
+        arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+        goto cleanup;
+      }
+    }
+
+    /*  Clean up if we broke out of the loop without cleaning.  */
+    if (arbint_cmp_u32(m, 1u) <= 0)
+      arbint_clear_all(p, p2, q, r, (arbint_t *) NULL);
+  }
+
+  rc = arbint_set(rop, lambda);
+
+cleanup:
+  arbint_clear_all(m, lambda, contrib, (arbint_t *) NULL);
   return rc;
 }

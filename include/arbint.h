@@ -16,9 +16,7 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 /*  The following features are currently unimplemented:
-      - arbint_set_str, arbint_get_str
-      - arbint_moebius, arbint_carmichael,
-      - arbint_legendre, arbint_jacobi, arbint_kronecker  */
+      - arbint_set_str, arbint_get_str  */
 
 #ifndef ARBINT_H
 #define ARBINT_H
