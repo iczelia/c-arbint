@@ -344,8 +344,8 @@ cleanup:
   return rc;
 }
 
-/*  Static prime table for is_power: primes up to 521 (97 entries).
-    Covers inputs up to 2^521 without needing dynamic prime generation.  */
+/*  Static small-prime table shared by is_power and isprime.
+    Primes up to 521 (97 entries).  */
 static const uint32_t arbint_is_power_primes[] = {
     2,   3,   5,   7,   11,  13,  17,  19,  23,  29,  31,  37,  41,  43,
     47,  53,  59,  61,  67,  71,  73,  79,  83,  89,  97,  101, 103, 107,
@@ -356,6 +356,268 @@ static const uint32_t arbint_is_power_primes[] = {
     439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521};
 #define ARBINT_IS_POWER_NPRIMES                                               \
   (sizeof(arbint_is_power_primes) / sizeof(arbint_is_power_primes[0]))
+
+#define ARBINT_ISPRIME_DEFAULT_REPS 16u
+
+/*  x = base^exp mod mod, where base is a u32 and exp/mod are arbint.  */
+static arbint_err_t arbint_isprime_pow_u32_tmod(arbint_t x, uint32_t base,
+                                                const arbint_t exp,
+                                                const arbint_t mod,
+                                                arbint_ctx_t * ctx) {
+  arbint_t acc, pow_base, e, tmp;
+  arbint_err_t rc;
+
+  rc = arbint_init(acc, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_init(pow_base, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(acc);
+    return rc;
+  }
+
+  rc = arbint_init(e, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(pow_base);
+    arbint_clear(acc);
+    return rc;
+  }
+
+  rc = arbint_init(tmp, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(e);
+    arbint_clear(pow_base);
+    arbint_clear(acc);
+    return rc;
+  }
+
+  rc = arbint_set_i32(acc, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set_u32(pow_base, base);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_tdiv_r(pow_base, pow_base, mod);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set(e, exp);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  while (!arbint_is_zero(e)) {
+    if ((ARBINT_CLIMBS(e)[0] & 1u) != 0u) {
+      rc = arbint_mul(tmp, acc, pow_base);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+      rc = arbint_tdiv_r(acc, tmp, mod);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+
+    rc = arbint_shr(e, e, 1u);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    if (arbint_is_zero(e))
+      break;
+
+    rc = arbint_sqr(tmp, pow_base);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_tdiv_r(pow_base, tmp, mod);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  rc = arbint_set(x, acc);
+
+cleanup:
+  arbint_clear(tmp);
+  arbint_clear(e);
+  arbint_clear(pow_base);
+  arbint_clear(acc);
+  return rc;
+}
+
+/*  One strong Miller-Rabin round. out_composite=1 means definitely
+    composite.  */
+static arbint_err_t arbint_isprime_mr_round(const arbint_t n, const arbint_t d,
+                                            size_t s, const arbint_t n_minus_1,
+                                            uint32_t base, int * out_composite,
+                                            arbint_ctx_t * ctx) {
+  arbint_t x, tmp;
+  arbint_err_t rc;
+  size_t i;
+
+  rc = arbint_init(x, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_init(tmp, ctx);
+  if (rc != ARBINT_OK) {
+    arbint_clear(x);
+    return rc;
+  }
+
+  rc = arbint_isprime_pow_u32_tmod(x, base, d, n, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  if (arbint_cmp_u32(x, 1u) == 0 || arbint_eq(x, n_minus_1)) {
+    *out_composite = 0;
+    rc = ARBINT_OK;
+    goto cleanup;
+  }
+
+  for (i = 1u; i < s; ++i) {
+    rc = arbint_sqr(tmp, x);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    rc = arbint_tdiv_r(x, tmp, n);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (arbint_eq(x, n_minus_1)) {
+      *out_composite = 0;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+
+    if (arbint_cmp_u32(x, 1u) == 0) {
+      *out_composite = 1;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+  }
+
+  *out_composite = 1;
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_clear(tmp);
+  arbint_clear(x);
+  return rc;
+}
+
+/*  Probable-prime test using trial division + strong Miller-Rabin.  */
+arbint_err_t arbint_isprime(const arbint_t n, int reps, int * out) {
+  arbint_ctx_t * ctx;
+  arbint_t n_minus_1, d;
+  const arbint_limb_t * np;
+  size_t nn;
+  size_t i;
+  size_t s = 0u;
+  size_t rounds;
+  int init_n_minus_1 = 0;
+  int init_d = 0;
+  arbint_err_t rc;
+
+  if (n == NULL || out == NULL)
+    return ARBINT_EINVAL;
+
+  /*  Primes are positive integers >= 2.  */
+  if (n[0]._sz <= 0) {
+    *out = 0;
+    return ARBINT_OK;
+  }
+
+  np = ARBINT_CLIMBS(n);
+  nn = arbint_abs_sz(n[0]._sz);
+
+  if (nn == 1u && np[0] < 2u) {
+    *out = 0;
+    return ARBINT_OK;
+  }
+
+  /*  Handle even numbers quickly.  */
+  if ((np[0] & 1u) == 0u) {
+    *out = (nn == 1u && np[0] == 2u) ? 1 : 0;
+    return ARBINT_OK;
+  }
+
+  /*  Trial divide by a fixed small-prime table.  */
+  for (i = 0u; i < ARBINT_IS_POWER_NPRIMES; ++i) {
+    uint32_t p = arbint_is_power_primes[i];
+    arbint_limb_t rem = 0u;
+
+    if (nn == 1u && np[0] == (arbint_limb_t) p) {
+      *out = 1;
+      return ARBINT_OK;
+    }
+
+    rc = arbint_mod_mag_single_limb(np, nn, (arbint_limb_t) p, &rem);
+    if (rc != ARBINT_OK)
+      return rc;
+    if (rem == 0u) {
+      *out = 0;
+      return ARBINT_OK;
+    }
+  }
+
+  /*  If n <= 521^2 and survived all primes <= 521, it is prime.  */
+  if (nn == 1u && np[0] <= (arbint_limb_t) (521u * 521u)) {
+    *out = 1;
+    return ARBINT_OK;
+  }
+
+  ctx = n[0]._ctx;
+  rc = arbint_init(n_minus_1, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+  init_n_minus_1 = 1;
+
+  rc = arbint_init(d, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_d = 1;
+
+  rc = arbint_sub_i32(n_minus_1, n, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_set(d, n_minus_1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  while ((ARBINT_CLIMBS(d)[0] & 1u) == 0u) {
+    rc = arbint_shr(d, d, 1u);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    ++s;
+  }
+
+  rounds = (reps > 0) ? (size_t) reps : ARBINT_ISPRIME_DEFAULT_REPS;
+  if (rounds > ARBINT_IS_POWER_NPRIMES)
+    rounds = ARBINT_IS_POWER_NPRIMES;
+  if (rounds == 0u)
+    rounds = 1u;
+
+  for (i = 0u; i < rounds; ++i) {
+    int composite = 0;
+    rc = arbint_isprime_mr_round(n, d, s, n_minus_1, arbint_is_power_primes[i],
+                                 &composite, ctx);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    if (composite) {
+      *out = 0;
+      rc = ARBINT_OK;
+      goto cleanup;
+    }
+  }
+
+  *out = 1;
+  rc = ARBINT_OK;
+
+cleanup:
+  if (init_d)
+    arbint_clear(d);
+  if (init_n_minus_1)
+    arbint_clear(n_minus_1);
+  return rc;
+}
 
 /*  Test if a is a perfect power (a = b^k for some integers b, k >= 2).
 

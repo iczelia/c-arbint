@@ -589,6 +589,23 @@ int main(void) {
     verify_bezout(a, b, g, x, y, tmp1, tmp2, "gcd(2^500, 7)");
   }
 
+  /*  Large close-size operands to exercise Lehmer-accelerated xgcd path.  */
+  {
+    arbint_err_t rc;
+
+    CHECK_EQ_I(arbint_set_i32(a, 2), ARBINT_OK);
+    CHECK_EQ_I(arbint_pow_u32(a, a, 4096u), ARBINT_OK);
+    CHECK_EQ_I(arbint_add_i32(a, a, 12345), ARBINT_OK);
+    CHECK_EQ_I(arbint_set(b, a), ARBINT_OK);
+    CHECK_EQ_I(arbint_sub_i32(b, b, 1), ARBINT_OK);
+
+    rc = arbint_xgcd(g, x, y, a, b);
+    CHECK_EQ_I(rc, ARBINT_OK);
+
+    check_i32_value(g, 1);
+    verify_bezout(a, b, g, x, y, tmp1, tmp2, "large close-size Lehmer path");
+  }
+
   /*  Test products of distinct primes.  */
   /*  gcd(2*3*5, 3*5*7) = 15.  */
   test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 30, 105, "gcd(30, 105)");

@@ -21,6 +21,7 @@
 #include "arbint_cpu.h"
 #include "arbint_div.h"
 #include "arbint_internal_util.h"
+#include "arbint_mul.h"
 #include "arbint_shift.h"
 #include "config.h"
 
@@ -189,27 +190,10 @@ static arbint_err_t arbint_gcd_euclid(arbint_t g, const arbint_t a,
                                       const arbint_t b) {
   arbint_t u, v, r;
   arbint_err_t rc;
-  arbint_ctx_t * ctx;
-  int init_u = 0;
-  int init_v = 0;
-  int init_r = 0;
 
-  ctx = g[0]._ctx;
-
-  rc = arbint_init(u, ctx);
+  rc = arbint_init_all(g[0]._ctx, u, v, r, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  init_u = 1;
-
-  rc = arbint_init(v, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_v = 1;
-
-  rc = arbint_init(r, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_r = 1;
 
   /*  Set u = |a|, v = |b|.  */
   rc = arbint_abs(u, a);
@@ -232,12 +216,7 @@ static arbint_err_t arbint_gcd_euclid(arbint_t g, const arbint_t a,
   rc = arbint_set(g, u);
 
 cleanup:
-  if (init_r)
-    arbint_clear(r);
-  if (init_v)
-    arbint_clear(v);
-  if (init_u)
-    arbint_clear(u);
+  arbint_clear_all(u, v, r, (arbint_t *) NULL);
   return rc;
 }
 
@@ -378,8 +357,6 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
   arbint_t gcd_val, quotient;
   arbint_err_t rc;
   arbint_ctx_t * ctx;
-  int init_gcd = 0;
-  int init_quot = 0;
   size_t an;
   size_t bn;
   size_t gn;
@@ -398,10 +375,9 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
 
   ctx = l[0]._ctx;
 
-  rc = arbint_init(gcd_val, ctx);
+  rc = arbint_init_all(ctx, gcd_val, quotient, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  init_gcd = 1;
 
   /*  Compute gcd(a, b).  */
   rc = arbint_gcd(gcd_val, a, b);
@@ -412,41 +388,27 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
 
   /*  Fast path: gcd == 1 means lcm = |a| * |b|.  */
   if (gn == 1u && ARBINT_CLIMBS(gcd_val)[0] == 1u) {
-    arbint_clear(gcd_val);
-    init_gcd = 0;
-
     rc = arbint_abs(l, a);
     if (rc != ARBINT_OK)
-      return rc;
-    rc = arbint_init(quotient, ctx);
-    if (rc != ARBINT_OK)
-      return rc;
+      goto cleanup;
     rc = arbint_abs(quotient, b);
-    if (rc != ARBINT_OK) {
-      arbint_clear(quotient);
-      return rc;
-    }
+    if (rc != ARBINT_OK)
+      goto cleanup;
     rc = arbint_mul(l, l, quotient);
-    arbint_clear(quotient);
-    return rc;
+    goto cleanup;
   }
 
   /*  Fast path: gcd == |a| means a divides b, lcm = |b|.  */
   if (gn == an && arbint_cmpabs(gcd_val, a) == 0) {
-    arbint_clear(gcd_val);
-    return arbint_abs(l, b);
+    rc = arbint_abs(l, b);
+    goto cleanup;
   }
 
   /*  Fast path: gcd == |b| means b divides a, lcm = |a|.  */
   if (gn == bn && arbint_cmpabs(gcd_val, b) == 0) {
-    arbint_clear(gcd_val);
-    return arbint_abs(l, a);
-  }
-
-  rc = arbint_init(quotient, ctx);
-  if (rc != ARBINT_OK)
+    rc = arbint_abs(l, a);
     goto cleanup;
-  init_quot = 1;
+  }
 
   /*  quotient = |a| / gcd (exact division).  */
   rc = arbint_abs(quotient, a);
@@ -465,10 +427,7 @@ ARBINT_API arbint_err_t arbint_lcm(arbint_t l, const arbint_t a,
   rc = arbint_mul(l, quotient, l);
 
 cleanup:
-  if (init_quot)
-    arbint_clear(quotient);
-  if (init_gcd)
-    arbint_clear(gcd_val);
+  arbint_clear_all(gcd_val, quotient, (arbint_t *) NULL);
   return rc;
 }
 
@@ -481,7 +440,6 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
   arbint_limb_t rem_limb;
   uint32_t g;
   size_t an;
-  int init_tmp = 0;
 
   if (l == NULL || a == NULL)
     return ARBINT_EINVAL;
@@ -523,7 +481,6 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
   rc = arbint_init(tmp, l[0]._ctx);
   if (rc != ARBINT_OK)
     return rc;
-  init_tmp = 1;
 
   rc = arbint_abs(tmp, a);
   if (rc != ARBINT_OK)
@@ -536,19 +493,98 @@ ARBINT_API arbint_err_t arbint_lcm_u32(arbint_t l, const arbint_t a,
   rc = arbint_mul_u32(l, tmp, b);
 
 cleanup:
-  if (init_tmp)
-    arbint_clear(tmp);
+  arbint_clear(tmp);
   return rc;
+}
+
+/*  Multiply signed arbint by a single limb (non-negative multiplier).  */
+static arbint_err_t arbint_xgcd_mul_limb(arbint_t rop, const arbint_t a,
+                                         arbint_limb_t b) {
+  const arbint_mul_kernel_table_t * k;
+  int as;
+  size_t an;
+  size_t cap;
+  size_t used;
+  arbint_err_t rc;
+
+  as = (a[0]._sz > 0) - (a[0]._sz < 0);
+  if (as == 0 || b == 0u) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+
+  if (b == 1u)
+    return arbint_set(rop, a);
+
+  an = arbint_abs_sz(a[0]._sz);
+  cap = an + 1u;
+  if (cap < an)
+    return ARBINT_EOVERFLOW;
+
+  rc = arbint_resize(rop, cap);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  k = arbint_mul_kernel_table_get();
+  used = k->mul_limb_1(ARBINT_LIMBS(rop), ARBINT_CLIMBS(a), an, b);
+
+  if (!arbint_set_signed_sz(rop, used, as))
+    return ARBINT_EOVERFLOW;
+  return ARBINT_OK;
+}
+
+/*  out = lhs_mul*lhs - rhs_mul*rhs, with non-negative limb multipliers.  */
+static arbint_err_t arbint_xgcd_lincomb_sub(arbint_t out, const arbint_t lhs,
+                                            arbint_limb_t lhs_mul,
+                                            const arbint_t rhs,
+                                            arbint_limb_t rhs_mul,
+                                            arbint_t lhs_term,
+                                            arbint_t rhs_term) {
+  arbint_err_t rc;
+
+  rc = arbint_xgcd_mul_limb(lhs_term, lhs, lhs_mul);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_xgcd_mul_limb(rhs_term, rhs, rhs_mul);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  return arbint_sub(out, lhs_term, rhs_term);
+}
+
+/*  Apply one Lehmer block transform to pair (x0, x1).  */
+static arbint_err_t
+arbint_xgcd_apply_lehmer_pair(arbint_t x0, arbint_t x1,
+                              const arbint_lehmer_matrix_t * m, int even,
+                              arbint_t out0, arbint_t out1, arbint_t tmp0,
+                              arbint_t tmp1) {
+  arbint_err_t rc;
+
+  if (even) {
+    /*  (x0, x1) <- (v0*x0 - v1*x1, w1*x1 - w0*x0).  */
+    rc = arbint_xgcd_lincomb_sub(out0, x0, m->v0, x1, m->v1, tmp0, tmp1);
+    if (rc != ARBINT_OK)
+      return rc;
+    return arbint_xgcd_lincomb_sub(out1, x1, m->w1, x0, m->w0, tmp0, tmp1);
+  }
+
+  /*  (x0, x1) <- (v1*x1 - v0*x0, w0*x0 - w1*x1).  */
+  rc = arbint_xgcd_lincomb_sub(out0, x1, m->v1, x0, m->v0, tmp0, tmp1);
+  if (rc != ARBINT_OK)
+    return rc;
+  return arbint_xgcd_lincomb_sub(out1, x0, m->w0, x1, m->w1, tmp0, tmp1);
 }
 
 /*  Extended GCD: compute g = gcd(a, b) and Bezout coefficients x, y
     such that a*x + b*y = g.
 
-    Uses the extended Euclidean algorithm:
+    Uses extended Euclid with Lehmer block acceleration on large inputs:
     - Track (r0, r1) = remainders, starting with (|a|, |b|)
     - Track (s0, s1) = coefficients for first input
     - Track (t0, t1) = coefficients for second input
-    - Each step: q = floor(r0/r1), then update all three pairs
+    - Large close-sized operands: apply one Lehmer matrix block
+    - Otherwise: one exact Euclidean step q = floor(r0/r1)
 
     Sign handling: we compute with |a|, |b|, then adjust signs at the end.
     If a < 0: x = -s0. If b < 0: y = -t0.
@@ -557,18 +593,19 @@ cleanup:
     g, x, y. "The final value is whichever output is written last."
     So g==x gets x's value, g==y gets y's value, x==y gets y's value.
 
-    Performance note: this uses plain Euclidean algorithm. For large
-    inputs (>= 32 limbs), arbint_gcd uses Lehmer's algorithm which is
-    faster. This xgcd does not use Lehmer tracking.  */
+    Performance note: large inputs use the same Lehmer step simulation
+    as arbint_gcd to reduce multi-limb divisions.  */
 ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
                                     const arbint_t a, const arbint_t b) {
   arbint_t r0, r1, s0, s1, t0, t1, q, tmp;
+  arbint_t pair0, pair1, prod0, prod1;
   arbint_t res_g, res_x, res_y;
   arbint_err_t rc;
   arbint_ctx_t * ctx;
   int a_neg, b_neg;
   int init_r0 = 0, init_r1 = 0, init_s0 = 0, init_s1 = 0;
   int init_t0 = 0, init_t1 = 0, init_q = 0, init_tmp = 0;
+  int init_pair0 = 0, init_pair1 = 0, init_prod0 = 0, init_prod1 = 0;
   int init_res_g = 0, init_res_x = 0, init_res_y = 0;
 
   if (g == NULL || x == NULL || y == NULL || a == NULL || b == NULL)
@@ -677,6 +714,26 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
     goto cleanup;
   init_tmp = 1;
 
+  rc = arbint_init(pair0, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_pair0 = 1;
+
+  rc = arbint_init(pair1, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_pair1 = 1;
+
+  rc = arbint_init(prod0, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_prod0 = 1;
+
+  rc = arbint_init(prod1, ctx);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  init_prod1 = 1;
+
   /*  Set initial values: r0 = |a|, r1 = |b|, s0 = 1, s1 = 0, t0 = 0,
       t1 = 1.  */
   rc = arbint_abs(r0, a);
@@ -694,8 +751,58 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
   if (rc != ARBINT_OK)
     goto cleanup;
 
+  /*  Keep r0 >= r1 for Lehmer simulation precondition.  */
+  if (arbint_cmpabs(r0, r1) < 0) {
+    arbint_swap(r0, r1);
+    arbint_swap(s0, s1);
+    arbint_swap(t0, t1);
+  }
+
   /*  Extended Euclidean loop.  */
   while (!arbint_is_zero(r1)) {
+    size_t r0_n = arbint_abs_sz(r0[0]._sz);
+    size_t r1_n = arbint_abs_sz(r1[0]._sz);
+    unsigned count = 0u;
+    int even = 1;
+    arbint_lehmer_matrix_t m;
+
+    /*  Lehmer simulation is reliable only when top lengths are close.  */
+    if (r1_n >= ARBINT_LEHMER_THRESHOLD && r0_n <= r1_n + 1u) {
+      const arbint_limb_t * r0p = ARBINT_CLIMBS(r0);
+      const arbint_limb_t * r1p = ARBINT_CLIMBS(r1);
+      arbint_limb_t a1 = r0p[r0_n - 1u];
+      arbint_limb_t a0 = (r0_n >= 2u) ? r0p[r0_n - 2u] : 0u;
+      arbint_limb_t b1 = r1p[r1_n - 1u];
+      arbint_limb_t b0 = (r1_n >= 2u) ? r1p[r1_n - 2u] : 0u;
+
+      count = arbint_lehmer_step(&m, a1, a0, b1, b0, &even);
+    }
+
+    if (count != 0u) {
+      /*  Apply same Lehmer block to remainders and both coefficient pairs.  */
+      rc = arbint_xgcd_apply_lehmer_pair(r0, r1, &m, even, pair0, pair1,
+                                         prod0, prod1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+      arbint_swap(r0, pair0);
+      arbint_swap(r1, pair1);
+
+      rc = arbint_xgcd_apply_lehmer_pair(s0, s1, &m, even, pair0, pair1,
+                                         prod0, prod1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+      arbint_swap(s0, pair0);
+      arbint_swap(s1, pair1);
+
+      rc = arbint_xgcd_apply_lehmer_pair(t0, t1, &m, even, pair0, pair1,
+                                         prod0, prod1);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+      arbint_swap(t0, pair0);
+      arbint_swap(t1, pair1);
+      continue;
+    }
+
     /*  q = floor(r0 / r1), r0 = r0 mod r1.  */
     rc = arbint_tdiv_qr(q, r0, r0, r1);
     if (rc != ARBINT_OK)
@@ -758,6 +865,14 @@ copy_results:
   /*  Fall through to cleanup.  */
 
 cleanup:
+  if (init_prod1)
+    arbint_clear(prod1);
+  if (init_prod0)
+    arbint_clear(prod0);
+  if (init_pair1)
+    arbint_clear(pair1);
+  if (init_pair0)
+    arbint_clear(pair0);
   if (init_tmp)
     arbint_clear(tmp);
   if (init_q)

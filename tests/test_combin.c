@@ -553,6 +553,68 @@ static void test_is_square_large(void) {
   arbint_ctx_clear(&ctx);
 }
 
+/*  isprime tests.  */
+
+static void test_isprime_basic(void) {
+  arbint_ctx_t ctx;
+  arbint_t n, p, c;
+  int out = -1;
+  size_t i;
+  static const struct {
+    int32_t n;
+    int is_prime;
+  } cases[] = {{-17, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 0},
+               {5, 1},  {9, 0},  {17, 1}, {19, 1}, {21, 0}, {97, 1}};
+  static const uint32_t carmichael[] = {561u, 1105u, 1729u, 2465u, 6601u};
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(p, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(c, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_isprime(NULL, 0, &out), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_isprime(n, 0, NULL), ARBINT_EINVAL);
+
+  for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    CHECK_EQ_I(arbint_set_i32(n, cases[i].n), ARBINT_OK);
+    CHECK_EQ_I(arbint_isprime(n, 0, &out), ARBINT_OK);
+    CHECK_EQ_I(out, cases[i].is_prime);
+  }
+
+  for (i = 0u; i < sizeof(carmichael) / sizeof(carmichael[0]); ++i) {
+    CHECK_EQ_I(arbint_set_u32(n, carmichael[i]), ARBINT_OK);
+    CHECK_EQ_I(arbint_isprime(n, 8, &out), ARBINT_OK);
+    CHECK_EQ_I(out, 0);
+  }
+
+  CHECK_EQ_I(arbint_set_u32(n, 2147483647u), ARBINT_OK);
+  CHECK_EQ_I(arbint_isprime(n, 12, &out), ARBINT_OK);
+  CHECK_EQ_I(out, 1);
+
+  CHECK_EQ_I(arbint_set_u32(n, 2147483645u), ARBINT_OK);
+  CHECK_EQ_I(arbint_isprime(n, 12, &out), ARBINT_OK);
+  CHECK_EQ_I(out, 0);
+
+  /*  Large prime: 2^127 - 1 (Mersenne prime).  */
+  CHECK_EQ_I(arbint_set_i32(p, 2), ARBINT_OK);
+  CHECK_EQ_I(arbint_pow_u32(p, p, 127u), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_i32(p, p, 1), ARBINT_OK);
+  CHECK_EQ_I(arbint_isprime(p, 24, &out), ARBINT_OK);
+  CHECK_EQ_I(out, 1);
+  CHECK_EQ_I(arbint_isprime(p, -1, &out), ARBINT_OK);
+  CHECK_EQ_I(out, 1);
+
+  /*  Large composite derived from that prime.  */
+  CHECK_EQ_I(arbint_mul_u32(c, p, 17u), ARBINT_OK);
+  CHECK_EQ_I(arbint_isprime(c, 24, &out), ARBINT_OK);
+  CHECK_EQ_I(out, 0);
+
+  arbint_clear(c);
+  arbint_clear(p);
+  arbint_clear(n);
+  arbint_ctx_clear(&ctx);
+}
+
 /*  Main.  */
 
 int main(void) {
@@ -585,6 +647,7 @@ int main(void) {
   test_is_square_negative();
   test_is_square_basic();
   test_is_square_large();
+  test_isprime_basic();
 
   ARBINT_TEST_FINISH("test_combin");
 }
