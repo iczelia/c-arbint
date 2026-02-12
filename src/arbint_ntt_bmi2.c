@@ -24,8 +24,8 @@
 
 #define ARBINT_USE_BMI2_INTRIN 1
 
-#include "arbint_ntt.h"
 #include "arbint_mul.h"
+#include "arbint_ntt.h"
 #include "config.h"
 
 #include <stdlib.h>

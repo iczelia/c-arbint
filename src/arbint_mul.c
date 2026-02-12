@@ -513,7 +513,7 @@ cleanup:
       - a=1: rop = 1
       - a<0: EDOM (API specifies a >= 0)
 
-    Aliasing: rop may alias a. We work in temporaries and assign at the end.  */
+    Aliasing: rop may alias a. We work in temporaries and assign at the end. */
 arbint_err_t arbint_root(arbint_t rop, const arbint_t a, uint32_t k) {
   arbint_ctx_t * ctx;
   arbint_t x, t, xk1;
@@ -575,13 +575,13 @@ arbint_err_t arbint_root(arbint_t rop, const arbint_t a, uint32_t k) {
   /*  Initial guess: x = 1 << ceil(nbits(a) / k).
       Overflow-safe computation of ceil(nbits / k).  */
   nbits = arbint_nbits(a);
-  if (nbits > SIZE_MAX - (size_t)(k - 1u)) {
+  if (nbits > SIZE_MAX - (size_t) (k - 1u)) {
     /*  nbits + k - 1 would overflow; compute manually.  */
     shift = nbits / (size_t) k;
     if (nbits % (size_t) k != 0u)
       shift += 1u;
   } else {
-    shift = (nbits + (size_t)(k - 1u)) / (size_t) k;
+    shift = (nbits + (size_t) (k - 1u)) / (size_t) k;
   }
 
   if (shift > (size_t) UINT32_MAX) {

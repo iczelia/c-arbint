@@ -27,8 +27,7 @@
 
 static inline void arbint_umul_limb_generic(arbint_limb_t * hi,
                                             arbint_limb_t * lo,
-                                            arbint_limb_t a,
-                                            arbint_limb_t b) {
+                                            arbint_limb_t a, arbint_limb_t b) {
 #if ARBINT_LIMB_BITS == 32
   uint64_t p = (uint64_t) a * (uint64_t) b;
   *lo = (arbint_limb_t) p;
@@ -66,8 +65,7 @@ static inline void arbint_umul_u64_generic(uint64_t * hi, uint64_t * lo,
 #if defined(ARBINT_USE_BMI2_INTRIN) && HAS_BMI2 && ARBINT_LIMB_BITS == 64
   #include <immintrin.h>
 static inline void arbint_umul_limb_bmi2(arbint_limb_t * hi,
-                                         arbint_limb_t * lo,
-                                         arbint_limb_t a,
+                                         arbint_limb_t * lo, arbint_limb_t a,
                                          arbint_limb_t b) {
   unsigned long long hi64 = 0ull;
   unsigned long long lo64 =
@@ -79,15 +77,14 @@ static inline void arbint_umul_limb_bmi2(arbint_limb_t * hi,
 static inline void arbint_umul_u64_bmi2(uint64_t * hi, uint64_t * lo,
                                         uint64_t a, uint64_t b) {
   unsigned long long hi64 = 0ull;
-  unsigned long long lo64 = _mulx_u64((unsigned long long) a,
-                                      (unsigned long long) b, &hi64);
+  unsigned long long lo64 =
+      _mulx_u64((unsigned long long) a, (unsigned long long) b, &hi64);
   *lo = (uint64_t) lo64;
   *hi = (uint64_t) hi64;
 }
 #else
 static inline void arbint_umul_limb_bmi2(arbint_limb_t * hi,
-                                         arbint_limb_t * lo,
-                                         arbint_limb_t a,
+                                         arbint_limb_t * lo, arbint_limb_t a,
                                          arbint_limb_t b) {
   arbint_umul_limb_generic(hi, lo, a, b);
 }
@@ -108,8 +105,8 @@ typedef struct arbint_mul_kernel_table {
                           const arbint_limb_t * b, size_t bn,
                           const arbint_alloc_t * alloc);
   size_t (*mulacc)(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
-                   const arbint_limb_t * a, size_t an,
-                   const arbint_limb_t * c, size_t cn);
+                   const arbint_limb_t * a, size_t an, const arbint_limb_t * c,
+                   size_t cn);
   size_t (*mulacc_1)(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
                      const arbint_limb_t * a, size_t an, arbint_limb_t b);
 } arbint_mul_kernel_table_t;

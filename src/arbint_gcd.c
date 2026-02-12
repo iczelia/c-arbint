@@ -31,12 +31,9 @@
     Lehmer GCD has platform-specific implementations that use different
     multiply primitives. The dispatch selects the optimal implementation
     based on CPU features detected at runtime.  */
-typedef arbint_err_t (*arbint_gcd_lehmer_fn_t)(arbint_t g,
-                                               const arbint_limb_t * ap,
-                                               size_t an,
-                                               const arbint_limb_t * bp,
-                                               size_t bn,
-                                               const arbint_alloc_t * alloc);
+typedef arbint_err_t (*arbint_gcd_lehmer_fn_t)(
+    arbint_t g, const arbint_limb_t * ap, size_t an, const arbint_limb_t * bp,
+    size_t bn, const arbint_alloc_t * alloc);
 
 /*  Select optimal Lehmer GCD implementation based on CPU features.
 
@@ -70,12 +67,10 @@ static arbint_gcd_lehmer_fn_t g_gcd_lehmer = NULL;
 
     Called from arbint_gcd when min(an, bn) >= ARBINT_LEHMER_THRESHOLD.
     Performs lazy initialization of the function pointer on first call.  */
-static arbint_err_t arbint_gcd_lehmer_dispatch(arbint_t g,
-                                               const arbint_limb_t * ap,
-                                               size_t an,
-                                               const arbint_limb_t * bp,
-                                               size_t bn,
-                                               const arbint_alloc_t * alloc) {
+static arbint_err_t
+arbint_gcd_lehmer_dispatch(arbint_t g, const arbint_limb_t * ap, size_t an,
+                           const arbint_limb_t * bp, size_t bn,
+                           const arbint_alloc_t * alloc) {
   ARBINT_LAZY_INIT(g_gcd_lehmer, arbint_select_gcd_lehmer);
   return g_gcd_lehmer(g, ap, an, bp, bn, alloc);
 }
@@ -682,7 +677,8 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
     goto cleanup;
   init_tmp = 1;
 
-  /*  Set initial values: r0 = |a|, r1 = |b|, s0 = 1, s1 = 0, t0 = 0, t1 = 1.  */
+  /*  Set initial values: r0 = |a|, r1 = |b|, s0 = 1, s1 = 0, t0 = 0,
+      t1 = 1.  */
   rc = arbint_abs(r0, a);
   if (rc != ARBINT_OK)
     goto cleanup;
@@ -729,7 +725,8 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
 
   /*  Copy results with sign adjustment.
       We computed with |a|, |b|, so s0*|a| + t0*|b| = g.
-      For signed a, b: a*x + b*y = g where x = s0*(a<0?-1:1), y = t0*(b<0?-1:1).  */
+      For signed a, b: a*x + b*y = g where x = s0*(a<0?-1:1), y =
+      t0*(b<0?-1:1).  */
   rc = arbint_set(res_g, r0);
   if (rc != ARBINT_OK)
     goto cleanup;

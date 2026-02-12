@@ -24,22 +24,22 @@
 #include <stdint.h>
 
 /*  Shared lazy-init helper for static dispatch pointers.  */
-#define ARBINT_LAZY_INIT(impl_var, selector_fn)                                 \
-  do {                                                                          \
-    if ((impl_var) == NULL)                                                     \
-      (impl_var) = (selector_fn)();                                             \
+#define ARBINT_LAZY_INIT(impl_var, selector_fn)                               \
+  do {                                                                        \
+    if ((impl_var) == NULL)                                                   \
+      (impl_var) = (selector_fn) ();                                          \
   } while (0)
 
 /*  Allocator selection helpers (single-threaded context ownership model).  */
-static inline const arbint_alloc_t * arbint_get_alloc_from_obj(const arbint_t x) {
+static inline const arbint_alloc_t *
+arbint_get_alloc_from_obj(const arbint_t x) {
   if (x == NULL || x[0]._ctx == NULL || x[0]._ctx->a.realloc == NULL)
     return NULL;
   return &x[0]._ctx->a;
 }
 
-static inline const arbint_alloc_t * arbint_pick_alloc3(const arbint_t a,
-                                                        const arbint_t b,
-                                                        const arbint_t c) {
+static inline const arbint_alloc_t *
+arbint_pick_alloc3(const arbint_t a, const arbint_t b, const arbint_t c) {
   const arbint_alloc_t * alloc;
 
   alloc = arbint_get_alloc_from_obj(a);

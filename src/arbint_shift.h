@@ -24,7 +24,7 @@
     Returns new normalized size after shift.
     Safe for k == 0 (no-op) and k >= n * LIMB_BITS (returns 0).  */
 static inline size_t arbint_rshift_limbs_inplace(arbint_limb_t * p, size_t n,
-                                                  size_t k) {
+                                                 size_t k) {
   size_t limb_shift;
   unsigned bit_shift;
   size_t i;
@@ -58,7 +58,7 @@ static inline size_t arbint_rshift_limbs_inplace(arbint_limb_t * p, size_t n,
     Caller must ensure p has capacity for at least (n + k/LIMB_BITS + 1) limbs.
     Returns new size after shift.  */
 static inline size_t arbint_lshift_limbs_inplace(arbint_limb_t * p, size_t n,
-                                                  size_t k, size_t cap) {
+                                                 size_t k, size_t cap) {
   size_t limb_shift;
   unsigned bit_shift;
   size_t new_n;

@@ -62,8 +62,7 @@
     cycle without modifying flags. This file is only compiled when BMI2
     is available, so no fallback paths are needed.  */
 static inline void arbint_lehmer_umul_bmi2(arbint_limb_t * hi,
-                                           arbint_limb_t * lo,
-                                           arbint_limb_t a,
+                                           arbint_limb_t * lo, arbint_limb_t a,
                                            arbint_limb_t b) {
   arbint_umul_limb_bmi2(hi, lo, a, b);
 }
@@ -107,8 +106,7 @@ static size_t arbint_lehmer_sub_bmi2(arbint_limb_t * dst,
 static void arbint_lehmer_apply_matrix_bmi2(arbint_limb_t * up, size_t * un,
                                             arbint_limb_t * vp, size_t * vn,
                                             const arbint_lehmer_matrix_t * m,
-                                            int even,
-                                            arbint_limb_t * scratch,
+                                            int even, arbint_limb_t * scratch,
                                             size_t scratch_cap) {
   size_t slot = scratch_cap / 4u;
   arbint_limb_t * v0u = scratch;
@@ -157,15 +155,15 @@ static void arbint_lehmer_apply_matrix_bmi2(arbint_limb_t * up, size_t * un,
 
   /*  Compute new_u = v0*u - v1*v (or v1*v - v0*u if odd).  */
   if (even) {
-    if (v0u_n > v1v_n ||
-        (v0u_n == v1v_n && arbint_cmp_mag_limbs(v0u, v0u_n, v1v, v1v_n) >= 0)) {
+    if (v0u_n > v1v_n || (v0u_n == v1v_n &&
+                          arbint_cmp_mag_limbs(v0u, v0u_n, v1v, v1v_n) >= 0)) {
       new_un = arbint_lehmer_sub_bmi2(up, v0u, v0u_n, v1v, v1v_n);
     } else {
       new_un = arbint_lehmer_sub_bmi2(up, v1v, v1v_n, v0u, v0u_n);
     }
   } else {
-    if (v1v_n > v0u_n ||
-        (v1v_n == v0u_n && arbint_cmp_mag_limbs(v1v, v1v_n, v0u, v0u_n) >= 0)) {
+    if (v1v_n > v0u_n || (v1v_n == v0u_n &&
+                          arbint_cmp_mag_limbs(v1v, v1v_n, v0u, v0u_n) >= 0)) {
       new_un = arbint_lehmer_sub_bmi2(up, v1v, v1v_n, v0u, v0u_n);
     } else {
       new_un = arbint_lehmer_sub_bmi2(up, v0u, v0u_n, v1v, v1v_n);
@@ -174,15 +172,15 @@ static void arbint_lehmer_apply_matrix_bmi2(arbint_limb_t * up, size_t * un,
 
   /*  Compute new_v = w1*v - w0*u (or w0*u - w1*v if odd).  */
   if (even) {
-    if (w1v_n > w0u_n ||
-        (w1v_n == w0u_n && arbint_cmp_mag_limbs(w1v, w1v_n, w0u, w0u_n) >= 0)) {
+    if (w1v_n > w0u_n || (w1v_n == w0u_n &&
+                          arbint_cmp_mag_limbs(w1v, w1v_n, w0u, w0u_n) >= 0)) {
       new_vn = arbint_lehmer_sub_bmi2(vp, w1v, w1v_n, w0u, w0u_n);
     } else {
       new_vn = arbint_lehmer_sub_bmi2(vp, w0u, w0u_n, w1v, w1v_n);
     }
   } else {
-    if (w0u_n > w1v_n ||
-        (w0u_n == w1v_n && arbint_cmp_mag_limbs(w0u, w0u_n, w1v, w1v_n) >= 0)) {
+    if (w0u_n > w1v_n || (w0u_n == w1v_n &&
+                          arbint_cmp_mag_limbs(w0u, w0u_n, w1v, w1v_n) >= 0)) {
       new_vn = arbint_lehmer_sub_bmi2(vp, w0u, w0u_n, w1v, w1v_n);
     } else {
       new_vn = arbint_lehmer_sub_bmi2(vp, w1v, w1v_n, w0u, w0u_n);
@@ -194,12 +192,10 @@ static void arbint_lehmer_apply_matrix_bmi2(arbint_limb_t * up, size_t * un,
 }
 
 /*  Binary GCD (Stein's algorithm) - fallback for small operands.  */
-static arbint_err_t arbint_gcd_binary_fallback_bmi2(arbint_t g,
-                                                    arbint_limb_t * up,
-                                                    size_t un,
-                                                    arbint_limb_t * vp,
-                                                    size_t vn,
-                                                    const arbint_alloc_t * alloc) {
+static arbint_err_t
+arbint_gcd_binary_fallback_bmi2(arbint_t g, arbint_limb_t * up, size_t un,
+                                arbint_limb_t * vp, size_t vn,
+                                const arbint_alloc_t * alloc) {
   arbint_limb_t * tmp;
   size_t ctz_u, ctz_v, common;
   size_t cap;
@@ -382,8 +378,8 @@ arbint_err_t arbint_gcd_lehmer_bmi2(arbint_t g, const arbint_limb_t * ap,
         vn = t;
       }
     } else {
-      arbint_lehmer_apply_matrix_bmi2(up, &un, vp, &vn, &m, even,
-                                      work, cap * 4u);
+      arbint_lehmer_apply_matrix_bmi2(up, &un, vp, &vn, &m, even, work,
+                                      cap * 4u);
 
       un = arbint_norm_used(up, un);
       vn = arbint_norm_used(vp, vn);

@@ -159,7 +159,7 @@ static inline unsigned arbint_lehmer_step(arbint_lehmer_matrix_t * m,
         We can only safely continue if a1 == 0 too.  */
     if (b1 == 0u) {
       if (a1 != 0u)
-        break;  /*  Quotient too large to simulate safely.  */
+        break; /*  Quotient too large to simulate safely.  */
       /*  Both a1 and b1 are zero; single-limb quotient.  */
       if (b0 == 0u)
         break;
@@ -170,7 +170,7 @@ static inline unsigned arbint_lehmer_step(arbint_lehmer_matrix_t * m,
     }
 
     if (q == 0u)
-      break;  /*  Would make no progress.  */
+      break; /*  Would make no progress.  */
 
     /*  Check if matrix update would overflow.
         new_w = v + q*w, so check v + q*w <= LIMIT.  */
@@ -249,14 +249,14 @@ static inline unsigned arbint_lehmer_step(arbint_lehmer_matrix_t * m,
 
       /*  a - prod.  */
       if (a0 < prod_lo) {
-        a0 = a0 - prod_lo;  /*  Wraps, borrow into a1.  */
+        a0 = a0 - prod_lo; /*  Wraps, borrow into a1.  */
         if (a1 == 0u || a1 - 1u < prod_hi)
-          break;  /*  Underflow.  */
+          break; /*  Underflow.  */
         a1 = a1 - 1u - prod_hi;
       } else {
         a0 = a0 - prod_lo;
         if (a1 < prod_hi)
-          break;  /*  Underflow.  */
+          break; /*  Underflow.  */
         a1 = a1 - prod_hi;
       }
     }
@@ -284,7 +284,8 @@ static inline unsigned arbint_lehmer_step(arbint_lehmer_matrix_t * m,
   return count;
 }
 
-/*  Lehmer GCD function declarations (implemented in platform-specific files).  */
+/*  Lehmer GCD function declarations (implemented in platform-specific
+    files).  */
 arbint_err_t arbint_gcd_lehmer_generic(arbint_t g, const arbint_limb_t * ap,
                                        size_t an, const arbint_limb_t * bp,
                                        size_t bn,

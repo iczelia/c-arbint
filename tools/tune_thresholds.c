@@ -398,7 +398,8 @@ static double normalize_time_ntt(double ns, size_t n) {
 /*  Find NTT crossover point.
     Looks for where normalized time (by n*log(n)) starts decreasing,
     indicating NTT has become more efficient than Toom-3.  */
-static size_t find_ntt_crossover(double * times, size_t * sizes, size_t count) {
+static size_t find_ntt_crossover(double * times, size_t * sizes,
+                                 size_t count) {
   size_t i;
   double prev_norm = 0.0;
   int decreasing_count = 0;

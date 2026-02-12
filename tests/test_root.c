@@ -105,54 +105,54 @@ static void test_root_perfect_powers(void) {
   CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
 
   /*  Cube roots (k=3).  */
-  CHECK_EQ_I(arbint_set_i32(a, 8), ARBINT_OK);      /*  2^3 = 8  */
+  CHECK_EQ_I(arbint_set_i32(a, 8), ARBINT_OK); /*  2^3 = 8  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 2);
 
-  CHECK_EQ_I(arbint_set_i32(a, 27), ARBINT_OK);     /*  3^3 = 27  */
+  CHECK_EQ_I(arbint_set_i32(a, 27), ARBINT_OK); /*  3^3 = 27  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 3);
 
-  CHECK_EQ_I(arbint_set_i32(a, 64), ARBINT_OK);     /*  4^3 = 64  */
+  CHECK_EQ_I(arbint_set_i32(a, 64), ARBINT_OK); /*  4^3 = 64  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 4);
 
-  CHECK_EQ_I(arbint_set_i32(a, 125), ARBINT_OK);    /*  5^3 = 125  */
+  CHECK_EQ_I(arbint_set_i32(a, 125), ARBINT_OK); /*  5^3 = 125  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 5);
 
-  CHECK_EQ_I(arbint_set_i32(a, 1000), ARBINT_OK);   /*  10^3 = 1000  */
+  CHECK_EQ_I(arbint_set_i32(a, 1000), ARBINT_OK); /*  10^3 = 1000  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 10);
 
   /*  Fourth roots (k=4).  */
-  CHECK_EQ_I(arbint_set_i32(a, 16), ARBINT_OK);     /*  2^4 = 16  */
+  CHECK_EQ_I(arbint_set_i32(a, 16), ARBINT_OK); /*  2^4 = 16  */
   CHECK_EQ_I(arbint_root(r, a, 4u), ARBINT_OK);
   check_i32_value(r, 2);
 
-  CHECK_EQ_I(arbint_set_i32(a, 81), ARBINT_OK);     /*  3^4 = 81  */
+  CHECK_EQ_I(arbint_set_i32(a, 81), ARBINT_OK); /*  3^4 = 81  */
   CHECK_EQ_I(arbint_root(r, a, 4u), ARBINT_OK);
   check_i32_value(r, 3);
 
-  CHECK_EQ_I(arbint_set_i32(a, 256), ARBINT_OK);    /*  4^4 = 256  */
+  CHECK_EQ_I(arbint_set_i32(a, 256), ARBINT_OK); /*  4^4 = 256  */
   CHECK_EQ_I(arbint_root(r, a, 4u), ARBINT_OK);
   check_i32_value(r, 4);
 
-  CHECK_EQ_I(arbint_set_i32(a, 10000), ARBINT_OK);  /*  10^4 = 10000  */
+  CHECK_EQ_I(arbint_set_i32(a, 10000), ARBINT_OK); /*  10^4 = 10000  */
   CHECK_EQ_I(arbint_root(r, a, 4u), ARBINT_OK);
   check_i32_value(r, 10);
 
   /*  Fifth roots (k=5).  */
-  CHECK_EQ_I(arbint_set_i32(a, 32), ARBINT_OK);     /*  2^5 = 32  */
+  CHECK_EQ_I(arbint_set_i32(a, 32), ARBINT_OK); /*  2^5 = 32  */
   CHECK_EQ_I(arbint_root(r, a, 5u), ARBINT_OK);
   check_i32_value(r, 2);
 
-  CHECK_EQ_I(arbint_set_i32(a, 243), ARBINT_OK);    /*  3^5 = 243  */
+  CHECK_EQ_I(arbint_set_i32(a, 243), ARBINT_OK); /*  3^5 = 243  */
   CHECK_EQ_I(arbint_root(r, a, 5u), ARBINT_OK);
   check_i32_value(r, 3);
 
   /*  Tenth root (k=10).  */
-  CHECK_EQ_I(arbint_set_i32(a, 1024), ARBINT_OK);   /*  2^10 = 1024  */
+  CHECK_EQ_I(arbint_set_i32(a, 1024), ARBINT_OK); /*  2^10 = 1024  */
   CHECK_EQ_I(arbint_root(r, a, 10u), ARBINT_OK);
   check_i32_value(r, 2);
 
@@ -229,8 +229,8 @@ static void test_root_k2_delegation(void) {
   CHECK_EQ_I(arbint_init(r_isqrt, &ctx), ARBINT_OK);
 
   /*  Verify root(a, 2) == isqrt(a) for various values.  */
-  int32_t test_values[] = {0, 1, 2, 3, 4, 5, 9, 10, 15, 16, 17, 99, 100, 101,
-                           1000, 10000, 65536, 1000000};
+  int32_t test_values[] = {0,  1,  2,  3,   4,   5,    9,     10,    15,
+                           16, 17, 99, 100, 101, 1000, 10000, 65536, 1000000};
   size_t i;
 
   for (i = 0; i < sizeof(test_values) / sizeof(test_values[0]); ++i) {
@@ -353,16 +353,16 @@ static void test_root_pow_roundtrip(void) {
 
   /*  root_k(base^k - 1) = base - 1.  */
   CHECK_EQ_I(arbint_set_i32(base, 10), ARBINT_OK);
-  CHECK_EQ_I(arbint_pow_u32(power, base, 3u), ARBINT_OK);  /*  1000  */
-  CHECK_EQ_I(arbint_sub_i32(power, power, 1), ARBINT_OK);  /*  999  */
+  CHECK_EQ_I(arbint_pow_u32(power, base, 3u), ARBINT_OK); /*  1000  */
+  CHECK_EQ_I(arbint_sub_i32(power, power, 1), ARBINT_OK); /*  999  */
   CHECK_EQ_I(arbint_root(r, power, 3u), ARBINT_OK);
   check_i32_value(r, 9);
   check_root_invariant(r, power, 3u);
 
   /*  root_k(base^k + 1) = base (if (base+1)^k > base^k + 1).  */
   CHECK_EQ_I(arbint_set_i32(base, 10), ARBINT_OK);
-  CHECK_EQ_I(arbint_pow_u32(power, base, 3u), ARBINT_OK);  /*  1000  */
-  CHECK_EQ_I(arbint_add_i32(power, power, 1), ARBINT_OK);  /*  1001  */
+  CHECK_EQ_I(arbint_pow_u32(power, base, 3u), ARBINT_OK); /*  1000  */
+  CHECK_EQ_I(arbint_add_i32(power, power, 1), ARBINT_OK); /*  1001  */
   CHECK_EQ_I(arbint_root(r, power, 3u), ARBINT_OK);
   check_i32_value(r, 10);
   check_root_invariant(r, power, 3u);
@@ -387,8 +387,8 @@ static void test_root_stochastic(void) {
   for (i = 0; i < 200; ++i) {
     /*  Generate a random value by squaring repeatedly.  */
     int32_t seed = 1 + (i * 7) % 100;
-    uint32_t k = 3u + (uint32_t)(i % 8);  /*  k in [3, 10]  */
-    int squarings = 1 + (i % 5);  /*  1-5 squarings  */
+    uint32_t k = 3u + (uint32_t) (i % 8); /*  k in [3, 10]  */
+    int squarings = 1 + (i % 5);          /*  1-5 squarings  */
     int j;
 
     CHECK_EQ_I(arbint_set_i32(a, seed), ARBINT_OK);
@@ -421,13 +421,13 @@ static void test_root_large_k(void) {
 
   /*  Large k with medium a: root_32(2^32) = 2.  */
   CHECK_EQ_I(arbint_set_i32(a, 1), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(a, a, 32u), ARBINT_OK);  /*  2^32  */
+  CHECK_EQ_I(arbint_shl(a, a, 32u), ARBINT_OK); /*  2^32  */
   CHECK_EQ_I(arbint_root(r, a, 32u), ARBINT_OK);
   check_i32_value(r, 2);
 
   /*  root_64(2^64) = 2.  */
   CHECK_EQ_I(arbint_set_i32(a, 1), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(a, a, 64u), ARBINT_OK);  /*  2^64  */
+  CHECK_EQ_I(arbint_shl(a, a, 64u), ARBINT_OK); /*  2^64  */
   CHECK_EQ_I(arbint_root(r, a, 64u), ARBINT_OK);
   check_i32_value(r, 2);
 
@@ -464,7 +464,7 @@ static void test_root_consecutive(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/*  Test boundary values around perfect powers to verify Newton convergence.  */
+/*  Test boundary values around perfect powers to verify Newton convergence. */
 static void test_root_boundary(void) {
   arbint_ctx_t ctx;
   arbint_t a, r;
@@ -475,24 +475,24 @@ static void test_root_boundary(void) {
 
   /*  Values around 2^30 (for k=3: ~1024^3).  */
   /*  1024^3 = 1073741824.  */
-  CHECK_EQ_I(arbint_set_i32(a, 1073741823), ARBINT_OK);  /*  1024^3 - 1  */
+  CHECK_EQ_I(arbint_set_i32(a, 1073741823), ARBINT_OK); /*  1024^3 - 1  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 1023);
   check_root_invariant(r, a, 3u);
 
-  CHECK_EQ_I(arbint_set_i32(a, 1073741824), ARBINT_OK);  /*  1024^3  */
+  CHECK_EQ_I(arbint_set_i32(a, 1073741824), ARBINT_OK); /*  1024^3  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 1024);
   check_root_invariant(r, a, 3u);
 
-  CHECK_EQ_I(arbint_set_i32(a, 1073741825), ARBINT_OK);  /*  1024^3 + 1  */
+  CHECK_EQ_I(arbint_set_i32(a, 1073741825), ARBINT_OK); /*  1024^3 + 1  */
   CHECK_EQ_I(arbint_root(r, a, 3u), ARBINT_OK);
   check_i32_value(r, 1024);
   check_root_invariant(r, a, 3u);
 
   /*  Values around 256^4 = 4294967296 (for k=4).  */
   CHECK_EQ_I(arbint_set_i32(a, 1), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(a, a, 32u), ARBINT_OK);  /*  2^32 = 256^4 = 65536^2  */
+  CHECK_EQ_I(arbint_shl(a, a, 32u), ARBINT_OK); /*  2^32 = 256^4 = 65536^2  */
   CHECK_EQ_I(arbint_root(r, a, 4u), ARBINT_OK);
   check_i32_value(r, 256);
   check_root_invariant(r, a, 4u);
@@ -576,15 +576,15 @@ static void test_root_multilimb_result(void) {
 
   /*  Build a large base (2^100) and compute root_3((2^100)^3) = 2^100.  */
   CHECK_EQ_I(arbint_set_i32(base, 1), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(base, base, 100u), ARBINT_OK);  /*  base = 2^100  */
-  CHECK_EQ_I(arbint_pow_u32(power, base, 3u), ARBINT_OK);  /*  power = 2^300  */
+  CHECK_EQ_I(arbint_shl(base, base, 100u), ARBINT_OK);    /*  base = 2^100  */
+  CHECK_EQ_I(arbint_pow_u32(power, base, 3u), ARBINT_OK); /*  power = 2^300  */
   CHECK_EQ_I(arbint_root(r, power, 3u), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(r, base), 0);
 
   /*  root_5((2^50)^5) = 2^50.  */
   CHECK_EQ_I(arbint_set_i32(base, 1), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(base, base, 50u), ARBINT_OK);  /*  base = 2^50  */
-  CHECK_EQ_I(arbint_pow_u32(power, base, 5u), ARBINT_OK);  /*  power = 2^250  */
+  CHECK_EQ_I(arbint_shl(base, base, 50u), ARBINT_OK);     /*  base = 2^50  */
+  CHECK_EQ_I(arbint_pow_u32(power, base, 5u), ARBINT_OK); /*  power = 2^250  */
   CHECK_EQ_I(arbint_root(r, power, 5u), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(r, base), 0);
 
@@ -595,7 +595,7 @@ static void test_root_multilimb_result(void) {
   check_i32_value(r, 12345);
 
   /*  Non-perfect power near a large perfect power.  */
-  CHECK_EQ_I(arbint_add_i32(power, power, 1), ARBINT_OK);  /*  12345^3 + 1  */
+  CHECK_EQ_I(arbint_add_i32(power, power, 1), ARBINT_OK); /*  12345^3 + 1  */
   CHECK_EQ_I(arbint_root(r, power, 3u), ARBINT_OK);
   check_i32_value(r, 12345);
   check_root_invariant(r, power, 3u);

@@ -76,8 +76,8 @@ static void verify_gcd(const arbint_t a, const arbint_t b, const arbint_t g,
 
 /*  Helper: test xgcd with i32 values and verify results.  */
 static void test_xgcd_i32(arbint_t a, arbint_t b, arbint_t g, arbint_t x,
-                          arbint_t y, arbint_t tmp1, arbint_t tmp2,
-                          int32_t av, int32_t bv, const char * desc) {
+                          arbint_t y, arbint_t tmp1, arbint_t tmp2, int32_t av,
+                          int32_t bv, const char * desc) {
   arbint_err_t rc;
 
   rc = arbint_set_i32(a, av);
@@ -211,10 +211,10 @@ int main(void) {
     /*  Per aliasing contract, g should have x's value (x written after g).
         Verify Bezout: 12*x + 8*y should equal gcd(12,8)=4.  */
     CHECK_EQ_I(arbint_gcd(tmp1, a, b), ARBINT_OK);
-    CHECK_EQ_I(arbint_mul(tmp2, a, g), ARBINT_OK);  /*  a * x (x is in g).  */
-    CHECK_EQ_I(arbint_mul(x, b, y), ARBINT_OK);     /*  b * y.  */
+    CHECK_EQ_I(arbint_mul(tmp2, a, g), ARBINT_OK); /*  a * x (x is in g).  */
+    CHECK_EQ_I(arbint_mul(x, b, y), ARBINT_OK);    /*  b * y.  */
     CHECK_EQ_I(arbint_add(tmp2, tmp2, x), ARBINT_OK);
-    CHECK(arbint_eq(tmp2, tmp1));  /*  a*x + b*y == gcd.  */
+    CHECK(arbint_eq(tmp2, tmp1)); /*  a*x + b*y == gcd.  */
   }
 
   /*  Test output aliasing: g == y (should get y's value).  */
@@ -229,7 +229,7 @@ int main(void) {
     /*  g should have y's value.  */
     CHECK_EQ_I(arbint_gcd(tmp1, a, b), ARBINT_OK);
     CHECK_EQ_I(arbint_mul(tmp2, a, x), ARBINT_OK);
-    CHECK_EQ_I(arbint_mul(y, b, g), ARBINT_OK);  /*  b * y (y is in g).  */
+    CHECK_EQ_I(arbint_mul(y, b, g), ARBINT_OK); /*  b * y (y is in g).  */
     CHECK_EQ_I(arbint_add(tmp2, tmp2, y), ARBINT_OK);
     CHECK(arbint_eq(tmp2, tmp1));
   }
@@ -470,10 +470,12 @@ int main(void) {
   check_i32_value(g, 1);
 
   /*  Test with large primes.  */
-  test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 104729, 104743, "gcd(104729, 104743) primes");
+  test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 104729, 104743,
+                "gcd(104729, 104743) primes");
   check_i32_value(g, 1);
 
-  test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 999961, 999979, "gcd(999961, 999979) primes");
+  test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 999961, 999979,
+                "gcd(999961, 999979) primes");
   check_i32_value(g, 1);
 
   /*  Test highly composite numbers.  */
@@ -491,7 +493,8 @@ int main(void) {
   test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 321, 123, "gcd(321, 123) swapped");
 
   test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 1234, 4321, "gcd(1234, 4321)");
-  test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 4321, 1234, "gcd(4321, 1234) swapped");
+  test_xgcd_i32(a, b, g, x, y, tmp1, tmp2, 4321, 1234,
+                "gcd(4321, 1234) swapped");
 
   /*  Test all output aliasing in zero path: gcd(a, 0) with g==y.  */
   {
@@ -541,7 +544,7 @@ int main(void) {
     arbint_err_t rc;
 
     CHECK_EQ_I(arbint_set_i32(a, -2), ARBINT_OK);
-    CHECK_EQ_I(arbint_pow_u32(a, a, 100), ARBINT_OK);  /*  -2^100.  */
+    CHECK_EQ_I(arbint_pow_u32(a, a, 100), ARBINT_OK); /*  -2^100.  */
     CHECK_EQ_I(arbint_set_i32(b, 2), ARBINT_OK);
     CHECK_EQ_I(arbint_pow_u32(b, b, 50), ARBINT_OK);
 

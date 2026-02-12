@@ -44,8 +44,8 @@
 
 #define ARBINT_USE_BMI2_INTRIN 1
 
-#include "arbint_ntt.h"
 #include "arbint_mul.h"
+#include "arbint_ntt.h"
 #include "config.h"
 
 #include <immintrin.h>
@@ -81,98 +81,102 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
 
 /* ========== AVX2 Optimized Loop Macros ========== */
 
-/*  Threshold for using AVX2 loops. Below this, scalar loops have less overhead.
-    16 elements = 4 AVX2 vectors = 128 bytes = 2 cache lines.  */
+/*  Threshold for using AVX2 loops. Below this, scalar loops have less
+    overhead. 16 elements = 4 AVX2 vectors = 128 bytes = 2 cache lines.  */
 #define NTT_AVX2_LOOP_THRESHOLD 16u
 
 /*  AVX2-optimized to_mont conversion loop.
     Uses vectorized loads/stores with scalar Montgomery multiply.
-    The to_mont function is defined in the include, so we inline the loop body.  */
-#define NTT_TO_MONT_LOOP(dst, src, n, mont)                                    \
-  do {                                                                         \
-    size_t _i = 0u;                                                            \
-    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                      \
-      for (; _i + 4u <= (n); _i += 4u) {                                       \
-        if (_i + 16u < (n))                                                    \
-          _mm_prefetch((const char *) &(src)[_i + 16u], _MM_HINT_T0);          \
-        __m256i _v = _mm256_loadu_si256((const __m256i *) &(src)[_i]);         \
-        uint64_t _s0 = (uint64_t) _mm256_extract_epi64(_v, 0);                 \
-        uint64_t _s1 = (uint64_t) _mm256_extract_epi64(_v, 1);                 \
-        uint64_t _s2 = (uint64_t) _mm256_extract_epi64(_v, 2);                 \
-        uint64_t _s3 = (uint64_t) _mm256_extract_epi64(_v, 3);                 \
-        uint64_t _r0 = to_mont(_s0, mont);                                     \
-        uint64_t _r1 = to_mont(_s1, mont);                                     \
-        uint64_t _r2 = to_mont(_s2, mont);                                     \
-        uint64_t _r3 = to_mont(_s3, mont);                                     \
-        __m256i _result = _mm256_set_epi64x(                                   \
-            (long long) _r3, (long long) _r2, (long long) _r1, (long long) _r0); \
-        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                  \
-      }                                                                        \
-    }                                                                          \
-    for (; _i < (n); ++_i) {                                                   \
-      (dst)[_i] = to_mont((src)[_i], mont);                                    \
-    }                                                                          \
+    The to_mont function is defined in the include, so we inline
+    the loop body.  */
+#define NTT_TO_MONT_LOOP(dst, src, n, mont)                                   \
+  do {                                                                        \
+    size_t _i = 0u;                                                           \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                     \
+      for (; _i + 4u <= (n); _i += 4u) {                                      \
+        if (_i + 16u < (n))                                                   \
+          _mm_prefetch((const char *) &(src)[_i + 16u], _MM_HINT_T0);         \
+        __m256i _v = _mm256_loadu_si256((const __m256i *) &(src)[_i]);        \
+        uint64_t _s0 = (uint64_t) _mm256_extract_epi64(_v, 0);                \
+        uint64_t _s1 = (uint64_t) _mm256_extract_epi64(_v, 1);                \
+        uint64_t _s2 = (uint64_t) _mm256_extract_epi64(_v, 2);                \
+        uint64_t _s3 = (uint64_t) _mm256_extract_epi64(_v, 3);                \
+        uint64_t _r0 = to_mont(_s0, mont);                                    \
+        uint64_t _r1 = to_mont(_s1, mont);                                    \
+        uint64_t _r2 = to_mont(_s2, mont);                                    \
+        uint64_t _r3 = to_mont(_s3, mont);                                    \
+        __m256i _result =                                                     \
+            _mm256_set_epi64x((long long) _r3, (long long) _r2,               \
+                              (long long) _r1, (long long) _r0);              \
+        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                 \
+      }                                                                       \
+    }                                                                         \
+    for (; _i < (n); ++_i) {                                                  \
+      (dst)[_i] = to_mont((src)[_i], mont);                                   \
+    }                                                                         \
   } while (0)
 
 /*  AVX2-optimized pointwise multiplication loop.  */
-#define NTT_POINTWISE_MUL(dst, a, b, n, mont)                                  \
-  do {                                                                         \
-    size_t _i = 0u;                                                            \
-    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                      \
-      for (; _i + 4u <= (n); _i += 4u) {                                       \
-        if (_i + 16u < (n)) {                                                  \
-          _mm_prefetch((const char *) &(a)[_i + 16u], _MM_HINT_T0);            \
-          _mm_prefetch((const char *) &(b)[_i + 16u], _MM_HINT_T0);            \
-        }                                                                      \
-        __m256i _va = _mm256_loadu_si256((const __m256i *) &(a)[_i]);          \
-        __m256i _vb = _mm256_loadu_si256((const __m256i *) &(b)[_i]);          \
-        uint64_t _a0 = (uint64_t) _mm256_extract_epi64(_va, 0);                \
-        uint64_t _a1 = (uint64_t) _mm256_extract_epi64(_va, 1);                \
-        uint64_t _a2 = (uint64_t) _mm256_extract_epi64(_va, 2);                \
-        uint64_t _a3 = (uint64_t) _mm256_extract_epi64(_va, 3);                \
-        uint64_t _b0 = (uint64_t) _mm256_extract_epi64(_vb, 0);                \
-        uint64_t _b1 = (uint64_t) _mm256_extract_epi64(_vb, 1);                \
-        uint64_t _b2 = (uint64_t) _mm256_extract_epi64(_vb, 2);                \
-        uint64_t _b3 = (uint64_t) _mm256_extract_epi64(_vb, 3);                \
-        uint64_t _r0 = mont_mul(_a0, _b0, mont);                               \
-        uint64_t _r1 = mont_mul(_a1, _b1, mont);                               \
-        uint64_t _r2 = mont_mul(_a2, _b2, mont);                               \
-        uint64_t _r3 = mont_mul(_a3, _b3, mont);                               \
-        __m256i _result = _mm256_set_epi64x(                                   \
-            (long long) _r3, (long long) _r2, (long long) _r1, (long long) _r0); \
-        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                  \
-      }                                                                        \
-    }                                                                          \
-    for (; _i < (n); ++_i) {                                                   \
-      (dst)[_i] = mont_mul((a)[_i], (b)[_i], mont);                            \
-    }                                                                          \
+#define NTT_POINTWISE_MUL(dst, a, b, n, mont)                                 \
+  do {                                                                        \
+    size_t _i = 0u;                                                           \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                     \
+      for (; _i + 4u <= (n); _i += 4u) {                                      \
+        if (_i + 16u < (n)) {                                                 \
+          _mm_prefetch((const char *) &(a)[_i + 16u], _MM_HINT_T0);           \
+          _mm_prefetch((const char *) &(b)[_i + 16u], _MM_HINT_T0);           \
+        }                                                                     \
+        __m256i _va = _mm256_loadu_si256((const __m256i *) &(a)[_i]);         \
+        __m256i _vb = _mm256_loadu_si256((const __m256i *) &(b)[_i]);         \
+        uint64_t _a0 = (uint64_t) _mm256_extract_epi64(_va, 0);               \
+        uint64_t _a1 = (uint64_t) _mm256_extract_epi64(_va, 1);               \
+        uint64_t _a2 = (uint64_t) _mm256_extract_epi64(_va, 2);               \
+        uint64_t _a3 = (uint64_t) _mm256_extract_epi64(_va, 3);               \
+        uint64_t _b0 = (uint64_t) _mm256_extract_epi64(_vb, 0);               \
+        uint64_t _b1 = (uint64_t) _mm256_extract_epi64(_vb, 1);               \
+        uint64_t _b2 = (uint64_t) _mm256_extract_epi64(_vb, 2);               \
+        uint64_t _b3 = (uint64_t) _mm256_extract_epi64(_vb, 3);               \
+        uint64_t _r0 = mont_mul(_a0, _b0, mont);                              \
+        uint64_t _r1 = mont_mul(_a1, _b1, mont);                              \
+        uint64_t _r2 = mont_mul(_a2, _b2, mont);                              \
+        uint64_t _r3 = mont_mul(_a3, _b3, mont);                              \
+        __m256i _result =                                                     \
+            _mm256_set_epi64x((long long) _r3, (long long) _r2,               \
+                              (long long) _r1, (long long) _r0);              \
+        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                 \
+      }                                                                       \
+    }                                                                         \
+    for (; _i < (n); ++_i) {                                                  \
+      (dst)[_i] = mont_mul((a)[_i], (b)[_i], mont);                           \
+    }                                                                         \
   } while (0)
 
 /*  AVX2-optimized scale and from_mont conversion loop.  */
-#define NTT_SCALE_FROM_MONT(x, n, scale, mont)                                 \
-  do {                                                                         \
-    size_t _i = 0u;                                                            \
-    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                      \
-      for (; _i + 4u <= (n); _i += 4u) {                                       \
-        if (_i + 16u < (n))                                                    \
-          _mm_prefetch((const char *) &(x)[_i + 16u], _MM_HINT_T0);            \
-        __m256i _v = _mm256_loadu_si256((const __m256i *) &(x)[_i]);           \
-        uint64_t _v0 = (uint64_t) _mm256_extract_epi64(_v, 0);                 \
-        uint64_t _v1 = (uint64_t) _mm256_extract_epi64(_v, 1);                 \
-        uint64_t _v2 = (uint64_t) _mm256_extract_epi64(_v, 2);                 \
-        uint64_t _v3 = (uint64_t) _mm256_extract_epi64(_v, 3);                 \
-        uint64_t _r0 = from_mont(mont_mul(_v0, scale, mont), mont);            \
-        uint64_t _r1 = from_mont(mont_mul(_v1, scale, mont), mont);            \
-        uint64_t _r2 = from_mont(mont_mul(_v2, scale, mont), mont);            \
-        uint64_t _r3 = from_mont(mont_mul(_v3, scale, mont), mont);            \
-        __m256i _result = _mm256_set_epi64x(                                   \
-            (long long) _r3, (long long) _r2, (long long) _r1, (long long) _r0); \
-        _mm256_storeu_si256((__m256i *) &(x)[_i], _result);                    \
-      }                                                                        \
-    }                                                                          \
-    for (; _i < (n); ++_i) {                                                   \
-      (x)[_i] = from_mont(mont_mul((x)[_i], scale, mont), mont);               \
-    }                                                                          \
+#define NTT_SCALE_FROM_MONT(x, n, scale, mont)                                \
+  do {                                                                        \
+    size_t _i = 0u;                                                           \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                     \
+      for (; _i + 4u <= (n); _i += 4u) {                                      \
+        if (_i + 16u < (n))                                                   \
+          _mm_prefetch((const char *) &(x)[_i + 16u], _MM_HINT_T0);           \
+        __m256i _v = _mm256_loadu_si256((const __m256i *) &(x)[_i]);          \
+        uint64_t _v0 = (uint64_t) _mm256_extract_epi64(_v, 0);                \
+        uint64_t _v1 = (uint64_t) _mm256_extract_epi64(_v, 1);                \
+        uint64_t _v2 = (uint64_t) _mm256_extract_epi64(_v, 2);                \
+        uint64_t _v3 = (uint64_t) _mm256_extract_epi64(_v, 3);                \
+        uint64_t _r0 = from_mont(mont_mul(_v0, scale, mont), mont);           \
+        uint64_t _r1 = from_mont(mont_mul(_v1, scale, mont), mont);           \
+        uint64_t _r2 = from_mont(mont_mul(_v2, scale, mont), mont);           \
+        uint64_t _r3 = from_mont(mont_mul(_v3, scale, mont), mont);           \
+        __m256i _result =                                                     \
+            _mm256_set_epi64x((long long) _r3, (long long) _r2,               \
+                              (long long) _r1, (long long) _r0);              \
+        _mm256_storeu_si256((__m256i *) &(x)[_i], _result);                   \
+      }                                                                       \
+    }                                                                         \
+    for (; _i < (n); ++_i) {                                                  \
+      (x)[_i] = from_mont(mont_mul((x)[_i], scale, mont), mont);              \
+    }                                                                         \
   } while (0)
 
 /*  Include the core for Montgomery arithmetic, CRT, etc.
@@ -190,7 +194,8 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
 /*  Vectorized modular addition: (a + b) mod p for 4 elements.
 
     For primes p close to 2^64, we cannot simply compute a + b because it
-    may overflow. Instead we use: result = (a >= p - b) ? (a - (p - b)) : (a + b)
+    may overflow. Instead we use: result = (a >= p - b) ? (a - (p - b)) : (a +
+    b)
 
     AVX2 has no unsigned 64-bit compare, so we use the XOR-with-sign-bit trick:
     unsigned a >= b iff signed (a ^ 0x8000...) >= (b ^ 0x8000...)  */
@@ -258,9 +263,10 @@ static inline __m256i ntt_mod_sub_avx2(__m256i a, __m256i b, __m256i p) {
 
     omega_vec contains [omega^0, omega^1, omega^2, omega^3] in Montgomery form.
     Returns omega^4 for continuing the sequence.  */
-static inline uint64_t ntt_butterfly_forward_4(
-    uint64_t * x, size_t k, size_t m_half, __m256i omega_vec,
-    uint64_t omega_m, const arbint_mont_params_t * mont) {
+static inline uint64_t
+ntt_butterfly_forward_4(uint64_t * x, size_t k, size_t m_half,
+                        __m256i omega_vec, uint64_t omega_m,
+                        const arbint_mont_params_t * mont) {
   uint64_t p = mont->p;
   __m256i p_vec = _mm256_set1_epi64x((long long) p);
 
@@ -321,11 +327,12 @@ static inline uint64_t ntt_butterfly_forward_4(
       x[k + j] = (u[j] + v[j]) mod p
       x[k + j + m_half] = (u[j] - v[j]) * omega_inv[j] mod p
 
-    omega_inv_vec contains [omega_inv^0, omega_inv^1, omega_inv^2, omega_inv^3].
-    Returns omega_inv^4 for continuing the sequence.  */
-static inline uint64_t ntt_butterfly_inverse_4(
-    uint64_t * x, size_t k, size_t m_half, __m256i omega_inv_vec,
-    uint64_t omega_m_inv, const arbint_mont_params_t * mont) {
+    omega_inv_vec contains [omega_inv^0, omega_inv^1, omega_inv^2,
+    omega_inv^3]. Returns omega_inv^4 for continuing the sequence.  */
+static inline uint64_t
+ntt_butterfly_inverse_4(uint64_t * x, size_t k, size_t m_half,
+                        __m256i omega_inv_vec, uint64_t omega_m_inv,
+                        const arbint_mont_params_t * mont) {
   uint64_t p = mont->p;
   __m256i p_vec = _mm256_set1_epi64x((long long) p);
 
@@ -368,9 +375,8 @@ static inline uint64_t ntt_butterfly_inverse_4(
   ntt_umul(&hi, &lo, d3, omega_inv3);
   uint64_t r3 = mont_redc(hi, lo, mont);
 
-  __m256i result_mul =
-      _mm256_set_epi64x((long long) r3, (long long) r2, (long long) r1,
-                        (long long) r0);
+  __m256i result_mul = _mm256_set_epi64x((long long) r3, (long long) r2,
+                                         (long long) r1, (long long) r0);
 
   /*  Store the multiplication result.  */
   _mm256_storeu_si256((__m256i *) &x[k + m_half], result_mul);
@@ -380,11 +386,11 @@ static inline uint64_t ntt_butterfly_inverse_4(
   return mont_redc(hi, lo, mont);
 }
 
-/*  Prepare omega vector: [omega^0, omega^1, omega^2, omega^3] in Montgomery form.
-    omega_start is the starting omega value (omega^j for some j).  */
-static inline __m256i ntt_prepare_omega_vec(uint64_t omega_start,
-                                            uint64_t omega_m,
-                                            const arbint_mont_params_t * mont) {
+/*  Prepare omega vector: [omega^0, omega^1, omega^2, omega^3] in Montgomery
+    form. omega_start is the starting omega value (omega^j for some j).  */
+static inline __m256i
+ntt_prepare_omega_vec(uint64_t omega_start, uint64_t omega_m,
+                      const arbint_mont_params_t * mont) {
   uint64_t hi, lo;
   uint64_t o0 = omega_start;
 
@@ -402,10 +408,12 @@ static inline __m256i ntt_prepare_omega_vec(uint64_t omega_start,
 }
 
 /*  Process 4 forward butterflies using precomputed omega table.
-    Same as ntt_butterfly_forward_4 but loads omega values from table[j:j+4].  */
-static inline void ntt_butterfly_forward_4_table(
-    uint64_t * x, size_t k, size_t m_half, const uint64_t * omega_table,
-    size_t j, const arbint_mont_params_t * mont) {
+    Same as ntt_butterfly_forward_4 but loads omega values from
+    table[j:j+4].  */
+static inline void
+ntt_butterfly_forward_4_table(uint64_t * x, size_t k, size_t m_half,
+                              const uint64_t * omega_table, size_t j,
+                              const arbint_mont_params_t * mont) {
   uint64_t p = mont->p;
   __m256i p_vec = _mm256_set1_epi64x((long long) p);
 
@@ -456,10 +464,12 @@ static inline void ntt_butterfly_forward_4_table(
 }
 
 /*  Process 4 inverse butterflies using precomputed omega_inv table.
-    Same as ntt_butterfly_inverse_4 but loads omega_inv values from table[j:j+4].  */
-static inline void ntt_butterfly_inverse_4_table(
-    uint64_t * x, size_t k, size_t m_half, const uint64_t * omega_inv_table,
-    size_t j, const arbint_mont_params_t * mont) {
+    Same as ntt_butterfly_inverse_4 but loads omega_inv values from
+    table[j:j+4].  */
+static inline void
+ntt_butterfly_inverse_4_table(uint64_t * x, size_t k, size_t m_half,
+                              const uint64_t * omega_inv_table, size_t j,
+                              const arbint_mont_params_t * mont) {
   uint64_t p = mont->p;
   __m256i p_vec = _mm256_set1_epi64x((long long) p);
 
@@ -506,9 +516,8 @@ static inline void ntt_butterfly_inverse_4_table(
   ntt_umul(&hi, &lo, d3, omega_inv3);
   uint64_t r3 = mont_redc(hi, lo, mont);
 
-  __m256i result_mul =
-      _mm256_set_epi64x((long long) r3, (long long) r2, (long long) r1,
-                        (long long) r0);
+  __m256i result_mul = _mm256_set_epi64x((long long) r3, (long long) r2,
+                                         (long long) r1, (long long) r0);
 
   /*  Store the multiplication result.  */
   _mm256_storeu_si256((__m256i *) &x[k + j + m_half], result_mul);
@@ -545,10 +554,9 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
     uint64_t omega_m = roots->omega[s];
 
     /*  Check if precomputed full omega table is available for this stage.  */
-    int use_full_table = (roots->omega_full != NULL &&
-                          s >= NTT_FULL_OMEGA_MIN_STAGE &&
-                          s < roots->full_max_log2 &&
-                          roots->omega_full[s] != NULL);
+    int use_full_table =
+        (roots->omega_full != NULL && s >= NTT_FULL_OMEGA_MIN_STAGE &&
+         s < roots->full_max_log2 && roots->omega_full[s] != NULL);
 
     if (m_half >= NTT_AVX2_BUTTERFLY_THRESHOLD) {
       /*  AVX2 path: process 4 butterflies at a time.  */
@@ -579,8 +587,8 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
           /*  Process groups of 4.  */
           for (; j + 4u <= m_half; j += 4u) {
             __m256i omega_vec = ntt_prepare_omega_vec(omega, omega_m, mont);
-            omega = ntt_butterfly_forward_4(x, k + j, m_half, omega_vec, omega_m,
-                                            mont);
+            omega = ntt_butterfly_forward_4(x, k + j, m_half, omega_vec,
+                                            omega_m, mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code.  */
@@ -609,12 +617,13 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
   }
 }
 
-/*  Inverse NTT with AVX2 optimization: Gentleman-Sande decimation-in-frequency.
-    x must be in Montgomery form on entry.
-    On exit, x contains INTT(x) * n (not yet scaled by n^-1).
+/*  Inverse NTT with AVX2 optimization: Gentleman-Sande
+    decimation-in-frequency. x must be in Montgomery form on entry. On exit,
+    x contains INTT(x) * n (not yet scaled by n^-1).
 
-    When precomputed full omega_inv tables are available (omega_inv_full[s] != NULL),
-    we use direct table lookups instead of computing omega_inv values on the fly.  */
+    When precomputed full omega_inv tables are available (omega_inv_full[s] !=
+    NULL), we use direct table lookups instead of computing omega_inv values
+    on the fly.  */
 static void ntt_inverse(uint64_t * x, size_t log2_n,
                         const arbint_ntt_roots_t * roots,
                         const arbint_mont_params_t * mont) {
@@ -625,10 +634,11 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
   for (size_t s = log2_n; s > 0u; --s) {
     size_t m = (size_t) 1u << s;
     size_t m_half = m >> 1;
-    size_t stage_idx = s - 1u;  /* omega_inv index for this stage */
+    size_t stage_idx = s - 1u; /* omega_inv index for this stage */
     uint64_t omega_m_inv = roots->omega_inv[stage_idx];
 
-    /*  Check if precomputed full omega_inv table is available for this stage.  */
+    /*  Check if precomputed full omega_inv table is available
+        for this stage.  */
     int use_full_table = (roots->omega_inv_full != NULL &&
                           stage_idx >= NTT_FULL_OMEGA_MIN_STAGE &&
                           stage_idx < roots->full_max_log2 &&
@@ -645,7 +655,8 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
 
           /*  Process groups of 4 using table lookups.  */
           for (; j + 4u <= m_half; j += 4u) {
-            ntt_butterfly_inverse_4_table(x, k, m_half, omega_inv_table, j, mont);
+            ntt_butterfly_inverse_4_table(x, k, m_half, omega_inv_table, j,
+                                          mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code using table.  */
@@ -664,8 +675,8 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
           for (; j + 4u <= m_half; j += 4u) {
             __m256i omega_inv_vec =
                 ntt_prepare_omega_vec(omega_inv, omega_m_inv, mont);
-            omega_inv = ntt_butterfly_inverse_4(x, k + j, m_half, omega_inv_vec,
-                                                omega_m_inv, mont);
+            omega_inv = ntt_butterfly_inverse_4(
+                x, k + j, m_half, omega_inv_vec, omega_m_inv, mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code.  */

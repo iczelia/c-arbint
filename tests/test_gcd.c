@@ -676,14 +676,14 @@ static void test_gcd_binary_mod_opt(void) {
       gcd should be 2^320 since 2^2048 = 2^320 * 2^1728.  */
   CHECK_EQ_I(arbint_set_u32(big, 2u), ARBINT_OK);
   for (int i = 0; i < 11; ++i)
-    CHECK_EQ_I(arbint_sqr(big, big), ARBINT_OK);  /* 2^2048 */
+    CHECK_EQ_I(arbint_sqr(big, big), ARBINT_OK); /* 2^2048 */
 
   CHECK_EQ_I(arbint_set_u32(expected, 2u), ARBINT_OK);
   for (int i = 0; i < 5; ++i)
     CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK);  /* 2^320 */
+  CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK); /* 2^320 */
 
-  CHECK_EQ_I(arbint_mul_u32(medium, expected, 7u), ARBINT_OK);  /* 7 * 2^320 */
+  CHECK_EQ_I(arbint_mul_u32(medium, expected, 7u), ARBINT_OK); /* 7 * 2^320 */
 
   CHECK_EQ_I(arbint_gcd(g, big, medium), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(g, expected), 0);
@@ -752,30 +752,30 @@ static void test_gcd_large_single_limb(void) {
 
   /*  gcd(2^32, 2^32) = 2^32 (not 0 from truncation).  */
   CHECK_EQ_I(arbint_set_u32(a, 65536u), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);  /* a = 2^32 */
-  CHECK_EQ_I(arbint_set(b, a), ARBINT_OK);  /* b = 2^32 */
+  CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK); /* a = 2^32 */
+  CHECK_EQ_I(arbint_set(b, a), ARBINT_OK); /* b = 2^32 */
 
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
-  CHECK_EQ_I(arbint_cmp(g, a), 0);  /* gcd should equal a */
+  CHECK_EQ_I(arbint_cmp(g, a), 0); /* gcd should equal a */
 
   /*  lcm(2^32, 2^32) = 2^32 (must not fail with EZERO).  */
   CHECK_EQ_I(arbint_lcm(l, a, b), ARBINT_OK);
-  CHECK_EQ_I(arbint_cmp(l, a), 0);  /* lcm should equal a */
+  CHECK_EQ_I(arbint_cmp(l, a), 0); /* lcm should equal a */
 
   /*  gcd(2^33, 2^32) = 2^32.  */
-  CHECK_EQ_I(arbint_mul_u32(a, a, 2u), ARBINT_OK);  /* a = 2^33 */
+  CHECK_EQ_I(arbint_mul_u32(a, a, 2u), ARBINT_OK); /* a = 2^33 */
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
-  CHECK_EQ_I(arbint_cmp(g, b), 0);  /* gcd should equal b = 2^32 */
+  CHECK_EQ_I(arbint_cmp(g, b), 0); /* gcd should equal b = 2^32 */
 
   /*  gcd with large coprime single-limb values.  */
   CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(a, a, 40u), ARBINT_OK);  /* a = 2^40 */
+  CHECK_EQ_I(arbint_shl(a, a, 40u), ARBINT_OK); /* a = 2^40 */
   CHECK_EQ_I(arbint_set_u32(b, 3u), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(b, b, 35u), ARBINT_OK);  /* b = 3 * 2^35 */
+  CHECK_EQ_I(arbint_shl(b, b, 35u), ARBINT_OK); /* b = 3 * 2^35 */
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
   /* gcd(2^40, 3*2^35) = 2^35 */
   CHECK_EQ_I(arbint_set_u32(l, 1u), ARBINT_OK);
-  CHECK_EQ_I(arbint_shl(l, l, 35u), ARBINT_OK);  /* expected = 2^35 */
+  CHECK_EQ_I(arbint_shl(l, l, 35u), ARBINT_OK); /* expected = 2^35 */
   CHECK_EQ_I(arbint_cmp(g, l), 0);
 
   arbint_clear(l);
@@ -874,7 +874,7 @@ static void test_gcd_consecutive(void) {
   /*  Large consecutive (multi-limb): n = 2^256, n+1 = 2^256 + 1.  */
   CHECK_EQ_I(arbint_set_u32(n, 2u), ARBINT_OK);
   for (int i = 0; i < 8; ++i)
-    CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK);  /* 2^256 */
+    CHECK_EQ_I(arbint_sqr(n, n), ARBINT_OK); /* 2^256 */
   CHECK_EQ_I(arbint_add_u32(n_plus_1, n, 1u), ARBINT_OK);
   CHECK_EQ_I(arbint_gcd(g, n, n_plus_1), ARBINT_OK);
   check_u32_value(g, 1u);
@@ -916,7 +916,7 @@ static void test_gcd_scaling(void) {
   /*  Large scale factor: k = 2^128.  */
   CHECK_EQ_I(arbint_set_u32(expected, 2u), ARBINT_OK);
   for (int i = 0; i < 7; ++i)
-    CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK);  /* k = 2^128 */
+    CHECK_EQ_I(arbint_sqr(expected, expected), ARBINT_OK); /* k = 2^128 */
 
   CHECK_EQ_I(arbint_mul(ka, a, expected), ARBINT_OK);
   CHECK_EQ_I(arbint_mul(kb, b, expected), ARBINT_OK);
@@ -947,8 +947,8 @@ static void test_gcd_threshold_boundary(void) {
   CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
   CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
 
-  /*  Build numbers of exactly 3, 4, 5, 6 limbs (on 64-bit: 192, 256, 320, 384 bits).
-      Use 2^(64*n) - 1 which has exactly n limbs.  */
+  /*  Build numbers of exactly 3, 4, 5, 6 limbs (on 64-bit: 192, 256, 320, 384
+     bits). Use 2^(64*n) - 1 which has exactly n limbs.  */
   for (i = 3; i <= 6; ++i) {
     /*  a = 2^(64*i) - 1 (all 1-bits, exactly i limbs on 64-bit).  */
     CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
@@ -995,13 +995,13 @@ static void test_gcd_primes(void) {
 
   /*  gcd(p, p^2) = p.  */
   CHECK_EQ_I(arbint_set_u32(a, 104729u), ARBINT_OK);
-  CHECK_EQ_I(arbint_sqr(b, a), ARBINT_OK);  /* b = p^2 */
+  CHECK_EQ_I(arbint_sqr(b, a), ARBINT_OK); /* b = p^2 */
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(g, a), 0);
 
   /*  gcd(p*q, p) = p for distinct primes p, q.  */
   CHECK_EQ_I(arbint_set_u32(a, 104729u), ARBINT_OK);
-  CHECK_EQ_I(arbint_mul_u32(b, a, 1299709u), ARBINT_OK);  /* b = p*q */
+  CHECK_EQ_I(arbint_mul_u32(b, a, 1299709u), ARBINT_OK); /* b = p*q */
   CHECK_EQ_I(arbint_gcd(g, b, a), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(g, a), 0);
 
@@ -1028,7 +1028,7 @@ static void test_gcd_stochastic(void) {
   for (iter = 0; iter < 50; ++iter) {
     /*  Simple LCG for pseudo-random values.  */
     seed = seed * 1103515245u + 12345u;
-    uint32_t av = (seed >> 16) | 1u;  /* Ensure nonzero, odd */
+    uint32_t av = (seed >> 16) | 1u; /* Ensure nonzero, odd */
     seed = seed * 1103515245u + 12345u;
     uint32_t bv = (seed >> 16) | 1u;
 
@@ -1076,7 +1076,7 @@ static void test_lcm_stochastic(void) {
 
   for (iter = 0; iter < 50; ++iter) {
     seed = seed * 1103515245u + 12345u;
-    uint32_t av = ((seed >> 16) % 10000u) + 1u;  /* 1 to 10000 */
+    uint32_t av = ((seed >> 16) % 10000u) + 1u; /* 1 to 10000 */
     seed = seed * 1103515245u + 12345u;
     uint32_t bv = ((seed >> 16) % 10000u) + 1u;
 
@@ -1148,7 +1148,7 @@ static void test_gcd_large_stochastic(void) {
     CHECK_EQ_I(arbint_tdiv_r(r, b, g), ARBINT_OK);
     CHECK(arbint_is_zero(r));
 
-    /*  gcd(av * factor, bv * factor) >= factor (since factor divides both).  */
+    /*  gcd(av * factor, bv * factor) >= factor (since factor divides both). */
     CHECK(arbint_cmpabs(g, factor) >= 0);
   }
 
@@ -1214,7 +1214,7 @@ static void test_gcd_with_one(void) {
   /*  Large multi-limb case.  */
   CHECK_EQ_I(arbint_set_u32(b, 2u), ARBINT_OK);
   for (int i = 0; i < 10; ++i)
-    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK);  /* b = 2^1024 */
+    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK); /* b = 2^1024 */
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
   check_u32_value(g, 1u);
 
@@ -1459,7 +1459,7 @@ static void test_gcd_lehmer_quotient_edge(void) {
   check_u32_value(g, 1u);
 
   /*  Test: a = 2^2048 + 1, b = 2^2048 - 1.
-      gcd(2^n + 1, 2^n - 1) = gcd(2, 2^n - 1) = 1 (both are odd when n > 0).  */
+      gcd(2^n + 1, 2^n - 1) = gcd(2, 2^n - 1) = 1 (both are odd when n > 0). */
   CHECK_EQ_I(arbint_set_u32(a, 2u), ARBINT_OK);
   for (int i = 0; i < 11; ++i)
     CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);
@@ -1473,11 +1473,11 @@ static void test_gcd_lehmer_quotient_edge(void) {
   CHECK_EQ_I(arbint_set_u32(a, 2u), ARBINT_OK);
   for (int i = 0; i < 11; ++i)
     CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);
-  CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK);  /* 2^2048 - 1 */
+  CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK); /* 2^2048 - 1 */
   CHECK_EQ_I(arbint_set_u32(b, 2u), ARBINT_OK);
   for (int i = 0; i < 10; ++i)
     CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK);
-  CHECK_EQ_I(arbint_sub_u32(b, b, 1u), ARBINT_OK);  /* 2^1024 - 1 */
+  CHECK_EQ_I(arbint_sub_u32(b, b, 1u), ARBINT_OK); /* 2^1024 - 1 */
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
   CHECK_EQ_I(arbint_cmp(g, b), 0);
 
@@ -1511,10 +1511,10 @@ static void test_gcd_lehmer_high_quotient(void) {
       gcd(a, b) = gcd(b, 1) = 1  */
   CHECK_EQ_I(arbint_set_u32(b, 2u), ARBINT_OK);
   for (int i = 0; i < 11; ++i)
-    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK);  /* b = 2^2048 */
+    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK); /* b = 2^2048 */
 
-  CHECK_EQ_I(arbint_mul_u32(a, b, 100000000u), ARBINT_OK);  /* a = b * 10^8 */
-  CHECK_EQ_I(arbint_add_u32(a, a, 1u), ARBINT_OK);          /* a = b * 10^8 + 1 */
+  CHECK_EQ_I(arbint_mul_u32(a, b, 100000000u), ARBINT_OK); /* a = b * 10^8 */
+  CHECK_EQ_I(arbint_add_u32(a, a, 1u), ARBINT_OK); /* a = b * 10^8 + 1 */
 
   CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
   check_u32_value(g, 1u);

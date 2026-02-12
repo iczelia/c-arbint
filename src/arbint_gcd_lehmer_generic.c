@@ -66,38 +66,11 @@
 #include "arbint_addsub.h"
 #include "arbint_base.h"
 #include "arbint_div.h"
+#include "arbint_mul.h"
 #include "arbint_shift.h"
 #include "config.h"
 
 #include <string.h>
-
-/*  Portable wide multiply: hi:lo = a * b.
-
-    Computes the full 2*LIMB_BITS product of two limbs. Used for matrix
-    coefficient multiplication in arbint_lehmer_mul_1  */
-static inline void arbint_lehmer_umul_generic(arbint_limb_t * hi,
-                                              arbint_limb_t * lo,
-                                              arbint_limb_t a,
-                                              arbint_limb_t b) {
-#if ARBINT_LIMB_BITS == 64
-  arbint_limb_t a_lo = a & 0xFFFFFFFFu;
-  arbint_limb_t a_hi = a >> 32;
-  arbint_limb_t b_lo = b & 0xFFFFFFFFu;
-  arbint_limb_t b_hi = b >> 32;
-  arbint_limb_t x0 = a_lo * b_lo;
-  arbint_limb_t x1 = a_lo * b_hi;
-  arbint_limb_t x2 = a_hi * b_lo;
-  arbint_limb_t x3 = a_hi * b_hi;
-  arbint_limb_t mid = (x0 >> 32) + (x1 & 0xFFFFFFFFu) + (x2 & 0xFFFFFFFFu);
-  *lo = (mid << 32) | (x0 & 0xFFFFFFFFu);
-  *hi = x3 + (x1 >> 32) + (x2 >> 32) + (mid >> 32);
-#else
-  /*  32-bit limbs: use 64-bit arithmetic.  */
-  uint64_t prod = (uint64_t) a * b;
-  *lo = (arbint_limb_t) prod;
-  *hi = (arbint_limb_t) (prod >> 32);
-#endif
-}
 
 /*  Multiply limb array by single limb: dst = src * mult.
 
@@ -114,7 +87,7 @@ static size_t arbint_lehmer_mul_1_generic(arbint_limb_t * dst,
   arbint_limb_t hi, lo;
 
   for (i = 0u; i < n; ++i) {
-    arbint_lehmer_umul_generic(&hi, &lo, src[i], mult);
+    arbint_umul_limb_generic(&hi, &lo, src[i], mult);
     lo += carry;
     if (lo < carry)
       ++hi;
@@ -162,12 +135,10 @@ static size_t arbint_lehmer_sub_generic(arbint_limb_t * dst,
     Scratch layout: [v0*u | v1*v | w0*u | w1*v], each slot = cap/4 limbs.
     We must compute all four products before any subtraction, since the
     subtractions write back to up and vp (the original operands).  */
-static void arbint_lehmer_apply_matrix_generic(arbint_limb_t * up, size_t * un,
-                                               arbint_limb_t * vp, size_t * vn,
-                                               const arbint_lehmer_matrix_t * m,
-                                               int even,
-                                               arbint_limb_t * scratch,
-                                               size_t scratch_cap) {
+static void arbint_lehmer_apply_matrix_generic(
+    arbint_limb_t * up, size_t * un, arbint_limb_t * vp, size_t * vn,
+    const arbint_lehmer_matrix_t * m, int even, arbint_limb_t * scratch,
+    size_t scratch_cap) {
   size_t slot = scratch_cap / 4u;
   arbint_limb_t * v0u = scratch;
   arbint_limb_t * v1v = scratch + slot;
@@ -215,16 +186,16 @@ static void arbint_lehmer_apply_matrix_generic(arbint_limb_t * up, size_t * un,
 
   /*  Compute new_u = v0*u - v1*v (or v1*v - v0*u if odd).  */
   if (even) {
-    if (v0u_n > v1v_n ||
-        (v0u_n == v1v_n && arbint_cmp_mag_limbs(v0u, v0u_n, v1v, v1v_n) >= 0)) {
+    if (v0u_n > v1v_n || (v0u_n == v1v_n &&
+                          arbint_cmp_mag_limbs(v0u, v0u_n, v1v, v1v_n) >= 0)) {
       new_un = arbint_lehmer_sub_generic(up, v0u, v0u_n, v1v, v1v_n);
     } else {
       /*  Result would be negative; shouldn't happen with valid matrix.  */
       new_un = arbint_lehmer_sub_generic(up, v1v, v1v_n, v0u, v0u_n);
     }
   } else {
-    if (v1v_n > v0u_n ||
-        (v1v_n == v0u_n && arbint_cmp_mag_limbs(v1v, v1v_n, v0u, v0u_n) >= 0)) {
+    if (v1v_n > v0u_n || (v1v_n == v0u_n &&
+                          arbint_cmp_mag_limbs(v1v, v1v_n, v0u, v0u_n) >= 0)) {
       new_un = arbint_lehmer_sub_generic(up, v1v, v1v_n, v0u, v0u_n);
     } else {
       new_un = arbint_lehmer_sub_generic(up, v0u, v0u_n, v1v, v1v_n);
@@ -233,15 +204,15 @@ static void arbint_lehmer_apply_matrix_generic(arbint_limb_t * up, size_t * un,
 
   /*  Compute new_v = w1*v - w0*u (or w0*u - w1*v if odd).  */
   if (even) {
-    if (w1v_n > w0u_n ||
-        (w1v_n == w0u_n && arbint_cmp_mag_limbs(w1v, w1v_n, w0u, w0u_n) >= 0)) {
+    if (w1v_n > w0u_n || (w1v_n == w0u_n &&
+                          arbint_cmp_mag_limbs(w1v, w1v_n, w0u, w0u_n) >= 0)) {
       new_vn = arbint_lehmer_sub_generic(vp, w1v, w1v_n, w0u, w0u_n);
     } else {
       new_vn = arbint_lehmer_sub_generic(vp, w0u, w0u_n, w1v, w1v_n);
     }
   } else {
-    if (w0u_n > w1v_n ||
-        (w0u_n == w1v_n && arbint_cmp_mag_limbs(w0u, w0u_n, w1v, w1v_n) >= 0)) {
+    if (w0u_n > w1v_n || (w0u_n == w1v_n &&
+                          arbint_cmp_mag_limbs(w0u, w0u_n, w1v, w1v_n) >= 0)) {
       new_vn = arbint_lehmer_sub_generic(vp, w0u, w0u_n, w1v, w1v_n);
     } else {
       new_vn = arbint_lehmer_sub_generic(vp, w1v, w1v_n, w0u, w0u_n);
@@ -267,9 +238,9 @@ static void arbint_lehmer_apply_matrix_generic(arbint_limb_t * up, size_t * un,
     4. Result = u << k (restore common power of 2)
 
     Operates on limb arrays directly; result written to g.  */
-static arbint_err_t arbint_gcd_binary_fallback(arbint_t g,
-                                               arbint_limb_t * up, size_t un,
-                                               arbint_limb_t * vp, size_t vn,
+static arbint_err_t arbint_gcd_binary_fallback(arbint_t g, arbint_limb_t * up,
+                                               size_t un, arbint_limb_t * vp,
+                                               size_t vn,
                                                const arbint_alloc_t * alloc) {
   arbint_limb_t * tmp;
   size_t ctz_u, ctz_v, common;
@@ -479,8 +450,8 @@ arbint_err_t arbint_gcd_lehmer_generic(arbint_t g, const arbint_limb_t * ap,
       }
     } else {
       /*  Apply matrix transformation.  */
-      arbint_lehmer_apply_matrix_generic(up, &un, vp, &vn, &m, even,
-                                         work, cap * 4u);
+      arbint_lehmer_apply_matrix_generic(up, &un, vp, &vn, &m, even, work,
+                                         cap * 4u);
 
       /*  Normalize.  */
       un = arbint_norm_used(up, un);

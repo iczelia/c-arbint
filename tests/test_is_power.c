@@ -28,8 +28,8 @@ static void test_is_power_value(const arbint_t a, int expected_out,
     fprintf(stderr, "FAIL %s: arbint_is_power returned %d\n", desc, (int) rc);
     ++g_failures;
   } else if (out != expected_out) {
-    fprintf(stderr, "FAIL %s: expected out=%d, got out=%d\n", desc, expected_out,
-            out);
+    fprintf(stderr, "FAIL %s: expected out=%d, got out=%d\n", desc,
+            expected_out, out);
     ++g_failures;
   }
 }
@@ -354,7 +354,8 @@ int main(void) {
       Is -1024 = b^5 for some b? 1024^(1/5) = 4. (-4)^5 = -1024. Yes!  */
   test_is_power_i32(a, -1024, 1, "-1024 = (-4)^5");
 
-  /*  -4096 = 2^12. 12 = 4*3. Is -4096 = b^3? 4096^(1/3) = 16. (-16)^3 = -4096. Yes!  */
+  /*  -4096 = 2^12. 12 = 4*3. Is -4096 = b^3? 4096^(1/3) = 16. (-16)^3 = -4096.
+   * Yes!  */
   CHECK_EQ_I(arbint_set_i32(a, -4096), ARBINT_OK);
   test_is_power_value(a, 1, "-4096 = (-16)^3");
 
