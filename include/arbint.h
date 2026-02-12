@@ -17,10 +17,9 @@
 
 /*  The following features are currently unimplemented:
       - arbint_set_str, arbint_get_str
-      - arbint_moebius, arbint_totient, arbint_carmichael,
-      - arbint_legendre, arbint_jacobi, arbint_primorial,
-      - arbint_kronecker, arbint_removefactor_u32,
-      - arbint_inv_mod, arbint_inv_mod_u32  */
+      - arbint_moebius, arbint_carmichael,
+      - arbint_legendre, arbint_jacobi,
+      - arbint_kronecker, arbint_removefactor_u32  */
 
 #ifndef ARBINT_H
 #define ARBINT_H

@@ -801,3 +801,111 @@ cleanup:
   arbint_clear_all(res_g, res_x, res_y, (arbint_t *) NULL);
   return rc;
 }
+
+/*  Modular multiplicative inverse: rop = a^{-1} mod mod.
+    Returns the unique x in [0, |mod|) such that a*x == 1 (mod mod).
+    Returns EDOM if gcd(a, mod) != 1.  */
+ARBINT_API arbint_err_t arbint_inv_mod(arbint_t rop, const arbint_t a,
+                                       const arbint_t mod) {
+  arbint_t g, x, y, abs_mod;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+
+  if (rop == NULL || a == NULL || mod == NULL)
+    return ARBINT_EINVAL;
+
+  if (arbint_is_zero(mod))
+    return ARBINT_EZERO;
+
+  /*  mod == 1 or mod == -1: any integer is 0 mod 1.  */
+  if (mod[0]._sz == 1 && ARBINT_CLIMBS(mod)[0] == 1u) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+  if (mod[0]._sz == -1 && ARBINT_CLIMBS(mod)[0] == 1u) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = a[0]._ctx;
+  if (ctx == NULL)
+    ctx = mod[0]._ctx;
+
+  rc = arbint_init_all(ctx, g, x, y, abs_mod, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  /*  Compute |mod| for canonical reduction.  */
+  rc = arbint_abs(abs_mod, mod);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Compute extended GCD: a*x + mod*y = g.  */
+  rc = arbint_xgcd(g, x, y, a, abs_mod);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Inverse exists only if gcd(a, |mod|) == 1.  */
+  if (!arbint_is_one(g)) {
+    rc = ARBINT_EDOM;
+    goto cleanup;
+  }
+
+  /*  x may be negative; fdiv_r with positive divisor gives [0, |mod|).  */
+  rc = arbint_fdiv_r(rop, x, abs_mod);
+
+cleanup:
+  arbint_clear_all(g, x, y, abs_mod, (arbint_t *) NULL);
+  return rc;
+}
+
+/*  Modular multiplicative inverse with u32 modulus: rop = a^{-1} mod mod.
+    Returns EDOM if gcd(a, mod) != 1.  */
+ARBINT_API arbint_err_t arbint_inv_mod_u32(arbint_t rop, const arbint_t a,
+                                           uint32_t mod) {
+  arbint_t g, x, y, mod_arb;
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+
+  if (rop == NULL || a == NULL)
+    return ARBINT_EINVAL;
+
+  if (mod == 0u)
+    return ARBINT_EZERO;
+
+  if (mod == 1u) {
+    arbint_zero(rop);
+    return ARBINT_OK;
+  }
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = a[0]._ctx;
+
+  rc = arbint_init_all(ctx, g, x, y, mod_arb, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_set_u32(mod_arb, mod);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Compute extended GCD: a*x + mod*y = g.  */
+  rc = arbint_xgcd(g, x, y, a, mod_arb);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Inverse exists only if gcd(a, mod) == 1.  */
+  if (!arbint_is_one(g)) {
+    rc = ARBINT_EDOM;
+    goto cleanup;
+  }
+
+  rc = arbint_fdiv_r_u32(rop, x, mod);
+
+cleanup:
+  arbint_clear_all(g, x, y, mod_arb, (arbint_t *) NULL);
+  return rc;
+}

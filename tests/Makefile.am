@@ -45,6 +45,7 @@ check_PROGRAMS = \
   test_combin \
   test_is_power \
   test_xgcd \
+  test_inv_mod \
   compute_pi \
   compute_e \
   compute_bitops
