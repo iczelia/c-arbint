@@ -686,6 +686,114 @@ static void test_next_prev_prime(void) {
   arbint_ctx_clear(&ctx);
 }
 
+static void test_totient_basic(void) {
+  arbint_ctx_t ctx;
+  arbint_t n, phi, expected, p, q;
+  size_t i;
+  static const struct {
+    uint32_t n;
+    uint32_t phi;
+  } cases[] = {{1u, 1u},   {2u, 1u},   {3u, 2u},   {4u, 2u},   {5u, 4u},
+               {6u, 2u},   {8u, 4u},   {9u, 6u},   {10u, 4u},  {12u, 4u},
+               {36u, 12u}, {97u, 96u}, {561u, 320u}};
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(phi, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(p, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(q, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_totient(NULL, n), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_totient(phi, NULL), ARBINT_EINVAL);
+
+  CHECK_EQ_I(arbint_set_i32(n, 0), ARBINT_OK);
+  CHECK_EQ_I(arbint_totient(phi, n), ARBINT_EDOM);
+  CHECK_EQ_I(arbint_set_i32(n, -7), ARBINT_OK);
+  CHECK_EQ_I(arbint_totient(phi, n), ARBINT_EDOM);
+
+  for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    CHECK_EQ_I(arbint_set_u32(n, cases[i].n), ARBINT_OK);
+    CHECK_EQ_I(arbint_totient(phi, n), ARBINT_OK);
+    check_u32_value(phi, cases[i].phi);
+  }
+
+  /*  phi(p*q) = (p-1)*(q-1) for distinct primes p, q.  */
+  CHECK_EQ_I(arbint_set_u32(p, 1000003u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(q, 1000033u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul(n, p, q), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_i32(p, p, 1), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_i32(q, q, 1), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul(expected, p, q), ARBINT_OK);
+  CHECK_EQ_I(arbint_totient(phi, n), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(phi, expected), 0);
+
+  /*  Aliasing: rop == n.  */
+  CHECK_EQ_I(arbint_set_u32(n, 36u), ARBINT_OK);
+  CHECK_EQ_I(arbint_totient(n, n), ARBINT_OK);
+  check_u32_value(n, 12u);
+
+  arbint_clear(q);
+  arbint_clear(p);
+  arbint_clear(expected);
+  arbint_clear(phi);
+  arbint_clear(n);
+  arbint_ctx_clear(&ctx);
+}
+
+static void test_primorial_basic(void) {
+  arbint_ctx_t ctx;
+  arbint_t n, p, expected;
+  size_t i;
+  static const struct {
+    int32_t n;
+    uint32_t primorial;
+  } cases[] = {{0, 1u}, {1, 1u}, {2, 2u}, {3, 6u},
+               {4, 6u}, {5, 30u}, {10, 210u}, {11, 2310u}};
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(p, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_primorial(NULL, n), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_primorial(p, NULL), ARBINT_EINVAL);
+
+  CHECK_EQ_I(arbint_set_i32(n, -3), ARBINT_OK);
+  CHECK_EQ_I(arbint_primorial(p, n), ARBINT_EDOM);
+
+  for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    CHECK_EQ_I(arbint_set_i32(n, cases[i].n), ARBINT_OK);
+    CHECK_EQ_I(arbint_primorial(p, n), ARBINT_OK);
+    check_u32_value(p, cases[i].primorial);
+  }
+
+  /*  Known value path: 100# computed independently in-test.  */
+  CHECK_EQ_I(arbint_set_u32(n, 100u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(expected, 1u), ARBINT_OK);
+  {
+    static const uint32_t primes_to_100[] = {
+        2u,  3u,  5u,  7u,  11u, 13u, 17u, 19u, 23u, 29u, 31u, 37u, 41u,
+        43u, 47u, 53u, 59u, 61u, 67u, 71u, 73u, 79u, 83u, 89u, 97u};
+    size_t j;
+    for (j = 0u; j < sizeof(primes_to_100) / sizeof(primes_to_100[0]); ++j)
+      CHECK_EQ_I(arbint_mul_u32(expected, expected, primes_to_100[j]),
+                 ARBINT_OK);
+  }
+  CHECK_EQ_I(arbint_primorial(p, n), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(p, expected), 0);
+
+  /*  Aliasing: rop == n.  */
+  CHECK_EQ_I(arbint_set_u32(n, 13u), ARBINT_OK);
+  CHECK_EQ_I(arbint_primorial(n, n), ARBINT_OK);
+  check_u32_value(n, 30030u);
+
+  arbint_clear(expected);
+  arbint_clear(p);
+  arbint_clear(n);
+  arbint_ctx_clear(&ctx);
+}
+
 /*  Main.  */
 
 int main(void) {
@@ -720,6 +828,8 @@ int main(void) {
   test_is_square_large();
   test_isprime_basic();
   test_next_prev_prime();
+  test_totient_basic();
+  test_primorial_basic();
 
   ARBINT_TEST_FINISH("test_combin");
 }

@@ -424,6 +424,8 @@ ARBINT_API arbint_err_t arbint_bin_u32u32(arbint_t rop, uint32_t n,
                                           uint32_t k);
 ARBINT_API arbint_err_t arbint_fib_u32(arbint_t rop, uint32_t n);
 ARBINT_API arbint_err_t arbint_lucas_u32(arbint_t rop, uint32_t n);
+/* primorial(n) = product of primes p <= n */
+ARBINT_API arbint_err_t arbint_primorial(arbint_t rop, const arbint_t n);
 
 /* ---------------- Roots / perfect powers ---------------- */
 /*  floor(sqrt(a)) for a>=0.  */

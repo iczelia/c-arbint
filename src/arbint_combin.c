@@ -291,6 +291,150 @@ cleanup:
   return rc;
 }
 
+/*  Compute Euler's totient phi(n).
+
+    Domain: n > 0. Returns ARBINT_EDOM for n <= 0.
+    Uses a fast uint32 path and a generic big-int factorization fallback:
+      phi(n) = n * product_{p|n} (1 - 1/p).  */
+arbint_err_t arbint_totient(arbint_t rop, const arbint_t n) {
+  arbint_ctx_t * ctx;
+  arbint_err_t rc;
+  uint32_t n_u32;
+  arbint_t m, phi, p, p2, q, r, tmp;
+
+  if (rop == NULL || n == NULL)
+    return ARBINT_EINVAL;
+  if (n[0]._sz <= 0)
+    return ARBINT_EDOM;
+
+  /*  phi(1) = 1.  */
+  if (arbint_cmp_u32(n, 1u) == 0)
+    return arbint_set_u32(rop, 1u);
+
+  /*  Fast path for small inputs using pure u32 arithmetic.  */
+  if (arbint_get_u32(n, &n_u32) == ARBINT_OK) {
+    uint32_t m = n_u32;
+    uint32_t phi = n_u32;
+    uint32_t p;
+
+    if ((m & 1u) == 0u) {
+      phi -= phi / 2u;
+      do {
+        m >>= 1u;
+      } while ((m & 1u) == 0u);
+    }
+
+    for (p = 3u; p <= m / p; p += 2u) {
+      if (m % p != 0u)
+        continue;
+      phi -= phi / p;
+      do {
+        m /= p;
+      } while (m % p == 0u);
+    }
+
+    if (m > 1u)
+      phi -= phi / m;
+
+    return arbint_set_u32(rop, phi);
+  }
+
+  /*  Generic big-int fallback.  */
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init_all(ctx, m, phi, p, p2, q, r, tmp, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_set(m, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+  rc = arbint_set(phi, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Factor 2 quickly.  */
+  if ((ARBINT_CLIMBS(m)[0] & 1u) == 0u) {
+    rc = arbint_tdiv_q_u32(tmp, phi, 2u);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_sub(phi, phi, tmp);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    do {
+      rc = arbint_tdiv_q_u32(m, m, 2u);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    } while (!arbint_is_zero(m) && (ARBINT_CLIMBS(m)[0] & 1u) == 0u);
+  }
+
+  rc = arbint_set_u32(p, 3u);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  while (!arbint_is_zero(m)) {
+    rc = arbint_sqr(p2, p);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    if (arbint_cmp(p2, m) > 0)
+      break;
+
+    rc = arbint_tdiv_qr(q, r, m, p);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (!arbint_is_zero(r)) {
+      rc = arbint_nextprime(p, p);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+      continue;
+    }
+
+    /*  Distinct prime factor contribution: phi -= phi / p.  */
+    rc = arbint_tdiv_q(tmp, phi, p);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_sub(phi, phi, tmp);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    rc = arbint_set(m, q);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    /*  Remove full p-adic power.  */
+    for (;;) {
+      rc = arbint_tdiv_qr(q, r, m, p);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+      if (!arbint_is_zero(r))
+        break;
+      rc = arbint_set(m, q);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+  }
+
+  if (arbint_cmp_u32(m, 1u) > 0) {
+    rc = arbint_tdiv_q(tmp, phi, m);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_sub(phi, phi, tmp);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  rc = arbint_set(rop, phi);
+
+cleanup:
+  arbint_clear_all(m, phi, p, p2, q, r, tmp, (arbint_t *) NULL);
+
+  return rc;
+}
+
 /*  Test if a is a perfect square.
 
     Sets *out = 1 if a = k^2 for some integer k, 0 otherwise.
@@ -740,6 +884,90 @@ arbint_err_t arbint_prevprime(arbint_t rop, const arbint_t n) {
 
 cleanup:
   arbint_clear(cand);
+  return rc;
+}
+
+/*  primorial(n) = product of all primes p <= n.
+
+    Domain: n >= 0. Returns ARBINT_EDOM for n < 0.
+    For n <= 1, result is 1.  */
+arbint_err_t arbint_primorial(arbint_t rop, const arbint_t n) {
+  arbint_err_t rc;
+  uint32_t n_u32;
+  arbint_ctx_t * ctx;
+  arbint_t bound, acc, p, tmp;
+
+  if (rop == NULL || n == NULL)
+    return ARBINT_EINVAL;
+  if (n[0]._sz < 0)
+    return ARBINT_EDOM;
+
+  if (n[0]._sz == 0 || arbint_cmp_u32(n, 1u) <= 0)
+    return arbint_set_u32(rop, 1u);
+
+  /*  Fast path for u32 bounds via sieve cache.  */
+  if (arbint_get_u32(n, &n_u32) == ARBINT_OK) {
+    uint32_t k;
+
+    rc = arbint_set_u32(rop, 1u);
+    if (rc != ARBINT_OK)
+      return rc;
+
+    if (n_u32 >= 2u) {
+      rc = arbint_cache_prime_sieve_ensure(n_u32);
+      if (rc != ARBINT_OK)
+        return rc;
+    }
+
+    for (k = 2u; k <= n_u32; ++k) {
+      if (arbint_cache_prime_sieve_is_prime(k)) {
+        rc = arbint_mul_u32(rop, rop, k);
+        if (rc != ARBINT_OK)
+          return rc;
+      }
+    }
+    return ARBINT_OK;
+  }
+
+  /*  Generic big-int bound path.  */
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init_all(ctx, bound, acc, p, tmp, (arbint_t *) NULL);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_set(bound, n);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set_u32(acc, 1u);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  rc = arbint_set_u32(p, 2u);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  while (arbint_cmp(p, bound) <= 0) {
+    rc = arbint_mul(tmp, acc, p);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+    rc = arbint_set(acc, tmp);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    rc = arbint_nextprime(p, p);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  rc = arbint_set(rop, acc);
+
+cleanup:
+  arbint_clear_all(bound, acc, p, tmp, (arbint_t *) NULL);
+
   return rc;
 }
 
