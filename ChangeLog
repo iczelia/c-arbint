@@ -1,6 +1,14 @@
 2026-02-12  Kamila Szewczyk  <k@iczelia.net>
 
-	* Version 0.0.5 released.
+	* Version 0.0.4 released.
+
+	* src/arbint_str.c, src/arbint_str.h: New files. Implement string
+	conversion functions arbint_set_str and arbint_get_str. Supports
+	bases 2-62 with case-insensitive parsing for bases 2-36 and
+	case-sensitive for 37-62. Uses fast divide-and-conquer algorithm
+	for large numbers: recursively splits number at B^(n/2) and
+	converts halves independently, achieving O(n log n) complexity
+	vs O(n^2) for naive digit-by-digit conversion.
 
 	* src/arbint_gcd.c: Add arbint_xgcd (extended GCD with Bezout
 	coefficients). Computes g = gcd(a, b) and coefficients x, y such
@@ -16,6 +24,17 @@
 	maintaining numerical stability through careful quotient bounds.
 	Automatically selected based on operand size.
 
+	* src/arbint_gcd.c: Add modular inverse functions:
+	- arbint_inv_mod: compute a^(-1) mod m via extended GCD.
+	- arbint_inv_mod_u32: 32-bit modulus variant.
+
+	* src/arbint_combin.c: New file. Implement combinatorial functions:
+	arbint_fac_u32 (factorial), arbint_bin_u32u32 (binomial coefficient),
+	arbint_fib_u32 (Fibonacci), arbint_lucas_u32 (Lucas numbers).
+	Factorial uses binary splitting for O(n log^2 n) complexity.
+	Binomial uses multiplicative formula with GCD reduction.
+	Fibonacci/Lucas use fast doubling formulas for O(log n) complexity.
+
 	* src/arbint_combin.c: Add arbint_is_power (perfect power detection).
 	Determines if |a| = b^k for some integer b and k >= 2. Returns
 	the smallest such exponent k, or 0 if not a perfect power. Uses
@@ -23,6 +42,44 @@
 	dynamically cached sieve for larger prime exponents. Handles edge
 	cases: 0 and +/-1 specially, even exponents forbidden for negative
 	inputs. GMP-compatible interface.
+
+	* src/arbint_combin.c: Add number-theoretic functions:
+	- arbint_moebius: Mobius function via trial division for small
+	  factors, returns -1/0/+1 based on square-free factorization.
+	- arbint_totient: Euler's totient using product formula
+	  phi(n) = n * prod(1 - 1/p) for prime factors p.
+	- arbint_primorial: product of all primes <= n.
+	- arbint_jacobi: Jacobi symbol using quadratic reciprocity and
+	  supplementary laws for (-1/n) and (2/n).
+	- arbint_legendre: Legendre symbol as special case of Jacobi.
+	- arbint_kronecker: Kronecker symbol extending Jacobi to all
+	  integer arguments.
+
+	* src/arbint_combin.c: Add primality testing and generation:
+	- arbint_isprime: Miller-Rabin test with configurable rounds.
+	- arbint_nextprime: incremental search with wheel optimization.
+	- arbint_prevprime: decremental search for largest prime < n.
+	- arbint_removefactor_u32: extract all powers of a 32-bit factor,
+	  returning the remaining cofactor and exponent count.
+
+	* src/arbint_mul.c: Implement arbint_root() for computing integer
+	k-th roots via Newton's method. Generalizes arbint_isqrt() to
+	arbitrary positive integer exponents. Quadratic convergence with
+	initial guess from bit count. Edge cases: k=0 returns EDOM, k=1
+	returns input, k=2 delegates to arbint_isqrt. Supports aliasing.
+
+	* src/arbint_mul_generic.c, src/arbint_mul_bmi2.c: Add fast
+	truncated division by 3 (arbint_tdiv_q_3) using fixed Barrett
+	constants. Used internally by arbint_root for the Newton iteration
+	t = floor(((k-1)*x + a/x^(k-1)) / k) when k=3.
+
+	* src/arbint_base.c: Add arbint_drop_caches to explicitly release
+	global runtime caches (NTT roots of unity, prime sieve, etc.).
+	Safe to call repeatedly; useful before memory debugging.
+
+	* tests/test_str.c: New file. String conversion tests covering
+	parsing and formatting in all supported bases, edge cases (zero,
+	negative, leading zeros), large numbers, round-trip verification.
 
 	* tests/test_xgcd.c: New file. Comprehensive tests for arbint_xgcd:
 	basic Bezout identity verification, coprime pairs, non-coprime
@@ -37,33 +94,6 @@
 	exponent, prime base powers, static table boundaries (exponent 521),
 	dynamic sieve tests (exponents 523, 541, 2003, 3001).
 
-	* include/arbint.h: Add arbint_xgcd, arbint_is_power to public API.
-
-	* man/c-arbint.3.in: Document arbint_xgcd and arbint_is_power.
-	Update GCD algorithm section with Lehmer algorithm description.
-
-2026-02-11  Kamila Szewczyk  <k@iczelia.net>
-
-	* Version 0.0.4 released.
-
-	* src/arbint_mul.c: Implement arbint_root() for computing integer
-	k-th roots via Newton's method. Generalizes arbint_isqrt() to
-	arbitrary positive integer exponents. Quadratic convergence with
-	initial guess from bit count. Edge cases: k=0 returns EDOM, k=1
-	returns input, k=2 delegates to arbint_isqrt. Supports aliasing.
-
-	* src/arbint_mul_generic.c, src/arbint_mul_bmi2.c: Add fast
-	truncated division by 3 (arbint_tdiv_q_3) using fixed Barrett
-	constants. Used internally by arbint_root for the Newton iteration
-	t = floor(((k-1)*x + a/x^(k-1)) / k) when k=3.
-
-	* src/arbint_combin.c: New file. Implement combinatorial functions:
-	arbint_fac_u32 (factorial), arbint_bin_u32u32 (binomial coefficient),
-	arbint_fib_u32 (Fibonacci), arbint_lucas_u32 (Lucas numbers).
-	Factorial uses binary splitting for O(n log^2 n) complexity.
-	Binomial uses multiplicative formula with GCD reduction.
-	Fibonacci/Lucas use fast doubling formulas for O(log n) complexity.
-
 	* tests/test_root.c: New file. Comprehensive tests for arbint_root:
 	edge cases, perfect powers, non-perfect powers (floor behavior),
 	k=2 delegation cross-verification, aliasing, large multi-limb
@@ -73,11 +103,33 @@
 	* tests/test_combin.c: New file. Tests for combinatorial functions
 	covering known values, edge cases, large inputs, and identities.
 
-	* include/arbint.h: Add arbint_root, arbint_fac_u32, arbint_bin_u32u32,
-	arbint_fib_u32, arbint_lucas_u32 to public API.
+	* tests/test_numtheory.c: New file. Number-theoretic function
+	tests covering Jacobi/Legendre/Kronecker symbols, Mobius function,
+	Euler totient, primality testing, and prime generation.
 
-	* man/c-arbint.3.in: Document arbint_root, factorial, binomial,
-	Fibonacci, and Lucas functions.
+	* tests/test_inv_mod.c: New file. Modular inverse tests covering
+	coprime pairs, verification via a*inv = 1 (mod m), edge cases.
+
+	* tests/test_removefactor.c: New file. Factor removal tests
+	covering powers of small primes, composite factors, edge cases.
+
+	* tests/test_framework.h: Add execution timing to test output.
+	Tests now report elapsed time in seconds (e.g., "passed (0.154s)").
+
+	* include/arbint.h: Add arbint_set_str, arbint_get_str, arbint_xgcd,
+	arbint_is_power, arbint_root, arbint_fac_u32, arbint_bin_u32u32,
+	arbint_fib_u32, arbint_lucas_u32, arbint_moebius, arbint_totient,
+	arbint_primorial, arbint_jacobi, arbint_legendre, arbint_kronecker,
+	arbint_isprime, arbint_nextprime, arbint_prevprime, arbint_inv_mod,
+	arbint_inv_mod_u32, arbint_removefactor_u32, arbint_drop_caches
+	to public API. Remove "unimplemented" comment block as all listed
+	functions are now implemented.
+
+	* man/c-arbint.3.in: Document all new API functions including
+	string conversion, extended GCD, combinatorial functions, roots,
+	perfect power detection, number-theoretic functions, primality
+	testing, modular inverse, and factor removal. Update GCD algorithm
+	section with Lehmer algorithm description.
 
 2026-02-11  Kamila Szewczyk  <k@iczelia.net>
 

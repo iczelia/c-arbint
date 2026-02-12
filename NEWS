@@ -1,17 +1,45 @@
-c-arbint 0.0.5 (2026-02-12)
+c-arbint 0.0.4 (2026-02-12)
 ===========================
 
-Fifth development release. Adds extended GCD with Bezout coefficients,
-perfect power detection, and Lehmer GCD algorithm for large operands.
+Fourth development release. Major feature additions: string conversion,
+extended GCD, number-theoretic functions, primality testing, modular
+inverse, combinatorial functions, k-th roots, perfect power detection,
+and Lehmer GCD algorithm for large operands.
 
 New Features
 ------------
+- String conversion (base 2-62):
+  * arbint_set_str: parse integer from string with optional sign
+  * arbint_get_str: format integer to allocated string
+  * Supports bases 2-36 (case-insensitive) and 37-62 (case-sensitive)
+  * Fast divide-and-conquer algorithm for large numbers
+
 - Extended GCD (arbint_xgcd):
   * Compute g = gcd(a, b) and Bezout coefficients x, y
   * Satisfies identity: a*x + b*y = g
   * Any output (g, x, y) may be NULL if not needed
   * GMP-compatible: x alone gives modular inverse for coprime inputs
   * Full aliasing support with "last write wins" semantics
+
+- Number-theoretic functions:
+  * arbint_moebius: Mobius function mu(n)
+  * arbint_totient: Euler's totient phi(n)
+  * arbint_primorial: product of primes <= n
+  * arbint_jacobi: Jacobi symbol (a/n)
+  * arbint_legendre: Legendre symbol (a/p) for prime p
+  * arbint_kronecker: Kronecker symbol (generalized Jacobi)
+
+- Primality testing and prime generation:
+  * arbint_isprime: Miller-Rabin probabilistic primality test
+  * arbint_nextprime: find smallest prime > n
+  * arbint_prevprime: find largest prime < n
+
+- Modular arithmetic:
+  * arbint_inv_mod: modular multiplicative inverse via extended GCD
+  * arbint_inv_mod_u32: 32-bit modulus variant
+
+- Factor removal:
+  * arbint_removefactor_u32: extract all powers of a 32-bit factor
 
 - Perfect power detection (arbint_is_power):
   * Test if |a| = b^k for some integer b and k >= 2
@@ -21,42 +49,6 @@ New Features
   * Handles negative inputs (only odd exponents allowed)
   * GMP-compatible interface
 
-Performance Optimizations
--------------------------
-- Lehmer GCD algorithm for large operands (>= 32 limbs):
-  * Extracts top bits into machine words for fast quotient computation
-  * Reduces multi-limb GCD to sequence of single-limb matrix operations
-  * Asymptotically faster than binary GCD for very large operands
-  * Automatically selected based on operand size
-
-Testing
--------
-- New test_xgcd binary with comprehensive coverage:
-  * Bezout identity verification for all test cases
-  * Coprime and non-coprime pairs
-  * Zero and negative inputs
-  * Complex aliasing scenarios (g==a, x==b, all outputs same)
-  * Fibonacci pairs (worst case for Euclidean algorithm)
-  * Large primes and highly composite numbers
-  * Stochastic verification
-
-- New test_is_power binary with comprehensive coverage:
-  * Perfect powers from squares through 7th powers
-  * Negative powers (odd exponents only)
-  * Composite exponent detection (e.g., 64 = 2^6 returns 6, not 2)
-  * Near-miss values (off by 1 from perfect powers)
-  * Static table boundary tests (exponent 521)
-  * Dynamic sieve tests (exponents 523, 541, 2003, 3001)
-
-
-c-arbint 0.0.4 (2026-02-11)
-===========================
-
-Fourth development release. Adds integer k-th root computation and
-combinatorial functions (factorial, binomial, Fibonacci, Lucas).
-
-New Features
-------------
 - Integer k-th root (arbint_root):
   * Compute floor(a^(1/k)) for arbitrary positive k
   * Newton's method with quadratic convergence
@@ -69,8 +61,35 @@ New Features
   * arbint_fib_u32: Fibonacci via fast doubling O(log n)
   * arbint_lucas_u32: Lucas numbers via fast doubling O(log n)
 
-- Internal optimization:
-  * Fast division by 3 using Barrett constants (for root iteration)
+- Cache management:
+  * arbint_drop_caches: explicitly release global runtime caches
+
+Performance Optimizations
+-------------------------
+- Lehmer GCD algorithm for large operands (>= 32 limbs):
+  * Extracts top bits into machine words for fast quotient computation
+  * Reduces multi-limb GCD to sequence of single-limb matrix operations
+  * Asymptotically faster than binary GCD for very large operands
+  * Automatically selected based on operand size
+
+- Fast division by 3 using Barrett constants (for root iteration)
+
+Testing
+-------
+- New test_str binary for string conversion
+- New test_xgcd binary for extended GCD with Bezout coefficients
+- New test_is_power binary for perfect power detection
+- New test_combin binary for combinatorial functions
+- New test_root binary for k-th root computation
+- New test_numtheory binary for number-theoretic functions
+- New test_inv_mod binary for modular inverse
+- New test_removefactor binary for factor removal
+- Test timing output: all tests now report execution time
+
+Documentation
+-------------
+- Man page updated with all new API functions
+- ChangeLog updated with detailed implementation notes
 
 
 c-arbint 0.0.3 (2026-02-11)

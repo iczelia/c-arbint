@@ -207,6 +207,61 @@ Set
 from another integer or a 32-bit scalar.
 .RE
 .\" -------------------------------------------------------------------------
+.SS String Conversion
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_set_str(arbint_t " rop ", const char *" s ", int " base ")"
+.RS 4
+.PP
+Parse an integer from string
+.I s
+in the given
+.IR base .
+The string may have an optional leading '+' or '-' sign, followed by
+digits appropriate for the base.
+Leading whitespace is not skipped.
+.PP
+.I base
+must be in the range 2-62, or 0 for auto-detection:
+.RS 4
+.IP \(bu 2
+Base 0: "0x" or "0X" prefix indicates hexadecimal, "0b" or "0B" indicates
+binary, "0" prefix indicates octal, otherwise decimal.
+.IP \(bu 2
+Bases 2-36: digits are '0'-'9' and 'a'-'z' (or 'A'-'Z'), case-insensitive.
+.IP \(bu 2
+Bases 37-62: digits are '0'-'9', 'A'-'Z' (values 10-35), then 'a'-'z'
+(values 36-61), case-sensitive.
+.RE
+.PP
+Returns
+.B ARBINT_EINVAL
+if
+.I base
+is out of range, the string is empty, or contains invalid characters
+for the specified base.
+.RE
+.PP
+.BI "arbint_err_t arbint_get_str(const arbint_t " op ", char **" out_str ", int " base ")"
+.RS 4
+.PP
+Format
+.I op
+as a string in the given
+.IR base .
+The result is allocated using the source object's context allocator
+and stored in
+.IR *out_str .
+The caller must free it with the same allocator.
+.PP
+.I base
+must be in the range 2-62, or negative for uppercase output (bases 2-36 only).
+For example, base -16 produces "1A2B" instead of "1a2b".
+.PP
+Negative numbers are formatted with a leading '-' sign.
+Zero is formatted as "0".
+.RE
+.\" -------------------------------------------------------------------------
 .SS Extraction
 .\" -------------------------------------------------------------------------
 .PP
@@ -511,6 +566,232 @@ Compute the
 .IR n "-th Lucas number L(" n ")."
 L(0) = 2, L(1) = 1.
 Uses O(log n) multiplications.
+.RE
+.PP
+.BI "arbint_err_t arbint_primorial(arbint_t " rop ", const arbint_t " n ")"
+.RS 4
+.PP
+Compute the primorial of
+.IR n :
+the product of all prime numbers less than or equal to
+.IR n .
+For example, primorial(10) = 2 * 3 * 5 * 7 = 210.
+Returns 1 for
+.I n
+< 2.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Number-Theoretic Functions
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_moebius(int *" out ", const arbint_t " n ")"
+.RS 4
+.PP
+Compute the Mobius function mu(n):
+.RS 4
+.IP \(bu 2
+mu(1) = 1
+.IP \(bu 2
+mu(n) = 0 if n has a squared prime factor
+.IP \(bu 2
+mu(n) = (-1)^k if n is a product of k distinct primes
+.RE
+.PP
+Sets
+.I *out
+to -1, 0, or 1.
+Returns
+.B ARBINT_EDOM
+if
+.I n
+<= 0.
+.RE
+.PP
+.BI "arbint_err_t arbint_totient(arbint_t " rop ", const arbint_t " n ")"
+.RS 4
+.PP
+Compute Euler's totient function phi(n): the count of integers
+in [1, n] that are coprime to
+.IR n .
+Uses the product formula phi(n) = n * prod(1 - 1/p) over distinct prime factors p.
+.I rop
+may alias
+.IR n .
+Returns
+.B ARBINT_EDOM
+if
+.I n
+<= 0.
+.RE
+.PP
+.BI "arbint_err_t arbint_jacobi(const arbint_t " a ", const arbint_t " n ", int *" out ")"
+.RS 4
+.PP
+Compute the Jacobi symbol (a/n).
+.I n
+must be a positive odd integer.
+Sets
+.I *out
+to -1, 0, or 1.
+Uses quadratic reciprocity and supplementary laws for efficient computation.
+.RE
+.PP
+.BI "arbint_err_t arbint_legendre(const arbint_t " a ", const arbint_t " p ", int *" out ")"
+.RS 4
+.PP
+Compute the Legendre symbol (a/p) where
+.I p
+is an odd prime.
+Equivalent to the Jacobi symbol when
+.I p
+is prime.
+Sets
+.I *out
+to -1, 0, or 1.
+.RE
+.PP
+.BI "arbint_err_t arbint_kronecker(const arbint_t " a ", const arbint_t " n ", int *" out ")"
+.RS 4
+.PP
+Compute the Kronecker symbol (a/n), which generalizes the Jacobi symbol
+to all integer arguments including even and negative
+.IR n .
+Sets
+.I *out
+to -1, 0, or 1.
+.RE
+.\" -------------------------------------------------------------------------
+.SS Primality Testing
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_isprime(const arbint_t " n ", int " reps ", int *" out ")"
+.RS 4
+.PP
+Test whether
+.I n
+is prime using the Miller-Rabin probabilistic primality test.
+The
+.I reps
+parameter specifies the number of test rounds; more rounds reduce the
+probability of false positives.
+Recommended values: 15-25 for general use, 40+ for cryptographic applications.
+.PP
+Sets
+.I *out
+to:
+.RS 4
+.IP \(bu 2
+2 if
+.I n
+is definitely prime (small values checked against a table)
+.IP \(bu 2
+1 if
+.I n
+is probably prime (passed all Miller-Rabin rounds)
+.IP \(bu 2
+0 if
+.I n
+is definitely composite
+.RE
+.PP
+Numbers <= 1 are not considered prime.
+.RE
+.PP
+.BI "arbint_err_t arbint_nextprime(arbint_t " rop ", const arbint_t " n ")"
+.RS 4
+.PP
+Find the smallest prime number greater than
+.IR n .
+.I rop
+may alias
+.IR n .
+Uses trial division for small factors and Miller-Rabin for primality testing.
+.RE
+.PP
+.BI "arbint_err_t arbint_prevprime(arbint_t " rop ", const arbint_t " n ")"
+.RS 4
+.PP
+Find the largest prime number less than
+.IR n .
+Returns
+.B ARBINT_EDOM
+if
+.I n
+<= 2 (no prime exists below 2).
+.I rop
+may alias
+.IR n .
+.RE
+.\" -------------------------------------------------------------------------
+.SS Modular Inverse
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_inv_mod(arbint_t " rop ", const arbint_t " a ", const arbint_t " m ")"
+.RS 4
+.PP
+Compute the modular multiplicative inverse:
+.IR rop " = " a "^(-1) mod " m .
+The result satisfies
+.IR a " * " rop " = 1 (mod " m ")."
+.PP
+Returns
+.B ARBINT_EDOM
+if gcd(a, m) != 1 (inverse does not exist).
+Returns
+.B ARBINT_EINVAL
+if
+.I m
+<= 0.
+.I rop
+may alias
+.I a
+or
+.IR m .
+.RE
+.PP
+.BI "arbint_err_t arbint_inv_mod_u32(arbint_t " rop ", const arbint_t " a ", uint32_t " m ")"
+.RS 4
+.PP
+32-bit modulus variant of
+.BR arbint_inv_mod ().
+.I rop
+may alias
+.IR a .
+.RE
+.\" -------------------------------------------------------------------------
+.SS Factor Removal
+.\" -------------------------------------------------------------------------
+.PP
+.BI "arbint_err_t arbint_removefactor_u32(arbint_t " rest ", uint32_t *" exp ", const arbint_t " n ", uint32_t " f ")"
+.RS 4
+.PP
+Remove all powers of factor
+.I f
+from
+.IR n .
+Sets
+.I rest
+to the remaining cofactor and
+.I *exp
+to the number of times
+.I f
+divides
+.IR n .
+.PP
+For example, removefactor(72, 2) sets rest = 9 and *exp = 3,
+since 72 = 2^3 * 9.
+.PP
+Returns
+.B ARBINT_EZERO
+if
+.I f
+is 0 or 1.
+.I rest
+may alias
+.IR n .
+If
+.I exp
+is NULL, the exponent is not returned.
 .RE
 .\" -------------------------------------------------------------------------
 .SS Perfect Power Tests
