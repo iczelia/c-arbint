@@ -1038,8 +1038,8 @@ jobs:
           if-no-files-found: warn
 
   # Exotic architectures from debian-ports that require special QEMU setup.
-  # These use urbanogilson/debian-debootstrap-ports images which are single-arch
-  # (not multi-arch manifests) and require manual binfmt_misc registration.
+  # These use our own pre-built images from ghcr.io (built by build-docker-images.yml).
+  # The images are single-arch and contain build-essential pre-installed.
   build-debian-ports:
     runs-on: ubuntu-24.04
     needs: package
@@ -1049,22 +1049,16 @@ jobs:
         include:
           - arch: ppc64
             qemu_arch: ppc64
-            image: urbanogilson/debian-debootstrap-ports:ppc64-trixie-sid
           - arch: powerpc
             qemu_arch: ppc
-            image: urbanogilson/debian-debootstrap-ports:powerpc-trixie-sid
           - arch: hppa
             qemu_arch: hppa
-            image: urbanogilson/debian-debootstrap-ports:hppa-trixie-sid
           - arch: m68k
             qemu_arch: m68k
-            image: urbanogilson/debian-debootstrap-ports:m68k-trixie-sid
           - arch: sh4
             qemu_arch: sh4
-            image: urbanogilson/debian-debootstrap-ports:sh4-trixie-sid
           - arch: alpha
             qemu_arch: alpha
-            image: urbanogilson/debian-debootstrap-ports:alpha-trixie-sid
     name: build-debian-ports (${{ matrix.arch }})
 
     steps:
@@ -1091,8 +1085,11 @@ jobs:
         run: |
           mkdir -p artifacts
 
-          # Pull the image first (no --platform flag for debootstrap images)
-          docker pull "${{ matrix.image }}"
+          # Use our own pre-built image from ghcr.io
+          image="ghcr.io/${{ github.repository_owner }}/c-arbint-build-${{ matrix.arch }}:latest"
+
+          # Pull the image (no --platform flag for single-arch images)
+          docker pull "$image"
 
           # Run with QEMU user-mode emulation via binfmt_misc
           # The -v for qemu-user-static makes QEMU available inside the container
@@ -1102,13 +1099,9 @@ jobs:
             -v "$PWD/dist:/work/dist" \
             -v "$PWD/artifacts:/work/artifacts" \
             -w /work \
-            "${{ matrix.image }}" \
+            "$image" \
             sh -eu -c '
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get -o Acquire::Retries=5 update
-              apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-                build-essential pkg-config tar xz-utils groff
-
+              # Build tools are pre-installed in our images
               tarball="$(ls dist/*.tar.xz | head -n1)"
               srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
               tar -xf "$tarball" -C dist

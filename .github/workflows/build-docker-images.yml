@@ -1,0 +1,129 @@
+name: Build Docker Images
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Rebuild weekly (Sunday 00:00 UTC) to pick up security updates
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/c-arbint-build
+
+jobs:
+  build-debian-ports-images:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: ppc64
+            qemu_arch: ppc64
+            debian_arch: ppc64
+          - arch: powerpc
+            qemu_arch: ppc
+            debian_arch: powerpc
+          - arch: hppa
+            qemu_arch: hppa
+            debian_arch: hppa
+          - arch: m68k
+            qemu_arch: m68k
+            debian_arch: m68k
+          - arch: sh4
+            qemu_arch: sh4
+            debian_arch: sh4
+          - arch: alpha
+            qemu_arch: alpha
+            debian_arch: alpha
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap qemu-user-static binfmt-support debian-ports-archive-keyring
+
+          # Enable binfmt_misc for all architectures
+          sudo update-binfmts --enable
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create rootfs with debootstrap
+        run: |
+          sudo mkdir -p rootfs
+
+          # debootstrap for debian-ports architectures
+          sudo debootstrap \
+            --arch=${{ matrix.debian_arch }} \
+            --keyring=/usr/share/keyrings/debian-ports-archive-keyring.gpg \
+            --include=build-essential,pkg-config,tar,xz-utils,groff,ca-certificates \
+            --variant=minbase \
+            --foreign \
+            sid \
+            rootfs \
+            http://deb.debian.org/debian-ports
+
+          # Copy qemu static binary for second stage
+          sudo cp /usr/bin/qemu-${{ matrix.qemu_arch }}-static rootfs/usr/bin/
+
+          # Run second stage of debootstrap
+          sudo chroot rootfs /debootstrap/debootstrap --second-stage
+
+          # Clean up apt cache to reduce image size
+          sudo chroot rootfs apt-get clean
+          sudo rm -rf rootfs/var/lib/apt/lists/*
+
+      - name: Import rootfs as Docker image
+        run: |
+          # Create tarball of rootfs
+          sudo tar -C rootfs -cf rootfs.tar .
+
+          # Import as Docker image
+          docker import rootfs.tar ${{ env.IMAGE_PREFIX }}-${{ matrix.arch }}:latest
+
+          # Tag with date for versioning
+          docker tag ${{ env.IMAGE_PREFIX }}-${{ matrix.arch }}:latest \
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.arch }}:$(date +%Y%m%d)
+
+      - name: Test the image
+        run: |
+          # Quick smoke test - verify the architecture and that gcc exists
+          docker run --rm ${{ env.IMAGE_PREFIX }}-${{ matrix.arch }}:latest \
+            sh -c 'uname -m && gcc --version | head -1'
+
+      - name: Push to GitHub Container Registry
+        run: |
+          docker push ${{ env.IMAGE_PREFIX }}-${{ matrix.arch }}:latest
+          docker push ${{ env.IMAGE_PREFIX }}-${{ matrix.arch }}:$(date +%Y%m%d)
+
+  update-ci-workflow:
+    runs-on: ubuntu-24.04
+    needs: build-debian-ports-images
+    if: success()
+
+    steps:
+      - name: Summary
+        run: |
+          echo "## Docker Images Built" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following images are now available:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.IMAGE_PREFIX }}-ppc64:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.IMAGE_PREFIX }}-powerpc:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.IMAGE_PREFIX }}-hppa:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.IMAGE_PREFIX }}-m68k:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.IMAGE_PREFIX }}-sh4:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.IMAGE_PREFIX }}-alpha:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Update \`.github/workflows/ci.yml\` to use these images." >> $GITHUB_STEP_SUMMARY
