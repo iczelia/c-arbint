@@ -1019,7 +1019,7 @@ jobs:
               srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
               tar -xf "$tarball" -C dist
               cd "dist/$srcdir"
-              ./configure --enable-lto=no
+              ./configure --enable-shared --disable-static --enable-lto=no
               jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
               make -j"$jobs"
               make check
@@ -1106,7 +1106,7 @@ jobs:
               srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
               tar -xf "$tarball" -C dist
               cd "dist/$srcdir"
-              ./configure --enable-lto=no
+              ./configure --enable-shared --disable-static --enable-lto=no
               jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
               make -j"$jobs"
               make check
