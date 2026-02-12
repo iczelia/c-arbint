@@ -603,10 +603,7 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
   arbint_err_t rc;
   arbint_ctx_t * ctx;
   int a_neg, b_neg;
-  int init_r0 = 0, init_r1 = 0, init_s0 = 0, init_s1 = 0;
-  int init_t0 = 0, init_t1 = 0, init_q = 0, init_tmp = 0;
-  int init_pair0 = 0, init_pair1 = 0, init_prod0 = 0, init_prod1 = 0;
-  int init_res_g = 0, init_res_x = 0, init_res_y = 0;
+  int init_work = 0;
 
   if (g == NULL || x == NULL || y == NULL || a == NULL || b == NULL)
     return ARBINT_EINVAL;
@@ -634,20 +631,9 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
   }
 
   /*  Allocate result temporaries for aliasing safety.  */
-  rc = arbint_init(res_g, ctx);
+  rc = arbint_init_all(ctx, res_g, res_x, res_y, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  init_res_g = 1;
-
-  rc = arbint_init(res_x, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_res_x = 1;
-
-  rc = arbint_init(res_y, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_res_y = 1;
 
   /*  Handle gcd(0, b) = |b| with x=0, y=sign(b).  */
   if (a[0]._sz == 0) {
@@ -674,65 +660,11 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
   }
 
   /*  Initialize working temporaries.  */
-  rc = arbint_init(r0, ctx);
+  rc = arbint_init_all(ctx, r0, r1, s0, s1, t0, t1, q, tmp, pair0, pair1, prod0,
+                       prod1, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     goto cleanup;
-  init_r0 = 1;
-
-  rc = arbint_init(r1, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_r1 = 1;
-
-  rc = arbint_init(s0, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_s0 = 1;
-
-  rc = arbint_init(s1, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_s1 = 1;
-
-  rc = arbint_init(t0, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_t0 = 1;
-
-  rc = arbint_init(t1, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_t1 = 1;
-
-  rc = arbint_init(q, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_q = 1;
-
-  rc = arbint_init(tmp, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_tmp = 1;
-
-  rc = arbint_init(pair0, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_pair0 = 1;
-
-  rc = arbint_init(pair1, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_pair1 = 1;
-
-  rc = arbint_init(prod0, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_prod0 = 1;
-
-  rc = arbint_init(prod1, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_prod1 = 1;
+  init_work = 1;
 
   /*  Set initial values: r0 = |a|, r1 = |b|, s0 = 1, s1 = 0, t0 = 0,
       t1 = 1.  */
@@ -865,35 +797,9 @@ copy_results:
   /*  Fall through to cleanup.  */
 
 cleanup:
-  if (init_prod1)
-    arbint_clear(prod1);
-  if (init_prod0)
-    arbint_clear(prod0);
-  if (init_pair1)
-    arbint_clear(pair1);
-  if (init_pair0)
-    arbint_clear(pair0);
-  if (init_tmp)
-    arbint_clear(tmp);
-  if (init_q)
-    arbint_clear(q);
-  if (init_t1)
-    arbint_clear(t1);
-  if (init_t0)
-    arbint_clear(t0);
-  if (init_s1)
-    arbint_clear(s1);
-  if (init_s0)
-    arbint_clear(s0);
-  if (init_r1)
-    arbint_clear(r1);
-  if (init_r0)
-    arbint_clear(r0);
-  if (init_res_y)
-    arbint_clear(res_y);
-  if (init_res_x)
-    arbint_clear(res_x);
-  if (init_res_g)
-    arbint_clear(res_g);
+  if (init_work)
+    arbint_clear_all(r0, r1, s0, s1, t0, t1, q, tmp, pair0, pair1, prod0, prod1,
+                     (arbint_t *) NULL);
+  arbint_clear_all(res_g, res_x, res_y, (arbint_t *) NULL);
   return rc;
 }
