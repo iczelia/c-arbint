@@ -18,11 +18,67 @@
 #include "arbint_gcd.h"
 
 #include "arbint_addsub.h"
+#include "arbint_cpu.h"
 #include "arbint_div.h"
 #include "arbint_shift.h"
 #include "config.h"
 
 #include <string.h>
+
+/*  Lehmer GCD dispatch function pointer type.
+
+    Lehmer GCD has platform-specific implementations that use different
+    multiply primitives. The dispatch selects the optimal implementation
+    based on CPU features detected at runtime.  */
+typedef arbint_err_t (*arbint_gcd_lehmer_fn_t)(arbint_t g,
+                                               const arbint_limb_t * ap,
+                                               size_t an,
+                                               const arbint_limb_t * bp,
+                                               size_t bn,
+                                               const arbint_alloc_t * alloc);
+
+/*  Select optimal Lehmer GCD implementation based on CPU features.
+
+    Three-tier dispatch pattern (same as multiplication):
+    1. HAS_BMI2_ALWAYS: library compiled with -mbmi2, always use BMI2
+    2. HAS_BMI2: BMI2 code compiled separately, runtime CPUID check
+    3. Neither: only generic implementation available
+
+    BMI2 provides _mulx_u64 for fast 64x64->128 multiply (~3x faster
+    than half-limb decomposition used in generic path).  */
+static arbint_gcd_lehmer_fn_t arbint_select_gcd_lehmer(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_gcd_lehmer_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_gcd_lehmer_bmi2
+             : arbint_gcd_lehmer_generic;
+#else
+  return arbint_gcd_lehmer_generic;
+#endif
+}
+
+/*  Cached Lehmer GCD function pointer (lazily initialized).
+
+    First call to arbint_gcd_lehmer_dispatch triggers CPU feature
+    detection and caches the result. Subsequent calls use the cached
+    pointer directly (no synchronization needed for pointer reads).  */
+static arbint_gcd_lehmer_fn_t g_gcd_lehmer = NULL;
+
+/*  Dispatch wrapper for Lehmer GCD.
+
+    Called from arbint_gcd when min(an, bn) >= ARBINT_LEHMER_THRESHOLD.
+    Performs lazy initialization of the function pointer on first call.  */
+static arbint_err_t arbint_gcd_lehmer_dispatch(arbint_t g,
+                                               const arbint_limb_t * ap,
+                                               size_t an,
+                                               const arbint_limb_t * bp,
+                                               size_t bn,
+                                               const arbint_alloc_t * alloc) {
+  if (g_gcd_lehmer == NULL)
+    g_gcd_lehmer = arbint_select_gcd_lehmer();
+  return g_gcd_lehmer(g, ap, an, bp, bn, alloc);
+}
 
 /*  Allocator selection helpers.  */
 
@@ -46,7 +102,19 @@ static const arbint_alloc_t * arbint_gcd_pick_alloc(const arbint_t a,
   return arbint_gcd_get_alloc_from(c);
 }
 
-/*  Binary GCD (Stein's algorithm) for large operands.
+/*  Binary GCD (Stein's algorithm) for medium-size operands.
+
+    Used when ARBINT_GCD_EUCLID_THRESHOLD < min_n < ARBINT_LEHMER_THRESHOLD
+    (i.e., 5-31 limbs on 64-bit). For this size range, Stein's algorithm
+    outperforms Euclidean GCD (avoids division) but doesn't justify
+    Lehmer's matrix overhead.
+
+    Algorithm: repeatedly subtract smaller from larger, stripping
+    trailing zeros after each subtraction. Exploits the facts that:
+    1. gcd(2a, 2b) = 2 * gcd(a, b)
+    2. gcd(2a, b) = gcd(a, b) when b is odd
+    3. gcd(a, b) = gcd(a-b, b) when a > b and both odd
+
     Uses internal limb-level operations for performance.
     Single combined allocation for u and v workspace.  */
 static arbint_err_t arbint_gcd_binary(arbint_t g, const arbint_limb_t * ap,
@@ -201,7 +269,15 @@ cleanup:
 }
 
 /*  arbint_gcd: compute greatest common divisor.
-    Result is always non-negative.  */
+
+    Algorithm selection based on operand size (min_n = min limb count):
+    - min_n == 1: single-limb fast path using arbint_gcd_limb
+    - min_n <= 4: Euclidean algorithm with tdiv_r (simple, low overhead)
+    - min_n < 32: Binary GCD / Stein's algorithm (avoids division)
+    - min_n >= 32: Lehmer GCD (amortizes matrix overhead with O(n*M(n)))
+
+    Handles aliasing: if g aliases a or b, makes a copy before computing.
+    Result is always non-negative: gcd(-12, 8) = gcd(12, -8) = 4.  */
 ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
                                    const arbint_t b) {
   size_t an;
@@ -250,7 +326,7 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
   if (min_n <= ARBINT_GCD_EUCLID_THRESHOLD)
     return arbint_gcd_euclid(g, a, b);
 
-  /*  Large operand path: binary GCD with internal limb ops.  */
+  /*  Get allocator for large operand paths.  */
   alloc = arbint_gcd_pick_alloc(g, a, b);
   if (alloc == NULL)
     return ARBINT_EINVAL;
@@ -273,7 +349,12 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
     bp = b_copy;
   }
 
-  rc = arbint_gcd_binary(g, ap, an, bp, bn, alloc);
+  /*  Very large operand path: use Lehmer GCD for O(n * M(n)) complexity.  */
+  if (min_n >= ARBINT_LEHMER_THRESHOLD)
+    rc = arbint_gcd_lehmer_dispatch(g, ap, an, bp, bn, alloc);
+  else
+    /*  Medium operand path: binary GCD with internal limb ops.  */
+    rc = arbint_gcd_binary(g, ap, an, bp, bn, alloc);
 
   arbint_free_limbs(alloc, b_copy);
   arbint_free_limbs(alloc, a_copy);

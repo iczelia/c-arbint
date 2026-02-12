@@ -24,7 +24,8 @@ ARBINT_CORE_SOURCES = \
   arbint_iex.c arbint_cpu.c arbint_mul.c \
   arbint_mul_generic.c arbint_div_generic.c arbint_bitops.c \
   arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c \
-  arbint_ntt.c arbint_ntt_generic.c arbint_gcd.c arbint_combin.c
+  arbint_ntt.c arbint_ntt_generic.c arbint_gcd.c arbint_gcd_lehmer_generic.c \
+  arbint_combin.c
 
 noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
@@ -41,7 +42,7 @@ EXTRA_DIST = \
   arbint_random_urandom.c arbint_random_winapi.c arbint_random_arc4.c \
   arbint_hash_shani.c arbint_hash_sha2_neon.c \
   arbint_hash_crc32c_sse42.c arbint_hash_crc32c_neon.c \
-  arbint_ntt_avx2.c arbint_ntt_bmi2.c \
+  arbint_ntt_avx2.c arbint_ntt_bmi2.c arbint_gcd_lehmer_bmi2.c \
   platform-objects.txt Makefile.platform-rules.am
 
 # -----------------------------------------------------------------------

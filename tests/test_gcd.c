@@ -1259,6 +1259,338 @@ static void test_gcd_perfect_powers(void) {
   arbint_ctx_clear(&ctx);
 }
 
+/*  Lehmer GCD threshold boundary tests.
+    ARBINT_LEHMER_THRESHOLD is 32 limbs; test at 31, 32, 33.  */
+static void test_gcd_lehmer_threshold(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g, r;
+  int nlimbs;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /*  Test around Lehmer threshold (32 limbs).  */
+  for (nlimbs = 31; nlimbs <= 35; ++nlimbs) {
+    /*  a = 2^(LIMB_BITS * nlimbs) - 1 (exactly nlimbs limbs, all 1-bits).  */
+    CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
+    CHECK_EQ_I(arbint_shl(a, a, (unsigned) (ARBINT_LIMB_BITS * nlimbs)),
+               ARBINT_OK);
+    CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK);
+
+    /*  b = a - 2.  */
+    CHECK_EQ_I(arbint_sub_u32(b, a, 2u), ARBINT_OK);
+
+    CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+
+    /*  Verify gcd divides both.  */
+    CHECK_EQ_I(arbint_tdiv_r(r, a, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+    CHECK_EQ_I(arbint_tdiv_r(r, b, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+
+    /*  Result must be positive.  */
+    CHECK(g[0]._sz > 0);
+  }
+
+  arbint_clear(r);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Large Fibonacci pairs test for Lehmer GCD.
+    F_n and F_{n-1} are always coprime, and produce the maximum number
+    of quotients (all 1s) -- worst case for Lehmer simulation.  */
+static void test_gcd_lehmer_fibonacci(void) {
+  arbint_ctx_t ctx;
+  arbint_t f_prev, f_curr, f_next, g;
+  int i;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(f_prev, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(f_curr, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(f_next, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+
+  /*  F_0 = 0, F_1 = 1.  */
+  CHECK_EQ_I(arbint_set_u32(f_prev, 0u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(f_curr, 1u), ARBINT_OK);
+
+  /*  Compute up to F_500 (multi-limb, well above Lehmer threshold).
+      F_500 has about 104 decimal digits, roughly 346 bits (6+ limbs on 64-bit,
+      but we want >32 limbs so go higher).  */
+  for (i = 2; i <= 3000; ++i) {
+    CHECK_EQ_I(arbint_add(f_next, f_curr, f_prev), ARBINT_OK);
+    CHECK_EQ_I(arbint_set(f_prev, f_curr), ARBINT_OK);
+    CHECK_EQ_I(arbint_set(f_curr, f_next), ARBINT_OK);
+  }
+
+  /*  gcd(F_3000, F_2999) = 1 (consecutive Fibonacci are coprime).  */
+  CHECK_EQ_I(arbint_gcd(g, f_curr, f_prev), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  gcd(F_2999, F_3000) = 1 (symmetry).  */
+  CHECK_EQ_I(arbint_gcd(g, f_prev, f_curr), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  arbint_clear(g);
+  arbint_clear(f_next);
+  arbint_clear(f_curr);
+  arbint_clear(f_prev);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Test Lehmer GCD with shared large factors.
+    gcd(k*a, k*b) = k * gcd(a, b) for large multi-limb k.  */
+static void test_gcd_lehmer_shared_factor(void) {
+  arbint_ctx_t ctx;
+  arbint_t factor, a, b, g, expected;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(factor, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+  /*  factor = 2^2048 (32 limbs on 64-bit, exactly at Lehmer threshold).  */
+  CHECK_EQ_I(arbint_set_u32(factor, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(factor, factor), ARBINT_OK);
+
+  /*  a = 7 * factor, b = 21 * factor.
+      gcd(a, b) = 7 * factor since gcd(7, 21) = 7.  */
+  CHECK_EQ_I(arbint_mul_u32(a, factor, 7u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(b, factor, 21u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, a), 0);
+
+  /*  a = 12 * factor, b = 8 * factor.
+      gcd(a, b) = 4 * factor.  */
+  CHECK_EQ_I(arbint_mul_u32(a, factor, 12u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(b, factor, 8u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(expected, factor, 4u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, expected), 0);
+
+  /*  a = 17 * factor, b = 13 * factor (coprime multipliers).
+      gcd(a, b) = factor.  */
+  CHECK_EQ_I(arbint_mul_u32(a, factor, 17u), ARBINT_OK);
+  CHECK_EQ_I(arbint_mul_u32(b, factor, 13u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, factor), 0);
+
+  arbint_clear(expected);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_clear(factor);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Test Lehmer GCD with very large operands (well above threshold).  */
+static void test_gcd_lehmer_large(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g, r;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /*  a = 2^4096 - 1 (64 limbs on 64-bit), b = 2^4096 - 3.
+      These are coprime (consecutive odd numbers).  */
+  CHECK_EQ_I(arbint_set_u32(a, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_shl(a, a, 4096u), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_u32(b, a, 2u), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+
+  /*  Verify gcd divides both.  */
+  CHECK_EQ_I(arbint_tdiv_r(r, a, g), ARBINT_OK);
+  CHECK(arbint_is_zero(r));
+  CHECK_EQ_I(arbint_tdiv_r(r, b, g), ARBINT_OK);
+  CHECK(arbint_is_zero(r));
+
+  /*  Result is positive.  */
+  CHECK(g[0]._sz > 0);
+
+  /*  Test with known GCD: a = 3^100, b = 3^150.
+      gcd = 3^100.  */
+  CHECK_EQ_I(arbint_set_u32(a, 3u), ARBINT_OK);
+  CHECK_EQ_I(arbint_pow_u32(a, a, 100u), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(b, 3u), ARBINT_OK);
+  CHECK_EQ_I(arbint_pow_u32(b, b, 150u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, a), 0);
+
+  arbint_clear(r);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Test Lehmer GCD with quotient sequence edge cases.
+    Powers of 2 +/- small values can trigger matrix overflow detection.  */
+static void test_gcd_lehmer_quotient_edge(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g, expected;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+  /*  Test: a = 2^2048, b = 7 (one operand >> other).
+      gcd = 1 since 2^2048 is only divisible by 2.  */
+  CHECK_EQ_I(arbint_set_u32(a, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);
+  CHECK_EQ_I(arbint_set_u32(b, 7u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  Test: a = 2^2048 + 1, b = 2^2048 - 1.
+      gcd(2^n + 1, 2^n - 1) = gcd(2, 2^n - 1) = 1 (both are odd when n > 0).  */
+  CHECK_EQ_I(arbint_set_u32(a, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_u32(b, a, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_add_u32(a, a, 1u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  Test: a = 2^2048 - 1, b = 2^1024 - 1.
+      2^2048 - 1 = (2^1024 - 1)(2^1024 + 1), so gcd = 2^1024 - 1.  */
+  CHECK_EQ_I(arbint_set_u32(a, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(a, a), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_u32(a, a, 1u), ARBINT_OK);  /* 2^2048 - 1 */
+  CHECK_EQ_I(arbint_set_u32(b, 2u), ARBINT_OK);
+  for (int i = 0; i < 10; ++i)
+    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_sub_u32(b, b, 1u), ARBINT_OK);  /* 2^1024 - 1 */
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, b), 0);
+
+  arbint_clear(expected);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Test Lehmer GCD with high-quotient case (regression test).
+    When Lehmer step returns count=0, the fallback must use division
+    rather than O(q) repeated subtraction. This test would take ~2 seconds
+    with subtraction-based fallback but completes instantly with division.  */
+static void test_gcd_lehmer_high_quotient(void) {
+  arbint_ctx_t ctx;
+  arbint_t a, b, g, expected;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(expected, &ctx), ARBINT_OK);
+
+  /*  Create a case with very high quotient: a = b * q + small_remainder.
+      If the fallback uses subtraction, this takes O(q) time.
+      With proper division, it should be O(1).
+
+      b = 2^2048 (32 limbs, at Lehmer threshold)
+      a = b * 100000000 + 1  (quotient = 10^8)
+      gcd(a, b) = gcd(b, 1) = 1  */
+  CHECK_EQ_I(arbint_set_u32(b, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(b, b), ARBINT_OK);  /* b = 2^2048 */
+
+  CHECK_EQ_I(arbint_mul_u32(a, b, 100000000u), ARBINT_OK);  /* a = b * 10^8 */
+  CHECK_EQ_I(arbint_add_u32(a, a, 1u), ARBINT_OK);          /* a = b * 10^8 + 1 */
+
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  check_u32_value(g, 1u);
+
+  /*  Another high-quotient case with non-trivial GCD.
+      a = 7 * b, so gcd(a, b) = b.
+      Then test gcd(a + small, b) where small < b to force reduction.  */
+  CHECK_EQ_I(arbint_mul_u32(a, b, 7u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  CHECK_EQ_I(arbint_cmp(g, b), 0);
+
+  /*  a = 1000000 * b + 3 (high quotient, gcd = gcd(b, 3)).  */
+  CHECK_EQ_I(arbint_mul_u32(a, b, 1000000u), ARBINT_OK);
+  CHECK_EQ_I(arbint_add_u32(a, a, 3u), ARBINT_OK);
+  CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+  /*  gcd(2^2048, 3) = 1 since 2^2048 mod 3 = 1 (2 = -1 mod 3, 2^even = 1).  */
+  check_u32_value(g, 1u);
+
+  arbint_clear(expected);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Test Lehmer GCD stochastic with large operands.  */
+static void test_gcd_lehmer_stochastic(void) {
+  arbint_ctx_t ctx;
+  arbint_t base, a, b, g, r;
+  int iter;
+  uint32_t seed = 77777u;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(base, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(a, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(b, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(g, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(r, &ctx), ARBINT_OK);
+
+  /*  base = 2^2048 (32 limbs on 64-bit).  */
+  CHECK_EQ_I(arbint_set_u32(base, 2u), ARBINT_OK);
+  for (int i = 0; i < 11; ++i)
+    CHECK_EQ_I(arbint_sqr(base, base), ARBINT_OK);
+
+  for (iter = 0; iter < 20; ++iter) {
+    seed = seed * 1103515245u + 12345u;
+    uint32_t av = ((seed >> 16) % 10000u) + 1u;
+    seed = seed * 1103515245u + 12345u;
+    uint32_t bv = ((seed >> 16) % 10000u) + 1u;
+
+    /*  a = av * base + offset, b = bv * base + offset2.  */
+    CHECK_EQ_I(arbint_mul_u32(a, base, av), ARBINT_OK);
+    CHECK_EQ_I(arbint_add_u32(a, a, (seed >> 20) % 1000u), ARBINT_OK);
+    CHECK_EQ_I(arbint_mul_u32(b, base, bv), ARBINT_OK);
+    CHECK_EQ_I(arbint_add_u32(b, b, (seed >> 24) % 1000u), ARBINT_OK);
+
+    CHECK_EQ_I(arbint_gcd(g, a, b), ARBINT_OK);
+
+    /*  gcd must divide both.  */
+    CHECK_EQ_I(arbint_tdiv_r(r, a, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+    CHECK_EQ_I(arbint_tdiv_r(r, b, g), ARBINT_OK);
+    CHECK(arbint_is_zero(r));
+
+    /*  Result must be positive.  */
+    CHECK(g[0]._sz > 0);
+  }
+
+  arbint_clear(r);
+  arbint_clear(g);
+  arbint_clear(b);
+  arbint_clear(a);
+  arbint_clear(base);
+  arbint_ctx_clear(&ctx);
+}
+
 /*  Main entry point.  */
 
 int main(void) {
@@ -1309,6 +1641,15 @@ int main(void) {
   test_gcd_stochastic();
   test_lcm_stochastic();
   test_gcd_large_stochastic();
+
+  /*  Lehmer GCD specific tests.  */
+  test_gcd_lehmer_threshold();
+  test_gcd_lehmer_fibonacci();
+  test_gcd_lehmer_shared_factor();
+  test_gcd_lehmer_large();
+  test_gcd_lehmer_quotient_edge();
+  test_gcd_lehmer_high_quotient();
+  test_gcd_lehmer_stochastic();
 
   ARBINT_TEST_FINISH("test_gcd");
 }
