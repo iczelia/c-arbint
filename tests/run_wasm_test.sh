@@ -11,6 +11,7 @@ test_path="$1"
 test_name=$(basename "$test_path")
 test_dir=$(cd "$(dirname "$test_path")" && pwd)
 libs_dir="$test_dir/.libs"
+node_bin="${NODE:-node}"
 
 # emcc + libtool may place the JS output in several locations depending
 # on the emscripten and libtool versions:
@@ -45,6 +46,9 @@ if [ -z "$js_file" ]; then
   exit 99
 fi
 
+# Keep an absolute JS path before changing cwd for data files.
+js_file=$(cd "$(dirname "$js_file")" && pwd)/$(basename "$js_file")
+
 # Ensure the side module (wasm) is next to the JS file so the
 # emscripten runtime can find it via neededDynlibs.
 # The libtool-bypass build places libarbint.wasm in src/;
@@ -68,8 +72,25 @@ if [ -f "$wasm_in_libs" ] && [ ! -f "$wasm_next_to_js" ]; then
   cp -f "$wasm_in_libs" "$js_dir/"
 fi
 
-# Run from the test source directory so that data files (pi10k.txt,
-# e10k.txt) are found by tests that open them relative to cwd.
-cd "$test_dir"
+# Run from the source directory when available so tests that open data files
+# relative to cwd (pi10k.txt, e10k.txt) work in out-of-tree builds.
+run_dir="$test_dir"
+if [ -n "$srcdir" ]; then
+  src_abs=$(cd "$srcdir" 2>/dev/null && pwd)
+  if [ -n "$src_abs" ]; then
+    run_dir="$src_abs"
+  fi
+fi
+cd "$run_dir"
 
-exec node "$js_file"
+# If this build targets Memory64 but the runtime lacks support,
+# skip rather than reporting a spurious test failure.
+if grep -q "'index': 'i64'" "$js_file"; then
+  if ! "$node_bin" -e "new WebAssembly.Memory({initial: 1n, index: 'i64'});" \
+      >/dev/null 2>&1; then
+    echo "run_wasm_test.sh: skipping $test_name (runtime has no wasm Memory64 support)" >&2
+    exit 77
+  fi
+fi
+
+exec "$node_bin" "$js_file"

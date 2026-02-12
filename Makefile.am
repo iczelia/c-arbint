@@ -29,10 +29,13 @@ dist_doc_DATA = README.md
 
 EXTRA_DIST = bootstrap
 
-.PHONY: clang-format tools
+.PHONY: clang-format tools cloc
 
 clang-format:
 	clang-format -i $$(find include src tests tools -type f \( -name '*.h' -o -name '*.c' \))
+
+cloc:
+	cloc --include-lang="C,C/C++ Header" include src tests tools
 
 # Build tools (tune_thresholds, etc.)
 tools:

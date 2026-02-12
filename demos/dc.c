@@ -45,6 +45,14 @@ static char * dc_strdup(const char * s) {
 #define DC_MAX_INPUT_LINE 65536
 #define DC_MAX_PRECISION 10000
 
+/*  Allocate line buffers on heap to avoid oversized stack frames on wasm.  */
+static char * dc_alloc_line_buffer(void) {
+  char * line = malloc(DC_MAX_INPUT_LINE);
+  if (!line)
+    fprintf(stderr, "dc: out of memory\n");
+  return line;
+}
+
 /*  Data structures  */
 
 /*  A dc value can be either a number or a string (macro).
@@ -1317,12 +1325,17 @@ static int dc_op_execute(dc_state_t * dc) {
 
 /*  ? command: read line from stdin and execute.  */
 static int dc_op_read_execute(dc_state_t * dc) {
-  char line[DC_MAX_INPUT_LINE];
+  char * line = dc_alloc_line_buffer();
+  if (!line)
+    return -1;
 
-  if (fgets(line, sizeof(line), stdin) == NULL)
+  if (fgets(line, DC_MAX_INPUT_LINE, stdin) == NULL) {
+    free(line);
     return 0;  /*  EOF is not an error.  */
+  }
 
   dc_execute(dc, line);
+  free(line);
   return 0;
 }
 
@@ -1672,12 +1685,15 @@ static void dc_cleanup(dc_state_t * dc) {
 /*  Main / test mode  */
 
 static void dc_run_interactive(dc_state_t * dc) {
-  char line[DC_MAX_INPUT_LINE];
+  char * line = dc_alloc_line_buffer();
+  if (!line)
+    return;
 
-  while (dc->running && fgets(line, sizeof(line), stdin)) {
+  while (dc->running && fgets(line, DC_MAX_INPUT_LINE, stdin)) {
     dc_execute(dc, line);
     dc->quit_depth = 0;
   }
+  free(line);
 }
 
 static void dc_run_expression(dc_state_t * dc, const char * expr) {
@@ -1691,12 +1707,17 @@ static void dc_run_file(dc_state_t * dc, const char * filename) {
     return;
   }
 
-  char line[DC_MAX_INPUT_LINE];
-  while (dc->running && fgets(line, sizeof(line), f)) {
+  char * line = dc_alloc_line_buffer();
+  if (!line) {
+    fclose(f);
+    return;
+  }
+  while (dc->running && fgets(line, DC_MAX_INPUT_LINE, f)) {
     dc_execute(dc, line);
     dc->quit_depth = 0;
   }
 
+  free(line);
   fclose(f);
 }
 
