@@ -1002,7 +1002,7 @@ jobs:
             sh -eu -c '
               # Detect distro and install dependencies
               if [ -f /etc/alpine-release ]; then
-                pkgs="build-base pkgconf tar xz groff"
+                pkgs="build-base pkgconf tar xz groff file"
                 if [ "$CC" = "clang" ]; then
                   pkgs="$pkgs clang"
                 fi
@@ -1010,7 +1010,7 @@ jobs:
               elif [ -f /etc/debian_version ]; then
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get -o Acquire::Retries=5 update
-                pkgs="build-essential pkg-config tar xz-utils groff"
+                pkgs="build-essential pkg-config tar xz-utils groff file"
                 if [ "$CC" = "clang" ]; then
                   pkgs="$pkgs clang"
                 fi
