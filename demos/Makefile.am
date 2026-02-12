@@ -19,11 +19,26 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_builddir)
 AM_CFLAGS = $(ARBINT_LTO_CFLAGS) $(ARBINT_EMSCRIPTEN_TEST_CFLAGS)
 AM_LDFLAGS = $(ARBINT_LTO_LDFLAGS) $(ARBINT_EMSCRIPTEN_TEST_LDFLAGS)
 
-# Demo programs are built and tested like tests
+# Demo programs are built but not run directly as tests
+# (dc requires --test flag, handled via wrapper)
 check_PROGRAMS = dc
 
-TESTS = $(check_PROGRAMS)
-TESTS_ENVIRONMENT = LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH"
+# Use a wrapper script to pass --test to dc
+TESTS = run_dc_test.sh
+EXTRA_DIST = run_dc_test.sh
+
+if ARBINT_HOST_EMSCRIPTEN
+# For emscripten, the wrapper uses run_wasm_test.sh internally
+TESTS_ENVIRONMENT = \
+    srcdir="$(srcdir)" \
+    top_srcdir="$(top_srcdir)" \
+    DC_BINARY="$(builddir)/dc" \
+    WASM_RUNNER="$(top_srcdir)/tests/run_wasm_test.sh"
+else
+TESTS_ENVIRONMENT = \
+    LD_LIBRARY_PATH="$(top_builddir)/src/.libs:$$LD_LIBRARY_PATH" \
+    DC_BINARY="$(builddir)/dc$(EXEEXT)"
+endif
 
 # Default linking for demo programs
 if ARBINT_HOST_EMSCRIPTEN
@@ -42,12 +57,6 @@ $(top_builddir)/src/libarbint.la: FORCE
 	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src libarbint.la
 endif
 FORCE:
-
-# Emscripten: run tests via node
-if ARBINT_HOST_EMSCRIPTEN
-LOG_COMPILER = $(SHELL)
-AM_LOG_FLAGS = $(top_srcdir)/tests/run_wasm_test.sh
-endif
 
 # dc demo: a reverse-polish calculator using c-arbint
 dc_SOURCES = dc.c

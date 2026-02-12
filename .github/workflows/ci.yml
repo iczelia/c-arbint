@@ -911,123 +911,87 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ppc64le - IBM POWER (big-endian variant available)
+          # ppc64le - IBM POWER little-endian
           - arch: ppc64le
             platform: linux/ppc64le
             image: debian:bookworm-slim
             compiler: clang
-            lto: 'on'
-          - arch: ppc64le
-            platform: linux/ppc64le
-            image: debian:bookworm-slim
-            compiler: clang
-            lto: 'off'
           - arch: ppc64le
             platform: linux/ppc64le
             image: alpine:latest
             compiler: gcc
-            lto: 'on'
-          - arch: ppc64le
-            platform: linux/ppc64le
-            image: alpine:latest
-            compiler: gcc
-            lto: 'off'
           # s390x - IBM Z mainframe (big-endian)
           - arch: s390x
             platform: linux/s390x
             image: debian:bookworm-slim
             compiler: clang
-            lto: 'on'
-          - arch: s390x
-            platform: linux/s390x
-            image: debian:bookworm-slim
-            compiler: clang
-            lto: 'off'
           - arch: s390x
             platform: linux/s390x
             image: alpine:latest
             compiler: gcc
-            lto: 'on'
-          - arch: s390x
-            platform: linux/s390x
-            image: alpine:latest
-            compiler: gcc
-            lto: 'off'
           # riscv64 - RISC-V 64-bit (only unstable images available)
           - arch: riscv64
             platform: linux/riscv64
             image: debian:sid-slim
             compiler: gcc
-            lto: 'on'
-          - arch: riscv64
-            platform: linux/riscv64
-            image: debian:sid-slim
-            compiler: gcc
-            lto: 'off'
           - arch: riscv64
             platform: linux/riscv64
             image: alpine:edge
             compiler: gcc
-            lto: 'on'
-          - arch: riscv64
-            platform: linux/riscv64
-            image: alpine:edge
-            compiler: gcc
-            lto: 'off'
           # mips64le - MIPS 64-bit little-endian
           - arch: mips64le
             platform: linux/mips64le
             image: debian:bookworm-slim
             compiler: gcc
-            lto: 'on'
-          - arch: mips64le
-            platform: linux/mips64le
-            image: debian:bookworm-slim
-            compiler: gcc
-            lto: 'off'
           - arch: mips64le
             platform: linux/mips64le
             image: debian:bookworm-slim
             compiler: clang
-            lto: 'on'
-          - arch: mips64le
-            platform: linux/mips64le
-            image: debian:bookworm-slim
-            compiler: clang
-            lto: 'off'
           # arm32v7 - ARMv7 32-bit (Raspberry Pi 2/3/4 in 32-bit mode)
           - arch: arm32v7
             platform: linux/arm/v7
             image: debian:bookworm-slim
             compiler: gcc
-            lto: 'on'
-          - arch: arm32v7
-            platform: linux/arm/v7
-            image: debian:bookworm-slim
-            compiler: gcc
-            lto: 'off'
           - arch: arm32v7
             platform: linux/arm/v7
             image: alpine:latest
             compiler: gcc
-            lto: 'on'
-          - arch: arm32v7
-            platform: linux/arm/v7
-            image: alpine:latest
-            compiler: gcc
-            lto: 'off'
           # arm32v5 - ARMv5TE (old embedded ARM)
           - arch: arm32v5
             platform: linux/arm/v5
             image: debian:bookworm-slim
             compiler: gcc
-            lto: 'on'
-          - arch: arm32v5
-            platform: linux/arm/v5
-            image: debian:bookworm-slim
+          # ppc64 - PowerPC 64-bit big-endian (debian-ports)
+          - arch: ppc64
+            platform: linux/ppc64
+            image: urbanogilson/debian-debootstrap-ports:ppc64-trixie-sid
             compiler: gcc
-            lto: 'off'
-    name: build-exotic (${{ matrix.arch }}, ${{ matrix.image }}, ${{ matrix.compiler }}, lto-${{ matrix.lto }})
+          # powerpc - PowerPC 32-bit (debian-ports)
+          - arch: powerpc
+            platform: linux/ppc
+            image: urbanogilson/debian-debootstrap-ports:powerpc-trixie-sid
+            compiler: gcc
+          # hppa - HP PA-RISC (debian-ports)
+          - arch: hppa
+            platform: linux/hppa
+            image: urbanogilson/debian-debootstrap-ports:hppa-trixie-sid
+            compiler: gcc
+          # m68k - Motorola 68000 series (debian-ports)
+          - arch: m68k
+            platform: linux/m68k
+            image: urbanogilson/debian-debootstrap-ports:m68k-trixie-sid
+            compiler: gcc
+          # sh4 - Hitachi SuperH (debian-ports)
+          - arch: sh4
+            platform: linux/sh4
+            image: urbanogilson/debian-debootstrap-ports:sh4-trixie-sid
+            compiler: gcc
+          # alpha - DEC Alpha (debian-ports)
+          - arch: alpha
+            platform: linux/alpha
+            image: urbanogilson/debian-debootstrap-ports:alpha-trixie-sid
+            compiler: gcc
+    name: build-exotic (${{ matrix.arch }}, ${{ matrix.image }}, ${{ matrix.compiler }})
 
     steps:
       - name: Set up QEMU
@@ -1045,8 +1009,6 @@ jobs:
           docker run --rm \
             --platform ${{ matrix.platform }} \
             -e CC="${{ matrix.compiler }}" \
-            -e MATRIX_LTO="${{ matrix.lto }}" \
-            -e IMAGE="${{ matrix.image }}" \
             -v "$PWD/dist:/work/dist" \
             -v "$PWD/artifacts:/work/artifacts" \
             -w /work \
@@ -1054,29 +1016,29 @@ jobs:
             sh -eu -c '
               # Detect distro and install dependencies
               if [ -f /etc/alpine-release ]; then
-                apk add --no-cache build-base clang pkgconf tar xz groff
+                pkgs="build-base pkgconf tar xz groff"
+                if [ "$CC" = "clang" ]; then
+                  pkgs="$pkgs clang"
+                fi
+                apk add --no-cache $pkgs
               elif [ -f /etc/debian_version ]; then
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get -o Acquire::Retries=5 update
-                apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-                  build-essential clang pkg-config tar xz-utils groff
+                pkgs="build-essential pkg-config tar xz-utils groff"
+                if [ "$CC" = "clang" ]; then
+                  pkgs="$pkgs clang"
+                fi
+                apt-get -o Acquire::Retries=5 install -y --no-install-recommends $pkgs
               else
                 echo "Unknown distro" >&2
                 exit 1
-              fi
-
-              configure_args=""
-              if [ "$MATRIX_LTO" = "on" ]; then
-                configure_args="$configure_args --enable-lto=yes"
-              else
-                configure_args="$configure_args --enable-lto=no"
               fi
 
               tarball="$(ls dist/*.tar.xz | head -n1)"
               srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
               tar -xf "$tarball" -C dist
               cd "dist/$srcdir"
-              ./configure $configure_args
+              ./configure --enable-lto=no
               jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
               make -j"$jobs"
               make check
@@ -1090,7 +1052,7 @@ jobs:
       - name: Upload shared library artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-exotic-${{ matrix.arch }}-${{ matrix.compiler }}-lto${{ matrix.lto }}-${{ matrix.image }}
+          name: build-exotic-${{ matrix.arch }}-${{ matrix.compiler }}-${{ matrix.image }}
           path: artifacts/*
           if-no-files-found: warn
 
@@ -1310,30 +1272,55 @@ jobs:
               tuple="i386-linux"
               compiler="${BASH_REMATCH[1]}"
               lto="${BASH_REMATCH[2]}"
-            elif [[ "$artifact_name" =~ ^build-exotic-ppc64le-([^-]+)-lto(on|off|auto)-.+ ]]; then
+            # Exotic archs (no LTO, artifact name: build-exotic-{arch}-{compiler}-{image})
+            elif [[ "$artifact_name" =~ ^build-exotic-ppc64le-([^-]+)-.+ ]]; then
               tuple="ppc64le-linux"
               compiler="${BASH_REMATCH[1]}"
-              lto="${BASH_REMATCH[2]}"
-            elif [[ "$artifact_name" =~ ^build-exotic-riscv64-([^-]+)-lto(on|off|auto)-.+ ]]; then
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-riscv64-([^-]+)-.+ ]]; then
               tuple="rv64gc-linux"
               compiler="${BASH_REMATCH[1]}"
-              lto="${BASH_REMATCH[2]}"
-            elif [[ "$artifact_name" =~ ^build-exotic-s390x-([^-]+)-lto(on|off|auto)-.+ ]]; then
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-s390x-([^-]+)-.+ ]]; then
               tuple="s390x-linux"
               compiler="${BASH_REMATCH[1]}"
-              lto="${BASH_REMATCH[2]}"
-            elif [[ "$artifact_name" =~ ^build-exotic-mips64le-([^-]+)-lto(on|off|auto)-.+ ]]; then
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-mips64le-([^-]+)-.+ ]]; then
               tuple="mips64el-linux"
               compiler="${BASH_REMATCH[1]}"
-              lto="${BASH_REMATCH[2]}"
-            elif [[ "$artifact_name" =~ ^build-exotic-arm32v7-([^-]+)-lto(on|off|auto)-.+ ]]; then
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-arm32v7-([^-]+)-.+ ]]; then
               tuple="armv7-linux"
               compiler="${BASH_REMATCH[1]}"
-              lto="${BASH_REMATCH[2]}"
-            elif [[ "$artifact_name" =~ ^build-exotic-arm32v5-([^-]+)-lto(on|off|auto)-.+ ]]; then
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-arm32v5-([^-]+)-.+ ]]; then
               tuple="armv5te-linux"
               compiler="${BASH_REMATCH[1]}"
-              lto="${BASH_REMATCH[2]}"
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-ppc64-([^-]+)-.+ ]]; then
+              tuple="ppc64-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-powerpc-([^-]+)-.+ ]]; then
+              tuple="ppc-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-hppa-([^-]+)-.+ ]]; then
+              tuple="hppa-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-m68k-([^-]+)-.+ ]]; then
+              tuple="m68k-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-sh4-([^-]+)-.+ ]]; then
+              tuple="sh4-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="off"
+            elif [[ "$artifact_name" =~ ^build-exotic-alpha-([^-]+)-.+ ]]; then
+              tuple="alpha-linux"
+              compiler="${BASH_REMATCH[1]}"
+              lto="off"
             elif [[ "$artifact_name" =~ ^build-macos-arm64-lto(on|off|auto)$ ]]; then
               tuple="arm64-darwin"
               compiler="clang"

@@ -2,6 +2,26 @@
 
 	* Version 0.0.4 released.
 
+	* .github/workflows/ci.yml: Replace run-on-arch-action with Docker
+	QEMU emulation for exotic architectures. Add new CI targets: ppc64
+	(big-endian), powerpc (32-bit), hppa (HP PA-RISC), m68k (Motorola
+	68000), sh4 (Hitachi SuperH), alpha (DEC Alpha), mips64le, arm32v7,
+	arm32v5. All exotic architectures build without LTO due to toolchain
+	limitations. Use debian-ports images for ppc64/powerpc/hppa/m68k/sh4/
+	alpha via urbanogilson/debian-debootstrap-ports.
+
+	* .github/workflows/release.yml: Update release notes template with
+	all supported architecture tuples including new exotic targets.
+
+	* tests/run_wasm_test.sh: Pass through extra command-line arguments
+	to wasm test binaries (e.g., --test flag for dc demo).
+
+	* demos/Makefile.am: Add dc_LOG_FLAGS = --test to run dc demo in
+	automated test mode instead of interactive mode.
+
+	* README.md: Update supported platforms section with expanded list
+	of exotic architectures tested via Docker QEMU emulation.
+
 	* src/arbint_str.c, src/arbint_str.h: New files. Implement string
 	conversion functions arbint_set_str and arbint_get_str. Supports
 	bases 2-62 with case-insensitive parsing for bases 2-36 and

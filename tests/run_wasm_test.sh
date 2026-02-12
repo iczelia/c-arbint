@@ -8,6 +8,8 @@
 # node.
 
 test_path="$1"
+shift
+extra_args="$*"
 test_name=$(basename "$test_path")
 test_dir=$(cd "$(dirname "$test_path")" && pwd)
 libs_dir="$test_dir/.libs"
@@ -93,4 +95,4 @@ if grep -q "'index': 'i64'" "$js_file"; then
   fi
 fi
 
-exec "$node_bin" "$js_file"
+exec "$node_bin" "$js_file" $extra_args

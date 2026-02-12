@@ -168,11 +168,22 @@ jobs:
             - `arm64-linux` - Linux ARM64
             - `i386-linux` - Linux x86 (32-bit)
             - `rv64gc-linux` - Linux RISC-V 64-bit
-            - `s390x-linux` - Linux IBM Z (s390x)
+            - `s390x-linux` - Linux IBM Z (s390x, big-endian)
             - `ppc64le-linux` - Linux PowerPC64 LE
+            - `ppc64-linux` - Linux PowerPC64 BE (big-endian)
+            - `ppc-linux` - Linux PowerPC 32-bit
+            - `mips64el-linux` - Linux MIPS64 LE
+            - `armv7-linux` - Linux ARMv7 (32-bit)
+            - `armv5te-linux` - Linux ARMv5TE (32-bit)
+            - `hppa-linux` - Linux HP PA-RISC
+            - `m68k-linux` - Linux Motorola 68000
+            - `sh4-linux` - Linux Hitachi SuperH
+            - `alpha-linux` - Linux DEC Alpha
             - `arm64-darwin` - macOS ARM64
             - `amd64-windows` - Windows x86-64
             - `i386-windows` - Windows x86 (32-bit)
+            - `wasm32-emscripten` - WebAssembly 32-bit
+            - `wasm64-emscripten` - WebAssembly 64-bit (Memory64)
 
             **Compiler suffixes:**
             - `-c` = Clang (no LTO)
@@ -180,13 +191,16 @@ jobs:
             - `-lc` = Clang with LTO
             - `-lg` = GCC with LTO
             - `-lm` = MSVC with LTO
+            - `-e` = Emscripten (no LTO)
+            - `-le` = Emscripten with LTO
 
             **Examples:**
             - `libarbint-amd64-linux-lg.so` - Linux x86-64, GCC with LTO
             - `libarbint-arm64-darwin-c.dylib` - macOS ARM64, Clang without LTO
             - `libarbint-i386-windows-lm.dll` - Windows x86, MSVC with LTO
+            - `libarbint-wasm32-emscripten-le.wasm` - WebAssembly 32-bit, Emscripten with LTO
 
-            **Note:** macOS builds use Clang only. Windows MSVC builds always use LTO.
+            **Note:** macOS builds use Clang only. Windows MSVC builds always use LTO. Exotic architectures (ppc64, ppc, hppa, m68k, sh4, alpha, armv5te) are built without LTO due to toolchain limitations.
 
             ### Building from Source
 

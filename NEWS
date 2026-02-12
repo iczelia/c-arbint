@@ -85,11 +85,30 @@ Testing
 - New test_inv_mod binary for modular inverse
 - New test_removefactor binary for factor removal
 - Test timing output: all tests now report execution time
+- dc demo now runs with --test flag for automated testing
+
+Build System / CI
+-----------------
+- Replaced run-on-arch-action with Docker QEMU emulation for exotic architectures
+- Added new exotic architecture CI targets (all via Docker, no LTO):
+  * ppc64 (PowerPC 64-bit big-endian)
+  * powerpc (PowerPC 32-bit)
+  * hppa (HP PA-RISC)
+  * m68k (Motorola 68000)
+  * sh4 (Hitachi SuperH)
+  * alpha (DEC Alpha)
+  * mips64le (MIPS 64-bit little-endian)
+  * arm32v7 (ARMv7 32-bit)
+  * arm32v5 (ARMv5TE)
+- Exotic architectures use debian-ports images (ppc64, powerpc, hppa, m68k, sh4, alpha)
+- LTO disabled for all exotic architectures due to toolchain limitations
+- wasm test runner now passes through command-line arguments (e.g., --test)
 
 Documentation
 -------------
 - Man page updated with all new API functions
 - ChangeLog updated with detailed implementation notes
+- README updated with expanded platform support list
 
 
 c-arbint 0.0.3 (2026-02-11)
