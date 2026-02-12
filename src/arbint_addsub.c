@@ -20,6 +20,7 @@
 #include "config.h"
 
 #include "arbint_cpu.h"
+#include "arbint_internal_util.h"
 
 #include <assert.h>
 #include <limits.h>
@@ -153,8 +154,7 @@ size_t arbint__dbl_mag(arbint_limb_t * dst, const arbint_limb_t * x,
   static arbint_dbl_mag_fn_t impl = NULL;
 
   /*  One-time initialization: select implementation based on CPU features.  */
-  if (impl == NULL)
-    impl = arbint_select_dbl_mag();
+  ARBINT_LAZY_INIT(impl, arbint_select_dbl_mag);
 
 #if HAS_AVX2
   /*  Threshold check: avoid SIMD overhead for small operands.  */

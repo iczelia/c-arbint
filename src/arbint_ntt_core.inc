@@ -110,6 +110,41 @@ static inline uint64_t mod_sub(uint64_t a, uint64_t b, uint64_t p) {
   return diff + (borrow & p);
 }
 
+/*  Reduce a 128-bit value represented as hi:lo modulo p.
+    Assumes p is an odd 64-bit prime near 2^64 (NTT primes).  */
+static inline uint64_t ntt_reduce_u128_mod(uint64_t hi, uint64_t lo,
+                                           uint64_t p) {
+  uint64_t r_mod_p = (uint64_t) 0u - p;
+  uint64_t hi2, lo2;
+  uint64_t sum;
+  uint64_t sum_hi;
+
+  ntt_umul(&hi2, &lo2, hi, r_mod_p);
+  sum = lo2 + lo;
+  sum_hi = hi2 + ((sum < lo2) ? 1u : 0u);
+
+  while (sum_hi > 0u) {
+    uint64_t hi3, lo3;
+    uint64_t new_sum;
+    ntt_umul(&hi3, &lo3, sum_hi, r_mod_p);
+    new_sum = lo3 + sum;
+    sum_hi = hi3 + ((new_sum < lo3) ? 1u : 0u);
+    sum = new_sum;
+  }
+
+  while (sum >= p)
+    sum -= p;
+
+  return sum;
+}
+
+/*  Compute (a * b) mod p without requiring compiler 128-bit integer type.  */
+static inline uint64_t ntt_mul_mod_u64(uint64_t a, uint64_t b, uint64_t p) {
+  uint64_t hi, lo;
+  ntt_umul(&hi, &lo, a, b);
+  return ntt_reduce_u128_mod(hi, lo, p);
+}
+
 /* ========== Montgomery Parameter Computation ========== */
 
 /*  Compute -p^(-1) mod 2^64 using Newton iteration.
@@ -140,59 +175,8 @@ static uint64_t compute_p_neg_inv(uint64_t p) {
     For squaring mod p without overflow, we use repeated doubling:
     R mod p, then (R mod p)^2 mod p.  */
 static uint64_t compute_r_squared(uint64_t p) {
-  /*  R mod p = 2^64 mod p.
-      Since p > 2^63, we have R mod p = 2^64 - p.  */
   uint64_t r_mod_p = (uint64_t) 0u - p;
-
-  /*  Compute r_mod_p^2 mod p using 128-bit arithmetic.  */
-  uint64_t hi, lo;
-  ntt_umul(&hi, &lo, r_mod_p, r_mod_p);
-
-  /*  Reduce hi:lo mod p.
-      Since hi < p and lo < 2^64, we have hi:lo < p * 2^64.
-      Compute hi:lo - floor(hi:lo / p) * p.
-
-      For efficiency, we use: result = hi:lo - hi * floor(2^64 / p) * p
-      and correct.
-
-      Simpler: use the fact that p is close to 2^64.
-      hi:lo mod p = (hi * (2^64 mod p) + lo) mod p
-                  = (hi * r_mod_p + lo) mod p.  */
-  uint64_t hi2, lo2;
-  ntt_umul(&hi2, &lo2, hi, r_mod_p);
-
-  /*  Add lo.  */
-  uint64_t sum_lo = lo2 + lo;
-  uint64_t carry = (sum_lo < lo2) ? 1u : 0u;
-  uint64_t sum_hi = hi2 + carry;
-
-  /*  Now reduce sum_hi:sum_lo mod p, recursively.  */
-  if (sum_hi == 0u) {
-    return (sum_lo >= p) ? (sum_lo - p) : sum_lo;
-  }
-
-  /*  sum_hi:sum_lo = sum_hi * 2^64 + sum_lo
-      = sum_hi * (p + r_mod_p) + sum_lo (since 2^64 = p + r_mod_p)
-      = sum_hi * p + sum_hi * r_mod_p + sum_lo
-      = sum_hi * r_mod_p + sum_lo (mod p).  */
-  uint64_t hi3, lo3;
-  ntt_umul(&hi3, &lo3, sum_hi, r_mod_p);
-  uint64_t final_lo = lo3 + sum_lo;
-  uint64_t final_hi = hi3 + ((final_lo < lo3) ? 1u : 0u);
-
-  /*  One more iteration if needed.  */
-  if (final_hi > 0u) {
-    uint64_t hi4, lo4;
-    ntt_umul(&hi4, &lo4, final_hi, r_mod_p);
-    final_lo = lo4 + final_lo;
-    final_hi = hi4 + ((final_lo < lo4) ? 1u : 0u);
-  }
-
-  /*  At this point final_hi should be 0. Reduce final_lo.  */
-  while (final_lo >= p)
-    final_lo -= p;
-
-  return final_lo;
+  return ntt_mul_mod_u64(r_mod_p, r_mod_p, p);
 }
 
 /*  Initialize Montgomery parameters for a prime p.  */
@@ -211,46 +195,11 @@ static uint64_t powmod(uint64_t base, uint64_t exp, uint64_t p) {
   base = base % p;
 
   while (exp > 0u) {
-    if (exp & 1u) {
-      uint64_t hi, lo;
-      ntt_umul(&hi, &lo, result, base);
-      /*  Reduce mod p using same technique as compute_r_squared.  */
-      uint64_t r_mod_p = (uint64_t) 0u - p;
-      uint64_t hi2, lo2;
-      ntt_umul(&hi2, &lo2, hi, r_mod_p);
-      uint64_t sum = lo2 + lo;
-      uint64_t carry = (sum < lo2) ? 1u : 0u;
-      uint64_t sum_hi = hi2 + carry;
-      while (sum_hi > 0u) {
-        uint64_t hi3, lo3;
-        ntt_umul(&hi3, &lo3, sum_hi, r_mod_p);
-        sum = lo3 + sum;
-        sum_hi = hi3 + ((sum < lo3) ? 1u : 0u);
-      }
-      while (sum >= p)
-        sum -= p;
-      result = sum;
-    }
+    if (exp & 1u)
+      result = ntt_mul_mod_u64(result, base, p);
     exp >>= 1;
-    if (exp > 0u) {
-      uint64_t hi, lo;
-      ntt_umul(&hi, &lo, base, base);
-      uint64_t r_mod_p = (uint64_t) 0u - p;
-      uint64_t hi2, lo2;
-      ntt_umul(&hi2, &lo2, hi, r_mod_p);
-      uint64_t sum = lo2 + lo;
-      uint64_t carry = (sum < lo2) ? 1u : 0u;
-      uint64_t sum_hi = hi2 + carry;
-      while (sum_hi > 0u) {
-        uint64_t hi3, lo3;
-        ntt_umul(&hi3, &lo3, sum_hi, r_mod_p);
-        sum = lo3 + sum;
-        sum_hi = hi3 + ((sum < lo3) ? 1u : 0u);
-      }
-      while (sum >= p)
-        sum -= p;
-      base = sum;
-    }
+    if (exp > 0u)
+      base = ntt_mul_mod_u64(base, base, p);
   }
   return result;
 }
@@ -361,24 +310,7 @@ static arbint_err_t arbint_ntt_ctx_init_internal(void) {
   /*  Compute p1 * p2 mod p3, then invert.  */
   uint64_t p1_mod_p3 = ARBINT_NTT_P1 % ARBINT_NTT_P3;
   uint64_t p2_mod_p3 = ARBINT_NTT_P2 % ARBINT_NTT_P3;
-  uint64_t hi, lo;
-  ntt_umul(&hi, &lo, p1_mod_p3, p2_mod_p3);
-  /*  Reduce hi:lo mod p3.  */
-  uint64_t r_mod_p3 = (uint64_t) 0u - ARBINT_NTT_P3;
-  uint64_t hi2, lo2;
-  ntt_umul(&hi2, &lo2, hi, r_mod_p3);
-  uint64_t sum = lo2 + lo;
-  uint64_t sum_hi = hi2 + ((sum < lo2) ? 1u : 0u);
-  while (sum_hi > 0u) {
-    uint64_t hi3, lo3;
-    ntt_umul(&hi3, &lo3, sum_hi, r_mod_p3);
-    uint64_t new_sum = lo3 + sum;
-    sum_hi = hi3 + ((new_sum < lo3) ? 1u : 0u);
-    sum = new_sum;
-  }
-  while (sum >= ARBINT_NTT_P3)
-    sum -= ARBINT_NTT_P3;
-  uint64_t p1p2_mod_p3 = sum;
+  uint64_t p1p2_mod_p3 = ntt_mul_mod_u64(p1_mod_p3, p2_mod_p3, ARBINT_NTT_P3);
   g_ntt_ctx.crt.p1p2_inv_mod_p3 = modinv(p1p2_mod_p3, ARBINT_NTT_P3);
 
   /*  Store p1 and p1*p2 for CRT reconstruction.  */
@@ -764,24 +696,7 @@ static void ntt_crt_combine(arbint_limb_t * dst, size_t * dst_used,
 
     /*  v2 = (r2[i] - v1) * p1_inv_mod_p2 mod p2.  */
     uint64_t diff2 = mod_sub(r2[i], v1 % ARBINT_NTT_P2, ARBINT_NTT_P2);
-    uint64_t hi, lo;
-    ntt_umul(&hi, &lo, diff2, crt->p1_inv_mod_p2);
-    /*  Reduce mod p2.  */
-    uint64_t r_mod_p2 = (uint64_t) 0u - ARBINT_NTT_P2;
-    uint64_t hi2, lo2;
-    ntt_umul(&hi2, &lo2, hi, r_mod_p2);
-    uint64_t sum = lo2 + lo;
-    uint64_t sum_hi = hi2 + ((sum < lo2) ? 1u : 0u);
-    while (sum_hi > 0u) {
-      uint64_t hi3, lo3;
-      ntt_umul(&hi3, &lo3, sum_hi, r_mod_p2);
-      uint64_t new_sum = lo3 + sum;
-      sum_hi = hi3 + ((new_sum < lo3) ? 1u : 0u);
-      sum = new_sum;
-    }
-    while (sum >= ARBINT_NTT_P2)
-      sum -= ARBINT_NTT_P2;
-    uint64_t v2 = sum;
+    uint64_t v2 = ntt_mul_mod_u64(diff2, crt->p1_inv_mod_p2, ARBINT_NTT_P2);
 
     /*  v3 = ((r3[i] - v1) - v2 * p1) * p1p2_inv_mod_p3 mod p3.  */
     uint64_t v1_mod_p3 = v1 % ARBINT_NTT_P3;
@@ -789,39 +704,13 @@ static void ntt_crt_combine(arbint_limb_t * dst, size_t * dst_used,
 
     /*  v2 * p1 mod p3.  */
     uint64_t p1_mod_p3 = ARBINT_NTT_P1 % ARBINT_NTT_P3;
-    ntt_umul(&hi, &lo, v2, p1_mod_p3);
-    uint64_t r_mod_p3 = (uint64_t) 0u - ARBINT_NTT_P3;
-    ntt_umul(&hi2, &lo2, hi, r_mod_p3);
-    sum = lo2 + lo;
-    sum_hi = hi2 + ((sum < lo2) ? 1u : 0u);
-    while (sum_hi > 0u) {
-      uint64_t hi3, lo3;
-      ntt_umul(&hi3, &lo3, sum_hi, r_mod_p3);
-      uint64_t new_sum = lo3 + sum;
-      sum_hi = hi3 + ((new_sum < lo3) ? 1u : 0u);
-      sum = new_sum;
-    }
-    while (sum >= ARBINT_NTT_P3)
-      sum -= ARBINT_NTT_P3;
-    uint64_t v2p1_mod_p3 = sum;
+    uint64_t v2p1_mod_p3 = ntt_mul_mod_u64(v2, p1_mod_p3, ARBINT_NTT_P3);
 
     uint64_t diff3b = mod_sub(diff3a, v2p1_mod_p3, ARBINT_NTT_P3);
 
     /*  diff3b * p1p2_inv_mod_p3 mod p3.  */
-    ntt_umul(&hi, &lo, diff3b, crt->p1p2_inv_mod_p3);
-    ntt_umul(&hi2, &lo2, hi, r_mod_p3);
-    sum = lo2 + lo;
-    sum_hi = hi2 + ((sum < lo2) ? 1u : 0u);
-    while (sum_hi > 0u) {
-      uint64_t hi3, lo3;
-      ntt_umul(&hi3, &lo3, sum_hi, r_mod_p3);
-      uint64_t new_sum = lo3 + sum;
-      sum_hi = hi3 + ((new_sum < lo3) ? 1u : 0u);
-      sum = new_sum;
-    }
-    while (sum >= ARBINT_NTT_P3)
-      sum -= ARBINT_NTT_P3;
-    uint64_t v3 = sum;
+    uint64_t v3 =
+        ntt_mul_mod_u64(diff3b, crt->p1p2_inv_mod_p3, ARBINT_NTT_P3);
 
     /*  Reconstruct: coeff = v1 + v2 * p1 + v3 * p1 * p2.
         Using 192-bit arithmetic to avoid overflow.  */

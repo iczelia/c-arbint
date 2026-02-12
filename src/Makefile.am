@@ -31,6 +31,7 @@ noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
   arbint_div.h arbint_iex.h arbint_cpu.h arbint_mul.h \
   arbint_mul_core.inc arbint_div_barrett_core.inc \
+  arbint_internal_util.h \
   arbint_bitops.h arbint_shift.h arbint_random.h \
   arbint_hash.h arbint_ntt.h arbint_ntt_core.inc arbint_gcd.h arbint_cache.h
 

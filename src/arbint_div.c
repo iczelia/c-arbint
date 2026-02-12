@@ -20,38 +20,10 @@
 #include "config.h"
 
 #include "arbint_cpu.h"
+#include "arbint_internal_util.h"
 
 #include <limits.h>
 #include <string.h>
-
-/*  Power-of-two detection helper.  */
-
-/*  Check if v is a power of two (v != 0 required).  */
-static inline int arbint_div_is_pow2(uint32_t v) {
-  return (v & (v - 1u)) == 0u;
-}
-
-/*  Count trailing zero bits in a magnitude.
-    Returns the total number of trailing zero bits, i.e., the largest k
-    such that the magnitude is divisible by 2^k.
-    For zero magnitude (nn == 0), returns SIZE_MAX.  */
-static size_t arbint_mag_ctz(const arbint_limb_t * np, size_t nn) {
-  size_t i;
-  size_t ctz = 0u;
-
-  if (nn == 0u)
-    return SIZE_MAX;
-
-  /*  Count full zero limbs.  */
-  for (i = 0u; i < nn && np[i] == 0u; ++i)
-    ctz += ARBINT_LIMB_BITS;
-
-  /*  Count trailing zeros in first nonzero limb.  */
-  if (i < nn)
-    ctz += arbint_ctz_limb(np[i]);
-
-  return ctz;
-}
 
 /*  Power-of-two truncated division: q = n / 2^k, r = n % 2^k.
     Truncated division semantics:
@@ -93,7 +65,7 @@ static arbint_err_t arbint_tdiv_qr_pow2(arbint_t q, arbint_t r,
 
   /*  Optimization: count trailing zeros in dividend.
       If n has >= k trailing zero bits, the remainder is 0.  */
-  n_ctz = arbint_mag_ctz(np, nn);
+  n_ctz = arbint_mag_ctz_or_size_max(np, nn);
 
   if (n_ctz >= (size_t) k) {
     /*  Dividend is divisible by 2^k: remainder is 0.  */
@@ -312,8 +284,7 @@ arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
                                     arbint_limb_t di, unsigned shift) {
   static arbint_mod_u32_barrett_fn_t impl = NULL;
 
-  if (impl == NULL)
-    impl = arbint_select_mod_u32_barrett();
+  ARBINT_LAZY_INIT(impl, arbint_select_mod_u32_barrett);
 
   return impl(x, d_norm, di, shift);
 }
@@ -321,8 +292,7 @@ arbint_err_t arbint_mod_u32_barrett(arbint_t x, arbint_limb_t d_norm,
 arbint_err_t arbint_tdiv_q_3_dispatch(arbint_t q, const arbint_t n) {
   static arbint_tdiv_q_3_fn_t impl = NULL;
 
-  if (impl == NULL)
-    impl = arbint_select_tdiv_q_3();
+  ARBINT_LAZY_INIT(impl, arbint_select_tdiv_q_3);
 
   return impl(q, n);
 }
@@ -334,8 +304,7 @@ arbint_err_t arbint_mod_mag_single_limb(const arbint_limb_t * np, size_t nn,
                                         arbint_limb_t * rem_out) {
   static arbint_div_mag_single_limb_fn_t impl = NULL;
 
-  if (impl == NULL)
-    impl = arbint_select_div_mag_single_limb();
+  ARBINT_LAZY_INIT(impl, arbint_select_div_mag_single_limb);
 
   return impl(np, nn, d_limb, NULL, NULL, rem_out);
 }
@@ -348,40 +317,13 @@ arbint_err_t arbint_div_qr_u32_dispatch(arbint_t q, arbint_t r,
   static arbint_div_qr_u32_impl_fn_t impl = NULL;
 
   /*  Power-of-two fast path: use shift/mask instead of reciprocal.  */
-  if (arbint_div_is_pow2(dmag))
+  if (arbint_u32_is_pow2(dmag))
     return arbint_tdiv_qr_pow2(q, r, n, (unsigned) arbint_ctz_limb(dmag),
                                dsign);
 
-  if (impl == NULL)
-    impl = arbint_select_div_qr_u32_impl();
+  ARBINT_LAZY_INIT(impl, arbint_select_div_qr_u32_impl);
 
   return impl(q, r, n, dmag, dsign);
-}
-
-/*  Allocator helpers.  */
-
-static const arbint_alloc_t * arbint_get_alloc_from(const arbint_t x) {
-  if (x == NULL || x[0]._ctx == NULL || x[0]._ctx->a.realloc == NULL)
-    return NULL;
-  return &x[0]._ctx->a;
-}
-
-static const arbint_alloc_t * arbint_pick_alloc(const arbint_t a,
-                                                const arbint_t b,
-                                                const arbint_t c,
-                                                const arbint_t d) {
-  const arbint_alloc_t * alloc;
-
-  alloc = arbint_get_alloc_from(a);
-  if (alloc != NULL)
-    return alloc;
-  alloc = arbint_get_alloc_from(b);
-  if (alloc != NULL)
-    return alloc;
-  alloc = arbint_get_alloc_from(c);
-  if (alloc != NULL)
-    return alloc;
-  return arbint_get_alloc_from(d);
 }
 
 /*  Magnitude view and signed assignment.  */
@@ -507,8 +449,7 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
     static arbint_div_mag_single_limb_fn_t impl = NULL;
     arbint_limb_t rem_limb = 0u;
 
-    if (impl == NULL)
-      impl = arbint_select_div_mag_single_limb();
+    ARBINT_LAZY_INIT(impl, arbint_select_div_mag_single_limb);
 
     rc = impl(np, nn, dp[0], qmag, &q_used, &rem_limb);
     if (rc != ARBINT_OK) {
@@ -550,36 +491,6 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
 
 /*  Truncated division implementation (arbint / arbint).  */
 
-/*  Check if magnitude limbs represent a power of two.
-    If so, return the bit position (0 for 1, 1 for 2, etc.).
-    Otherwise return SIZE_MAX.
-
-    A power of two has exactly one set bit: all limbs except one are zero,
-    and that one limb has popcount == 1.  */
-static size_t arbint_mag_pow2_bit(const arbint_limb_t * dp, size_t dn) {
-  size_t i;
-  size_t nonzero_idx = SIZE_MAX;
-
-  for (i = 0u; i < dn; ++i) {
-    if (dp[i] != 0u) {
-      if (nonzero_idx != SIZE_MAX)
-        return SIZE_MAX; /* More than one nonzero limb. */
-      nonzero_idx = i;
-    }
-  }
-
-  if (nonzero_idx == SIZE_MAX)
-    return SIZE_MAX; /* All zeros (should not happen for normalized). */
-
-  /*  Check if the nonzero limb is a power of two.  */
-  arbint_limb_t limb = dp[nonzero_idx];
-  if ((limb & (limb - 1u)) != 0u)
-    return SIZE_MAX; /* Not a power of two. */
-
-  /*  Compute bit position: limb_idx * LIMB_BITS + ctz(limb).  */
-  return nonzero_idx * ARBINT_LIMB_BITS + arbint_ctz_limb(limb);
-}
-
 arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
                                  const arbint_t d) {
   const arbint_limb_t * np;
@@ -606,7 +517,7 @@ arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
     return ARBINT_EZERO;
 
   /*  Power-of-two fast path: divisor is 2^k for some k.  */
-  pow2_bit = arbint_mag_pow2_bit(dp, dn);
+  pow2_bit = arbint_mag_pow2_bit_or_size_max(dp, dn);
   if (pow2_bit != SIZE_MAX) {
     /*  k may exceed 32 bits for large divisors (2^64, 2^128, etc.).
         arbint_tdiv_qr_pow2 takes unsigned k, which may truncate.
@@ -622,7 +533,7 @@ arbint_err_t arbint_tdiv_qr_impl(arbint_t q, arbint_t r, const arbint_t n,
     }
   }
 
-  alloc = arbint_pick_alloc(q, r, n, d);
+  alloc = arbint_pick_alloc4(q, r, n, d);
   if (alloc == NULL)
     return ARBINT_EINVAL;
 
@@ -658,7 +569,7 @@ arbint_err_t arbint_divisible_u32(const arbint_t n, uint32_t d, int * out) {
   np = ARBINT_CLIMBS(n);
 
   /* Power of 2: O(1) - check if low bits are zero. */
-  if (arbint_div_is_pow2(d)) {
+  if (arbint_u32_is_pow2(d)) {
     uint32_t mask = d - 1u;
 #if ARBINT_LIMB_BITS == 64
     *out = ((uint32_t) np[0] & mask) == 0u;
@@ -781,10 +692,10 @@ arbint_err_t arbint_divisible(const arbint_t n, const arbint_t d, int * out) {
   }
 
   /* Power of 2: check if n has enough trailing zeros. */
-  pow2_bit = arbint_mag_pow2_bit(dp, dn);
+  pow2_bit = arbint_mag_pow2_bit_or_size_max(dp, dn);
   if (pow2_bit != SIZE_MAX) {
     /* d = 2^pow2_bit. n is divisible iff n has >= pow2_bit trailing zeros. */
-    *out = (arbint_mag_ctz(np, nn) >= pow2_bit);
+    *out = (arbint_mag_ctz_or_size_max(np, nn) >= pow2_bit);
     return ARBINT_OK;
   }
 

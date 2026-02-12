@@ -17,6 +17,7 @@
 
 #include "arbint_ntt.h"
 #include "arbint_cpu.h"
+#include "arbint_internal_util.h"
 #include "config.h"
 
 /*  Function pointer type for NTT multiplication dispatch.  */
@@ -58,8 +59,7 @@ arbint_err_t arbint_mul_mag_ntt(arbint_limb_t * dst, size_t * out_used,
                                 const arbint_limb_t * a, size_t an,
                                 const arbint_limb_t * b, size_t bn,
                                 const arbint_alloc_t * alloc) {
-  if (g_mul_mag_ntt == NULL)
-    g_mul_mag_ntt = arbint_select_mul_mag_ntt();
+  ARBINT_LAZY_INIT(g_mul_mag_ntt, arbint_select_mul_mag_ntt);
 
   return g_mul_mag_ntt(dst, out_used, a, an, b, bn, alloc);
 }

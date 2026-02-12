@@ -20,6 +20,7 @@
 #include "arbint_addsub.h"
 #include "arbint_cpu.h"
 #include "arbint_div.h"
+#include "arbint_internal_util.h"
 #include "arbint_shift.h"
 #include "config.h"
 
@@ -75,31 +76,8 @@ static arbint_err_t arbint_gcd_lehmer_dispatch(arbint_t g,
                                                const arbint_limb_t * bp,
                                                size_t bn,
                                                const arbint_alloc_t * alloc) {
-  if (g_gcd_lehmer == NULL)
-    g_gcd_lehmer = arbint_select_gcd_lehmer();
+  ARBINT_LAZY_INIT(g_gcd_lehmer, arbint_select_gcd_lehmer);
   return g_gcd_lehmer(g, ap, an, bp, bn, alloc);
-}
-
-/*  Allocator selection helpers.  */
-
-static const arbint_alloc_t * arbint_gcd_get_alloc_from(const arbint_t x) {
-  if (x == NULL || x[0]._ctx == NULL || x[0]._ctx->a.realloc == NULL)
-    return NULL;
-  return &x[0]._ctx->a;
-}
-
-static const arbint_alloc_t * arbint_gcd_pick_alloc(const arbint_t a,
-                                                    const arbint_t b,
-                                                    const arbint_t c) {
-  const arbint_alloc_t * alloc;
-
-  alloc = arbint_gcd_get_alloc_from(a);
-  if (alloc != NULL)
-    return alloc;
-  alloc = arbint_gcd_get_alloc_from(b);
-  if (alloc != NULL)
-    return alloc;
-  return arbint_gcd_get_alloc_from(c);
 }
 
 /*  Binary GCD (Stein's algorithm) for medium-size operands.
@@ -327,7 +305,7 @@ ARBINT_API arbint_err_t arbint_gcd(arbint_t g, const arbint_t a,
     return arbint_gcd_euclid(g, a, b);
 
   /*  Get allocator for large operand paths.  */
-  alloc = arbint_gcd_pick_alloc(g, a, b);
+  alloc = arbint_pick_alloc3(g, a, b);
   if (alloc == NULL)
     return ARBINT_EINVAL;
 

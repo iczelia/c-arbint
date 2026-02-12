@@ -18,6 +18,7 @@
 #include "arbint_bitops.h"
 #include "arbint.h"
 #include "arbint_cpu.h"
+#include "arbint_internal_util.h"
 #include "config.h"
 
 #include <limits.h>
@@ -225,8 +226,7 @@ static arbint_popcount_limbs_fn_t arbint_select_popcount_limbs(void) {
 static size_t arbint_popcount_limbs(const arbint_limb_t * x, size_t n) {
   static arbint_popcount_limbs_fn_t impl = NULL;
 
-  if (impl == NULL)
-    impl = arbint_select_popcount_limbs();
+  ARBINT_LAZY_INIT(impl, arbint_select_popcount_limbs);
 
   return impl(x, n);
 }
@@ -269,8 +269,7 @@ static size_t arbint_hamming_limbs(const arbint_limb_t * a, size_t an,
                                    const arbint_limb_t * b, size_t bn) {
   static arbint_hamming_limbs_fn_t impl = NULL;
 
-  if (impl == NULL)
-    impl = arbint_select_hamming_limbs();
+  ARBINT_LAZY_INIT(impl, arbint_select_hamming_limbs);
 
   return impl(a, an, b, bn);
 }
@@ -533,8 +532,8 @@ arbint_err_t arbint_clrbit(arbint_t x, size_t bit_index) {
 /*  Count trailing zeros in |x|.  Returns EDOM if x == 0.  */
 arbint_err_t arbint_ctz(const arbint_t x, size_t * out) {
   size_t used;
-  size_t i;
   const arbint_limb_t * p;
+  size_t ctz;
 
   if (x == NULL || out == NULL)
     return ARBINT_EINVAL;
@@ -544,14 +543,11 @@ arbint_err_t arbint_ctz(const arbint_t x, size_t * out) {
     return ARBINT_EDOM;
 
   p = ARBINT_CLIMBS(x);
-  for (i = 0u; i < used; ++i) {
-    if (p[i] != 0u) {
-      *out = i * ARBINT_LIMB_BITS + arbint_ctz_limb(p[i]);
-      return ARBINT_OK;
-    }
-  }
-
-  return ARBINT_EDOM;
+  ctz = arbint_mag_ctz_or_size_max(p, used);
+  if (ctz == SIZE_MAX)
+    return ARBINT_EDOM;
+  *out = ctz;
+  return ARBINT_OK;
 }
 
 /* ========== Public API: clz ========== */

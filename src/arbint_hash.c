@@ -20,6 +20,7 @@
 #include "config.h"
 
 #include "arbint_cpu.h"
+#include "arbint_internal_util.h"
 
 #include <string.h>
 
@@ -269,8 +270,7 @@ ARBINT_API arbint_err_t arbint_hash_slow(const arbint_t op, uint8_t * out_hash,
     return ARBINT_OK;
 
   /*  One-time initialization.  */
-  if (sha256_compress == NULL)
-    sha256_compress = arbint_select_sha256_compress();
+  ARBINT_LAZY_INIT(sha256_compress, arbint_select_sha256_compress);
 
   if (hash_len <= 32u) {
     /*  Single SHA-256, possibly truncated.  */
@@ -326,8 +326,7 @@ ARBINT_API arbint_err_t arbint_hash_fast(const arbint_t op,
     return ARBINT_EINVAL;
 
   /*  One-time initialization.  */
-  if (crc32c_impl == NULL)
-    crc32c_impl = arbint_select_crc32c();
+  ARBINT_LAZY_INIT(crc32c_impl, arbint_select_crc32c);
 
   ctx.crc = 0xFFFFFFFFu;
   ctx.fn = crc32c_impl;
