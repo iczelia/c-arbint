@@ -955,6 +955,8 @@ jobs:
             image: debian:bookworm-slim
             image_tag: debian-bookworm
             compiler: clang
+            # Clang on Debian mips64le passes wrong linker emulation (-m elf instead of -m elf64ltsmip)
+            ldflags: "-Wl,-m,elf64ltsmip"
           # arm32v7 - ARMv7 32-bit (Raspberry Pi 2/3/4 in 32-bit mode)
           - arch: arm32v7
             platform: linux/arm/v7
@@ -990,6 +992,7 @@ jobs:
           docker run --rm \
             --platform ${{ matrix.platform }} \
             -e CC="${{ matrix.compiler }}" \
+            -e EXTRA_LDFLAGS="${{ matrix.ldflags }}" \
             -v "$PWD/dist:/work/dist" \
             -v "$PWD/artifacts:/work/artifacts" \
             -w /work \
@@ -1019,7 +1022,14 @@ jobs:
               srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
               tar -xf "$tarball" -C dist
               cd "dist/$srcdir"
-              ./configure --enable-shared --disable-static --enable-lto=no
+
+              # Apply extra LDFLAGS if specified (e.g., for mips64le clang linker emulation fix)
+              configure_ldflags=""
+              if [ -n "${EXTRA_LDFLAGS:-}" ]; then
+                configure_ldflags="LDFLAGS=$EXTRA_LDFLAGS"
+              fi
+
+              ./configure --enable-shared --disable-static --enable-lto=no $configure_ldflags
               jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
               make -j"$jobs"
               make check
