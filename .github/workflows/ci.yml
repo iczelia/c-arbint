@@ -955,8 +955,9 @@ jobs:
             image: debian:bookworm-slim
             image_tag: debian-bookworm
             compiler: clang
-            # Clang on Debian mips64le passes wrong linker emulation (-m elf instead of -m elf64ltsmip)
-            ldflags: "-Wl,-m,elf64ltsmip"
+            # Clang on Debian mips64le is misconfigured - force correct target triple
+            cflags: "--target=mips64el-linux-gnuabi64"
+            ldflags: "--target=mips64el-linux-gnuabi64"
           # arm32v7 - ARMv7 32-bit (Raspberry Pi 2/3/4 in 32-bit mode)
           - arch: arm32v7
             platform: linux/arm/v7
@@ -992,6 +993,7 @@ jobs:
           docker run --rm \
             --platform ${{ matrix.platform }} \
             -e CC="${{ matrix.compiler }}" \
+            -e EXTRA_CFLAGS="${{ matrix.cflags }}" \
             -e EXTRA_LDFLAGS="${{ matrix.ldflags }}" \
             -v "$PWD/dist:/work/dist" \
             -v "$PWD/artifacts:/work/artifacts" \
@@ -1023,13 +1025,16 @@ jobs:
               tar -xf "$tarball" -C dist
               cd "dist/$srcdir"
 
-              # Apply extra LDFLAGS if specified (e.g., for mips64le clang linker emulation fix)
-              configure_ldflags=""
+              # Build extra configure flags (e.g., for mips64le clang target triple fix)
+              configure_extra=""
+              if [ -n "${EXTRA_CFLAGS:-}" ]; then
+                configure_extra="$configure_extra CFLAGS=\"$EXTRA_CFLAGS\""
+              fi
               if [ -n "${EXTRA_LDFLAGS:-}" ]; then
-                configure_ldflags="LDFLAGS=$EXTRA_LDFLAGS"
+                configure_extra="$configure_extra LDFLAGS=\"$EXTRA_LDFLAGS\""
               fi
 
-              ./configure --enable-shared --disable-static --enable-lto=no $configure_ldflags
+              eval ./configure --enable-shared --disable-static --enable-lto=no $configure_extra
               jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 2)"
               make -j"$jobs"
               make check
