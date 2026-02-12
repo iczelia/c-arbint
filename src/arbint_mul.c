@@ -763,9 +763,6 @@ arbint_err_t arbint_root(arbint_t rop, const arbint_t a, uint32_t k) {
       - k=3 specialized path:
           t = floor((2*x + floor(a / x^2)) / 3)
         Uses squaring and u32-division by 3 fast path.
-      - k=4 specialized path:
-          t = floor((3*x + floor(a / x^3)) / 4)
-        Uses final division by 4 via right shift by 2.
       - generic path:
           t = floor(((k-1)*x + floor(a / x^(k-1))) / k)
       Terminate when t >= x.  */
