@@ -1,8 +1,0 @@
-- string conversion: arbint_set_str, arbint_get_str (base 2-36).
-- floor/ceiling division variants (arbint_fdiv_*, arbint_cdiv_*).
-- number-theoretic functions: arbint_isprime, arbint_totient, arbint_carmichael,
-  arbint_moebius, arbint_inv_mod, arbint_is_square, arbint_is_power, arbint_root.
-- speedups to arbint_mul (memory reuse, schonhage-strassen, toom-cook).
-- potential speedups to the comparison functions, if possible via vector
-  instructions. needs investigation.
-- clean up the ci configuration.
