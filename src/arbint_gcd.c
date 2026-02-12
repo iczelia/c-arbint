@@ -554,11 +554,9 @@ static arbint_err_t arbint_xgcd_lincomb_sub(arbint_t out, const arbint_t lhs,
 }
 
 /*  Apply one Lehmer block transform to pair (x0, x1).  */
-static arbint_err_t
-arbint_xgcd_apply_lehmer_pair(arbint_t x0, arbint_t x1,
-                              const arbint_lehmer_matrix_t * m, int even,
-                              arbint_t out0, arbint_t out1, arbint_t tmp0,
-                              arbint_t tmp1) {
+static arbint_err_t arbint_xgcd_apply_lehmer_pair(
+    arbint_t x0, arbint_t x1, const arbint_lehmer_matrix_t * m, int even,
+    arbint_t out0, arbint_t out1, arbint_t tmp0, arbint_t tmp1) {
   arbint_err_t rc;
 
   if (even) {
@@ -660,8 +658,8 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
   }
 
   /*  Initialize working temporaries.  */
-  rc = arbint_init_all(ctx, r0, r1, s0, s1, t0, t1, q, tmp, pair0, pair1, prod0,
-                       prod1, (arbint_t *) NULL);
+  rc = arbint_init_all(ctx, r0, r1, s0, s1, t0, t1, q, tmp, pair0, pair1,
+                       prod0, prod1, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     goto cleanup;
   init_work = 1;
@@ -712,22 +710,22 @@ ARBINT_API arbint_err_t arbint_xgcd(arbint_t g, arbint_t x, arbint_t y,
 
     if (count != 0u) {
       /*  Apply same Lehmer block to remainders and both coefficient pairs.  */
-      rc = arbint_xgcd_apply_lehmer_pair(r0, r1, &m, even, pair0, pair1,
-                                         prod0, prod1);
+      rc = arbint_xgcd_apply_lehmer_pair(r0, r1, &m, even, pair0, pair1, prod0,
+                                         prod1);
       if (rc != ARBINT_OK)
         goto cleanup;
       arbint_swap(r0, pair0);
       arbint_swap(r1, pair1);
 
-      rc = arbint_xgcd_apply_lehmer_pair(s0, s1, &m, even, pair0, pair1,
-                                         prod0, prod1);
+      rc = arbint_xgcd_apply_lehmer_pair(s0, s1, &m, even, pair0, pair1, prod0,
+                                         prod1);
       if (rc != ARBINT_OK)
         goto cleanup;
       arbint_swap(s0, pair0);
       arbint_swap(s1, pair1);
 
-      rc = arbint_xgcd_apply_lehmer_pair(t0, t1, &m, even, pair0, pair1,
-                                         prod0, prod1);
+      rc = arbint_xgcd_apply_lehmer_pair(t0, t1, &m, even, pair0, pair1, prod0,
+                                         prod1);
       if (rc != ARBINT_OK)
         goto cleanup;
       arbint_swap(t0, pair0);
@@ -798,8 +796,8 @@ copy_results:
 
 cleanup:
   if (init_work)
-    arbint_clear_all(r0, r1, s0, s1, t0, t1, q, tmp, pair0, pair1, prod0, prod1,
-                     (arbint_t *) NULL);
+    arbint_clear_all(r0, r1, s0, s1, t0, t1, q, tmp, pair0, pair1, prod0,
+                     prod1, (arbint_t *) NULL);
   arbint_clear_all(res_g, res_x, res_y, (arbint_t *) NULL);
   return rc;
 }

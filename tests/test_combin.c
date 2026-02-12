@@ -563,8 +563,8 @@ static void test_isprime_basic(void) {
   static const struct {
     int32_t n;
     int is_prime;
-  } cases[] = {{-17, 0}, {-1, 0}, {0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 0},
-               {5, 1},  {9, 0},  {17, 1}, {19, 1}, {21, 0}, {97, 1}};
+  } cases[] = {{-17, 0}, {-1, 0}, {0, 0},  {1, 0},  {2, 1},  {3, 1}, {4, 0},
+               {5, 1},   {9, 0},  {17, 1}, {19, 1}, {21, 0}, {97, 1}};
   static const uint32_t carmichael[] = {561u, 1105u, 1729u, 2465u, 6601u};
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
@@ -693,8 +693,8 @@ static void test_totient_basic(void) {
   static const struct {
     uint32_t n;
     uint32_t phi;
-  } cases[] = {{1u, 1u},   {2u, 1u},   {3u, 2u},   {4u, 2u},   {5u, 4u},
-               {6u, 2u},   {8u, 4u},   {9u, 6u},   {10u, 4u},  {12u, 4u},
+  } cases[] = {{1u, 1u},   {2u, 1u},   {3u, 2u},    {4u, 2u},  {5u, 4u},
+               {6u, 2u},   {8u, 4u},   {9u, 6u},    {10u, 4u}, {12u, 4u},
                {36u, 12u}, {97u, 96u}, {561u, 320u}};
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
@@ -748,7 +748,7 @@ static void test_primorial_basic(void) {
   static const struct {
     int32_t n;
     uint32_t primorial;
-  } cases[] = {{0, 1u}, {1, 1u}, {2, 2u}, {3, 6u},
+  } cases[] = {{0, 1u}, {1, 1u},  {2, 2u},    {3, 6u},
                {4, 6u}, {5, 30u}, {10, 210u}, {11, 2310u}};
 
   CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);

@@ -102,8 +102,8 @@ typedef struct arbint_ntt_roots {
 
   /*  Full omega tables for stages [0, full_max_log2).
       omega_full[s] points to 2^s entries: omega_m^0, omega_m^1, ...,
-      omega_m^(2^s-1) where omega_m = omega[s] is the primitive 2^(s+1)-th root.
-      NULL if not allocated.  */
+      omega_m^(2^s-1) where omega_m = omega[s] is the primitive 2^(s+1)-th
+      root. NULL if not allocated.  */
   uint64_t ** omega_full;
   uint64_t ** omega_inv_full;
   unsigned full_max_log2; /* Stages with full tables allocated */
