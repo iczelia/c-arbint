@@ -321,12 +321,20 @@ arbint_err_t arbint_gcd_lehmer_bmi2(arbint_t g, const arbint_limb_t * ap,
     unsigned count;
     int even;
 
-    a1 = up[un - 1u];
-    a0 = (un >= 2u) ? up[un - 2u] : 0u;
-    b1 = vp[vn - 1u];
-    b0 = (vn >= 2u) ? vp[vn - 2u] : 0u;
+    /*  Lehmer simulation is only reliable when operand lengths are close.
+        If u has at least two more limbs than v, the true quotient may be
+        very large while top-limb simulation suggests a tiny q; force an
+        exact division step in that case.  */
+    if (un > vn + 1u) {
+      count = 0u;
+    } else {
+      a1 = up[un - 1u];
+      a0 = (un >= 2u) ? up[un - 2u] : 0u;
+      b1 = vp[vn - 1u];
+      b0 = (vn >= 2u) ? vp[vn - 2u] : 0u;
 
-    count = arbint_lehmer_step(&m, a1, a0, b1, b0, &even);
+      count = arbint_lehmer_step(&m, a1, a0, b1, b0, &even);
+    }
 
     if (count == 0u) {
       /*  Simulation unsafe; do one Euclidean step (u = u mod v).

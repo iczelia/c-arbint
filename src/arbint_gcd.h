@@ -187,7 +187,9 @@ static inline unsigned arbint_lehmer_step(arbint_lehmer_matrix_t * m,
     t0 = b0;
     t1 = b1;
 
-    /*  a - q*b with borrow.  */
+    /*  a - q*b with borrow.
+        Compute q*b as a two-limb value. If q*b does not fit in two limbs,
+        simulation is unsafe and we must stop (caller will do a full step).  */
     {
       arbint_limb_t prod_lo;
       arbint_limb_t prod_hi;
@@ -202,16 +204,48 @@ static inline unsigned arbint_lehmer_step(arbint_lehmer_matrix_t * m,
       arbint_limb_t x2 = q_hi * b_lo;
       arbint_limb_t x3 = q_hi * b_hi;
       arbint_limb_t mid = (x0 >> 32) + (x1 & 0xFFFFFFFFu) + (x2 & 0xFFFFFFFFu);
+      arbint_limb_t qb1_lo;
+      arbint_limb_t qb1_hi;
+      arbint_limb_t y0, y1, y2, y3, ymid;
       prod_lo = (mid << 32) | (x0 & 0xFFFFFFFFu);
       prod_hi = x3 + (x1 >> 32) + (x2 >> 32) + (mid >> 32);
+
+      /*  Compute q*b1 as a 128-bit product split into qb1_hi:qb1_lo.  */
+      y0 = q_lo * (b1 & 0xFFFFFFFFu);
+      y1 = q_lo * (b1 >> 32);
+      y2 = q_hi * (b1 & 0xFFFFFFFFu);
+      y3 = q_hi * (b1 >> 32);
+      ymid = (y0 >> 32) + (y1 & 0xFFFFFFFFu) + (y2 & 0xFFFFFFFFu);
+      qb1_lo = (ymid << 32) | (y0 & 0xFFFFFFFFu);
+      qb1_hi = y3 + (y1 >> 32) + (y2 >> 32) + (ymid >> 32);
+
+      /*  q*b = q*b0 + (q*b1)<<64 must fit in two limbs:
+          - q*b1 must fit in one limb (qb1_hi == 0)
+          - prod_hi + qb1_lo must not overflow limb.  */
+      if (qb1_hi != 0u)
+        break;
+      if (prod_hi > ~(arbint_limb_t) 0 - qb1_lo)
+        break;
+      prod_hi += qb1_lo;
 #else
       /*  32-bit limbs: use 64-bit arithmetic.  */
       uint64_t prod64 = (uint64_t) q * b0;
+      uint64_t qb1_64;
+      arbint_limb_t qb1_lo;
       prod_lo = (arbint_limb_t) prod64;
       prod_hi = (arbint_limb_t) (prod64 >> 32);
-#endif
 
-      prod_hi += q * b1;
+      /*  q*b = q*b0 + (q*b1)<<32 must fit in two limbs:
+          - q*b1 must fit in one limb
+          - prod_hi + q*b1 must not overflow limb.  */
+      qb1_64 = (uint64_t) q * (uint64_t) b1;
+      if ((qb1_64 >> 32) != 0u)
+        break;
+      qb1_lo = (arbint_limb_t) qb1_64;
+      if (prod_hi > (arbint_limb_t) UINT32_MAX - qb1_lo)
+        break;
+      prod_hi += qb1_lo;
+#endif
 
       /*  a - prod.  */
       if (a0 < prod_lo) {
