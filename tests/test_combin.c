@@ -615,6 +615,77 @@ static void test_isprime_basic(void) {
   arbint_ctx_clear(&ctx);
 }
 
+static void test_next_prev_prime(void) {
+  arbint_ctx_t ctx;
+  arbint_t n, p;
+  int is_prime = 0;
+
+  CHECK_EQ_I(arbint_ctx_init_default(&ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(n, &ctx), ARBINT_OK);
+  CHECK_EQ_I(arbint_init(p, &ctx), ARBINT_OK);
+
+  CHECK_EQ_I(arbint_nextprime(NULL, n), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_nextprime(p, NULL), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_prevprime(NULL, n), ARBINT_EINVAL);
+  CHECK_EQ_I(arbint_prevprime(p, NULL), ARBINT_EINVAL);
+
+  CHECK_EQ_I(arbint_set_i32(n, -100), ARBINT_OK);
+  CHECK_EQ_I(arbint_nextprime(p, n), ARBINT_OK);
+  check_i32_value(p, 2);
+
+  CHECK_EQ_I(arbint_set_i32(n, 2), ARBINT_OK);
+  CHECK_EQ_I(arbint_nextprime(p, n), ARBINT_OK);
+  check_i32_value(p, 3);
+
+  CHECK_EQ_I(arbint_set_i32(n, 3), ARBINT_OK);
+  CHECK_EQ_I(arbint_nextprime(p, n), ARBINT_OK);
+  check_i32_value(p, 5);
+
+  CHECK_EQ_I(arbint_set_i32(n, 17), ARBINT_OK);
+  CHECK_EQ_I(arbint_nextprime(p, n), ARBINT_OK);
+  check_i32_value(p, 19);
+
+  CHECK_EQ_I(arbint_set_i32(n, 18), ARBINT_OK);
+  CHECK_EQ_I(arbint_prevprime(p, n), ARBINT_OK);
+  check_i32_value(p, 17);
+
+  CHECK_EQ_I(arbint_set_i32(n, 3), ARBINT_OK);
+  CHECK_EQ_I(arbint_prevprime(p, n), ARBINT_OK);
+  check_i32_value(p, 2);
+
+  CHECK_EQ_I(arbint_set_i32(n, 2), ARBINT_OK);
+  CHECK_EQ_I(arbint_prevprime(p, n), ARBINT_EDOM);
+  CHECK_EQ_I(arbint_set_i32(n, 1), ARBINT_OK);
+  CHECK_EQ_I(arbint_prevprime(p, n), ARBINT_EDOM);
+  CHECK_EQ_I(arbint_set_i32(n, -10), ARBINT_OK);
+  CHECK_EQ_I(arbint_prevprime(p, n), ARBINT_EDOM);
+
+  /*  Aliasing: rop == n.  */
+  CHECK_EQ_I(arbint_set_i32(n, 100), ARBINT_OK);
+  CHECK_EQ_I(arbint_nextprime(n, n), ARBINT_OK);
+  check_i32_value(n, 101);
+
+  CHECK_EQ_I(arbint_set_i32(n, 100), ARBINT_OK);
+  CHECK_EQ_I(arbint_prevprime(n, n), ARBINT_OK);
+  check_i32_value(n, 97);
+
+  /*  Property checks for a larger value.  */
+  CHECK_EQ_I(arbint_set_u32(n, 1000000000u), ARBINT_OK);
+  CHECK_EQ_I(arbint_nextprime(p, n), ARBINT_OK);
+  CHECK_EQ_I(arbint_isprime(p, 0, &is_prime), ARBINT_OK);
+  CHECK_EQ_I(is_prime, 1);
+  CHECK(arbint_cmp(p, n) > 0);
+
+  CHECK_EQ_I(arbint_prevprime(p, n), ARBINT_OK);
+  CHECK_EQ_I(arbint_isprime(p, 0, &is_prime), ARBINT_OK);
+  CHECK_EQ_I(is_prime, 1);
+  CHECK(arbint_cmp(p, n) < 0);
+
+  arbint_clear(p);
+  arbint_clear(n);
+  arbint_ctx_clear(&ctx);
+}
+
 /*  Main.  */
 
 int main(void) {
@@ -648,6 +719,7 @@ int main(void) {
   test_is_square_basic();
   test_is_square_large();
   test_isprime_basic();
+  test_next_prev_prime();
 
   ARBINT_TEST_FINISH("test_combin");
 }

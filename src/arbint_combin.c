@@ -619,6 +619,130 @@ cleanup:
   return rc;
 }
 
+/*  Find the smallest prime strictly greater than n.  */
+arbint_err_t arbint_nextprime(arbint_t rop, const arbint_t n) {
+  arbint_ctx_t * ctx;
+  arbint_t cand;
+  arbint_err_t rc;
+  int is_prime = 0;
+
+  if (rop == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init(cand, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_add_i32(cand, n, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  For n < 2, next prime is 2.  */
+  if (cand[0]._sz <= 0 || arbint_cmp_u32(cand, 2u) <= 0) {
+    rc = arbint_set_u32(rop, 2u);
+    goto cleanup;
+  }
+
+  /*  Keep candidate odd (all odd primes > 2).  */
+  if ((ARBINT_CLIMBS(cand)[0] & 1u) == 0u) {
+    rc = arbint_add_i32(cand, cand, 1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  for (;;) {
+    rc = arbint_isprime(cand, 0, &is_prime);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (is_prime) {
+      rc = arbint_set(rop, cand);
+      goto cleanup;
+    }
+
+    rc = arbint_add_i32(cand, cand, 2);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+cleanup:
+  arbint_clear(cand);
+  return rc;
+}
+
+/*  Find the largest prime strictly smaller than n.
+    Returns ARBINT_EDOM when no such prime exists (n <= 2).  */
+arbint_err_t arbint_prevprime(arbint_t rop, const arbint_t n) {
+  arbint_ctx_t * ctx;
+  arbint_t cand;
+  arbint_err_t rc;
+  int is_prime = 0;
+
+  if (rop == NULL || n == NULL)
+    return ARBINT_EINVAL;
+
+  /*  No prime exists below 2.  */
+  if (n[0]._sz <= 0 || arbint_cmp_u32(n, 2u) <= 0)
+    return ARBINT_EDOM;
+
+  ctx = rop[0]._ctx;
+  if (ctx == NULL)
+    ctx = n[0]._ctx;
+
+  rc = arbint_init(cand, ctx);
+  if (rc != ARBINT_OK)
+    return rc;
+
+  rc = arbint_sub_i32(cand, n, 1);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  if (arbint_cmp_u32(cand, 2u) == 0) {
+    rc = arbint_set_u32(rop, 2u);
+    goto cleanup;
+  }
+
+  if (cand[0]._sz <= 0 || arbint_cmp_u32(cand, 2u) < 0) {
+    rc = ARBINT_EDOM;
+    goto cleanup;
+  }
+
+  /*  Keep candidate odd (all odd primes > 2).  */
+  if ((ARBINT_CLIMBS(cand)[0] & 1u) == 0u) {
+    rc = arbint_sub_i32(cand, cand, 1);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+  for (;;) {
+    if (arbint_cmp_u32(cand, 2u) < 0) {
+      rc = ARBINT_EDOM;
+      goto cleanup;
+    }
+
+    rc = arbint_isprime(cand, 0, &is_prime);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    if (is_prime) {
+      rc = arbint_set(rop, cand);
+      goto cleanup;
+    }
+
+    rc = arbint_sub_i32(cand, cand, 2);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+  }
+
+cleanup:
+  arbint_clear(cand);
+  return rc;
+}
+
 /*  Test if a is a perfect power (a = b^k for some integers b, k >= 2).
 
     Sets *out = 1 if such b, k exist, 0 otherwise.
