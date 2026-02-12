@@ -47,7 +47,15 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap qemu-user-static binfmt-support debian-ports-archive-keyring
+          sudo apt-get install -y debootstrap qemu-user-static binfmt-support
+
+          # Fetch the latest debian-ports archive keyring from Debian's package repo
+          # This avoids hardcoding key URLs that change yearly
+          keyring_url=$(curl -fsSL https://deb.debian.org/debian-ports/pool/main/d/debian-ports-archive-keyring/ \
+            | grep -oP 'href="\Kdebian-ports-archive-keyring_[^"]+_all\.deb' \
+            | sort -V | tail -1)
+          curl -fsSL "https://deb.debian.org/debian-ports/pool/main/d/debian-ports-archive-keyring/${keyring_url}" -o /tmp/keyring.deb
+          sudo dpkg -i /tmp/keyring.deb
 
           # Enable binfmt_misc for all architectures
           sudo update-binfmts --enable
