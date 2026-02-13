@@ -120,18 +120,40 @@ jobs:
           name: c-arbint-binaries-repacked
           path: binaries-archive
 
+      - name: Install binary bundling dependencies
+        run: |
+          sudo apt -o Acquire::Retries=5 update
+          sudo apt -o Acquire::Retries=5 install -y bzip3 zip xz-utils
+
       - name: Organize artifacts
         run: |
-          mkdir -p final-artifacts
+          version="${{ needs.create-release-artifacts.outputs.version }}"
+          bundle_dir="c-arbint-${version}-bin"
+
+          mkdir -p final-artifacts "$bundle_dir" binary-staging
 
           # Copy release tarballs
           cp release-artifacts/* final-artifacts/
 
-          # Extract binaries from the repacked archive
-          cd binaries-archive
-          tar -xJf c-arbint-binaries.tar.xz
-          cp libarbint-* ../final-artifacts/ 2>/dev/null || true
-          cd ..
+          # Extract binaries from the repacked archive and stage them in
+          # c-arbint-${version}-bin to keep release assets compact.
+          tar -xJf binaries-archive/c-arbint-binaries.tar.xz -C binary-staging
+          if compgen -G "binary-staging/libarbint-*" > /dev/null; then
+            cp binary-staging/libarbint-* "$bundle_dir"/
+          else
+            echo "No libarbint-* binaries were found in c-arbint-binaries.tar.xz" >&2
+            exit 1
+          fi
+
+          (
+            cd "$bundle_dir"
+            tar -cJf "../final-artifacts/${bundle_dir}.tar.xz" .
+            tar -cf "../final-artifacts/${bundle_dir}.tar" .
+            zip -r "../final-artifacts/${bundle_dir}.zip" .
+          )
+          bzip3 -vfe "final-artifacts/${bundle_dir}.tar"
+
+          rm -rf "$bundle_dir" binary-staging
 
           echo "=== Final artifacts ==="
           ls -lh final-artifacts/
@@ -160,6 +182,9 @@ jobs:
             - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}.zip`
 
             #### Pre-built Shared Libraries
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.tar.xz`
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.tar.bz3`
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.zip`
 
             Binary naming convention: `libarbint-{tuple}-{compiler}.{ext}`
 
