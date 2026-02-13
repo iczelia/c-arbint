@@ -81,8 +81,8 @@ arbint_err_t arbint_mul_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used
     so the squaring optimization applies recursively at every level.
 
     Preconditions:
-    - an exceeds ARBINT_NTT_MAX_SIZE (requires segmentation)
-    - dst must have capacity for 2*an limbs
+    - 2*an > ARBINT_NTT_MAX_SIZE (requires segmentation)
+    - dst must have capacity for 2*an + 1 limbs
 
     Returns result limb count via out_used.  */
 arbint_err_t arbint_sqr_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used,
@@ -90,15 +90,15 @@ arbint_err_t arbint_sqr_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used
                                           const arbint_alloc_t * alloc);
 
 /*  Check if operands require segmented multiplication.
-    Returns 1 if either operand exceeds ARBINT_NTT_MAX_SIZE.  */
+    Returns 1 if convolution length an + bn exceeds ARBINT_NTT_MAX_SIZE.  */
 static inline int arbint_needs_segmented_ntt(size_t an, size_t bn) {
-  return (an > ARBINT_NTT_MAX_SIZE || bn > ARBINT_NTT_MAX_SIZE) ? 1 : 0;
+  return (an + bn > ARBINT_NTT_MAX_SIZE) ? 1 : 0;
 }
 
 /*  Check if operand requires segmented squaring.
-    Returns 1 if operand exceeds ARBINT_NTT_MAX_SIZE.  */
+    Returns 1 if convolution length 2*an exceeds ARBINT_NTT_MAX_SIZE.  */
 static inline int arbint_needs_segmented_ntt_sqr(size_t an) {
-  return (an > ARBINT_NTT_MAX_SIZE) ? 1 : 0;
+  return (2u * an > ARBINT_NTT_MAX_SIZE) ? 1 : 0;
 }
 
 #endif /*  ARBINT_NTT_SEGMENTED_H  */
