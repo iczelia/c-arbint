@@ -1,4 +1,4 @@
-2026-02-12  Kamila Szewczyk  <k@iczelia.net>
+2026-02-13  Kamila Szewczyk  <k@iczelia.net>
 
 	* Version 0.0.4 released.
 
@@ -9,18 +9,20 @@
 	arm32v5. All exotic architectures build without LTO due to toolchain
 	limitations. Use debian-ports images for ppc64/powerpc/hppa/m68k/sh4/
 	alpha via urbanogilson/debian-debootstrap-ports.
+	Ensure file(1) is installed in exotic Docker jobs so libtool can
+	detect mips64 linker emulation correctly (avoid invalid "-m elf").
 
 	* .github/workflows/release.yml: Update release notes template with
 	all supported architecture tuples including new exotic targets.
+	Bundle binary artifacts into c-arbint-<version>-bin.tar.xz,
+	c-arbint-<version>-bin.tar.bz3, and c-arbint-<version>-bin.zip
+	instead of uploading each libarbint-* file individually.
 
 	* tests/run_wasm_test.sh: Pass through extra command-line arguments
 	to wasm test binaries (e.g., --test flag for dc demo).
 
 	* demos/Makefile.am: Add dc_LOG_FLAGS = --test to run dc demo in
 	automated test mode instead of interactive mode.
-
-	* README.md: Update supported platforms section with expanded list
-	of exotic architectures tested via Docker QEMU emulation.
 
 	* src/arbint_str.c, src/arbint_str.h: New files. Implement string
 	conversion functions arbint_set_str and arbint_get_str. Supports
@@ -57,7 +59,7 @@
 
 	* src/arbint_combin.c: Add arbint_is_power (perfect power detection).
 	Determines if |a| = b^k for some integer b and k >= 2. Returns
-	the smallest such exponent k, or 0 if not a perfect power. Uses
+	1 if a perfect power exists, 0 otherwise. Uses
 	static table of 97 primes (up to 521) for small exponents, with
 	dynamically cached sieve for larger prime exponents. Handles edge
 	cases: 0 and +/-1 specially, even exponents forbidden for negative
@@ -145,12 +147,6 @@
 	to public API. Remove "unimplemented" comment block as all listed
 	functions are now implemented.
 
-	* man/c-arbint.3.in: Document all new API functions including
-	string conversion, extended GCD, combinatorial functions, roots,
-	perfect power detection, number-theoretic functions, primality
-	testing, modular inverse, and factor removal. Update GCD algorithm
-	section with Lehmer algorithm description.
-
 2026-02-11  Kamila Szewczyk  <k@iczelia.net>
 
 	* Version 0.0.3 released.
@@ -222,10 +218,6 @@
 	basic cases, zeros, negative inputs, aliasing, symmetry, multi-limb
 	operands, Fibonacci pairs (worst-case), scaling property, threshold
 	boundaries, and stochastic verification.
-
-	* man/c-arbint.3: Reorganize for clarity. Document divisibility
-	testing, floor/ceiling division, fused multiply-accumulate, NTT
-	multiplication algorithm, GCD/LCM functions.
 
 	* include/arbint.h: Add ~28 new API functions for division variants,
 	fused multiply-accumulate, divisibility testing, modular exponentiation,

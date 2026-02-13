@@ -176,10 +176,11 @@ sentinel.
 .PP
 .BI "arbint_ctx_t * arbint_get_ctx(const arbint_t " x ")"
 .br
-.BI "void arbint_set_ctx(arbint_t " x ", arbint_ctx_t *" ctx ")"
+.BI "arbint_err_t arbint_set_ctx(arbint_t " x ", arbint_ctx_t *" ctx ")"
 .RS 4
 .PP
 Query or rebind an integer's allocation context.
+Rebinding may migrate owned storage to the target allocator.
 .RE
 .PP
 .BI "void arbint_zero(arbint_t " x ")"
@@ -458,6 +459,26 @@ may alias
 The convention 0^0 = 1 is followed.
 .RE
 .PP
+.BI "arbint_err_t arbint_pow_tmod(arbint_t " rop ", const arbint_t " base ", const arbint_t " exp ", const arbint_t " mod ")"
+.br
+.BI "arbint_err_t arbint_pow_u32_tmod(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ", const arbint_t " mod ")"
+.RS 4
+.PP
+Modular exponentiation with arbitrary-size modulus:
+.IR rop " = " base "^" exp " mod " mod .
+The
+.BI arbint_pow_tmod ()
+variant accepts a big-integer exponent, while
+.BI arbint_pow_u32_tmod ()
+uses a 32-bit exponent.
+.I mod
+must be nonzero.
+Truncated-division remainder semantics are used.
+.I rop
+may alias
+.IR base " or " mod .
+.RE
+.PP
 .BI "arbint_err_t arbint_pow_u32u32_tmod(arbint_t " rop ", const arbint_t " base ", uint32_t " exp ", uint32_t " mod ")"
 .RS 4
 .PP
@@ -624,6 +645,26 @@ if
 <= 0.
 .RE
 .PP
+.BI "arbint_err_t arbint_carmichael(arbint_t " rop ", const arbint_t " n ")"
+.RS 4
+.PP
+Compute Carmichael's lambda function
+.IR lambda(n) :
+the smallest positive integer
+.I m
+such that
+.IR a^m " = 1 (mod " n ")"
+for all integers
+.I a
+coprime to
+.IR n .
+Returns
+.B ARBINT_EDOM
+if
+.I n
+<= 0.
+.RE
+.PP
 .BI "arbint_err_t arbint_jacobi(const arbint_t " a ", const arbint_t " n ", int *" out ")"
 .RS 4
 .PP
@@ -762,36 +803,39 @@ may alias
 .SS Factor Removal
 .\" -------------------------------------------------------------------------
 .PP
-.BI "arbint_err_t arbint_removefactor_u32(arbint_t " rest ", uint32_t *" exp ", const arbint_t " n ", uint32_t " f ")"
+.BI "arbint_err_t arbint_removefactor_u32(arbint_t " rest ", const arbint_t " a ", uint32_t " p ", uint32_t *" k ")"
 .RS 4
 .PP
 Remove all powers of factor
-.I f
+.I p
 from
-.IR n .
+.IR a .
 Sets
 .I rest
 to the remaining cofactor and
-.I *exp
+.I *k
 to the number of times
-.I f
+.I p
 divides
-.IR n .
+.IR a .
 .PP
-For example, removefactor(72, 2) sets rest = 9 and *exp = 3,
+For example, removefactor(72, 2) sets rest = 9 and *k = 3,
 since 72 = 2^3 * 9.
 .PP
 Returns
 .B ARBINT_EZERO
 if
-.I f
-is 0 or 1.
+.I p
+is 0.
+If
+.I p
+is 1, zero factors are removed and
+.I rest
+is set to
+.IR a .
 .I rest
 may alias
-.IR n .
-If
-.I exp
-is NULL, the exponent is not returned.
+.IR a .
 .RE
 .\" -------------------------------------------------------------------------
 .SS Perfect Power Tests
@@ -812,27 +856,26 @@ if
 is negative.
 .RE
 .PP
-.BI "arbint_err_t arbint_is_power(const arbint_t " a ", uint32_t *" exp ")"
+.BI "arbint_err_t arbint_is_power(const arbint_t " a ", int *" out ")"
 .RS 4
 .PP
 Test whether |a| is a perfect power.
-If |a| = b^k for some integer b and k >= 2, sets
-.I *exp
-to the smallest such k.
-Otherwise, sets
-.I *exp
-to 0.
+Sets
+.I *out
+to 1 if |a| = b^k for some integer b and k >= 2, otherwise 0.
 .PP
 Special cases:
 .RS 4
 .IP \(bu 2
 0 and +/-1 are considered perfect powers (any exponent works);
-returns 1.
+sets
+.I *out
+to 1.
 .IP \(bu 2
 Negative inputs: only odd exponents are valid.
-Returns 0 for negative numbers that are only even powers.
-.IP \(bu 2
-Composite exponents are detected: 64 = 2^6 returns 6, not 2.
+If no odd exponent matches, sets
+.I *out
+to 0.
 .RE
 .PP
 The algorithm uses a static table of 97 primes (up to 521) for fast

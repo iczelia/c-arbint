@@ -82,12 +82,12 @@ node your_file.js
 
 The platforms that the code has been verified to compile and pass tests on include:
 
-**Primary platforms (with LTO support):**
+Primary platforms (with LTO support):
 - Linux: x86-64 (Ubuntu, Fedora, Alpine; gcc/clang/tcc), arm64 (Ubuntu; gcc/clang/tcc), i386 (Debian; gcc/clang/tcc)
 - macOS: arm64 (clang)
 - Windows: x86-64, i686 (MinGW-GCC, TCC, MSVC)
 - WebAssembly: wasm32, wasm64 (Emscripten; with and without LTO)
 
-**Exotic architectures (no LTO, via Docker QEMU emulation):**
+Exotic architectures (no LTO, tested via Docker QEMU emulation):
 - Linux: riscv64 (Debian sid, Alpine edge; gcc), s390x (Debian, Alpine; clang/gcc), ppc64le (Debian, Alpine; clang/gcc), mips64le (Debian; gcc/clang), arm32v7 (Debian, Alpine; gcc), arm32v5 (Debian; gcc)
 - Linux (Debian ports): ppc64 big-endian (gcc), powerpc 32-bit (gcc), hppa/PA-RISC (gcc), m68k/Motorola 68000 (gcc), sh4/SuperH (gcc), alpha/DEC Alpha (gcc)

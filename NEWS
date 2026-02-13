@@ -1,4 +1,4 @@
-c-arbint 0.0.4 (2026-02-12)
+c-arbint 0.0.4 (2026-02-13)
 ===========================
 
 Fourth development release. Major feature additions: string conversion,
@@ -43,7 +43,7 @@ New Features
 
 - Perfect power detection (arbint_is_power):
   * Test if |a| = b^k for some integer b and k >= 2
-  * Returns smallest such exponent k, or 0 if not a perfect power
+  * Returns 1 if perfect power, 0 otherwise
   * Static table of 97 primes (up to exponent 521) for fast lookup
   * Dynamically cached sieve for larger prime exponents
   * Handles negative inputs (only odd exponents allowed)
@@ -74,22 +74,8 @@ Performance Optimizations
 
 - Fast division by 3 using Barrett constants (for root iteration)
 
-Testing
--------
-- New test_str binary for string conversion
-- New test_xgcd binary for extended GCD with Bezout coefficients
-- New test_is_power binary for perfect power detection
-- New test_combin binary for combinatorial functions
-- New test_root binary for k-th root computation
-- New test_numtheory binary for number-theoretic functions
-- New test_inv_mod binary for modular inverse
-- New test_removefactor binary for factor removal
-- Test timing output: all tests now report execution time
-- dc demo now runs with --test flag for automated testing
-
 Build System / CI
 -----------------
-- Replaced run-on-arch-action with Docker QEMU emulation for exotic architectures
 - Added new exotic architecture CI targets (all via Docker, no LTO):
   * ppc64 (PowerPC 64-bit big-endian)
   * powerpc (PowerPC 32-bit)
@@ -103,13 +89,6 @@ Build System / CI
 - Exotic architectures use debian-ports images (ppc64, powerpc, hppa, m68k, sh4, alpha)
 - LTO disabled for all exotic architectures due to toolchain limitations
 - wasm test runner now passes through command-line arguments (e.g., --test)
-
-Documentation
--------------
-- Man page updated with all new API functions
-- ChangeLog updated with detailed implementation notes
-- README updated with expanded platform support list
-
 
 c-arbint 0.0.3 (2026-02-11)
 ===========================
@@ -184,38 +163,9 @@ Build System
 - Data-driven platform-specific object management via platform-objects.txt
 - Combined AVX2+BMI2 compiler flags for NTT AVX2 backend
 
-Code Organization
------------------
-- NTT code organized into modular components:
-  * arbint_ntt.c: dispatch layer with runtime CPU detection
-  * arbint_ntt_core.inc: shared implementation (Montgomery, butterflies, CRT)
-  * arbint_ntt_generic.c: portable half-limb multiplication
-  * arbint_ntt_bmi2.c: BMI2-optimized 64x64->128 multiply
-  * arbint_ntt_avx2.c: AVX2+BMI2 (foundation for future SIMD butterflies)
-
-- Division code reorganized into separate modules:
-  * arbint_div.c: core multi-limb division (Knuth Algorithm D)
-  * arbint_div_generic.c: portable implementation
-  * arbint_div_bmi2.c: BMI2-optimized implementation
-  * arbint_tdiv.c: truncated division wrappers
-  * arbint_fdiv.c: floor division wrappers
-  * arbint_cdiv.c: ceiling division wrappers
-
 Testing
 -------
-- New test_ntt binary with comprehensive NTT coverage:
-  * Threshold boundary tests (below, at, above 1024 limbs)
-  * Power-of-two operand sizes
-  * Unbalanced operand sizes
-  * Algebraic identity verification (a*b == b*a, (a+b)*c == a*c + b*c)
-  * Aliasing tests
-  * Stochastic verification against reference multiplication
-
-Documentation
--------------
-- Man page reorganized for clarity
-- New sections for divisibility testing, all division variants, NTT algorithm
-- Algorithm complexity table updated with NTT
+- New test_ntt binary with comprehensive NTT coverage.
 
 Known Limitations
 -----------------
@@ -334,7 +284,6 @@ Testing
 
 Documentation
 -------------
-- Man page expanded with documentation for all new APIs
 - README converted to Markdown (README.md)
 
 Known Limitations
@@ -343,7 +292,6 @@ Known Limitations
 - Floor/ceiling division variants planned for future releases
 - Number-theoretic functions (primality, totient, etc.) declared but not yet
   implemented
-
 
 c-arbint 0.0.1 (2026-02-08)
 ===========================
@@ -389,12 +337,6 @@ Build System
 - Optional LTO support via `--enable-lto=auto|yes|no`
 - Tunable optimization levels (`--with-base-optimization=default|tuned`)
 - Comprehensive unit and stochastic tests via `make check`
-
-Documentation
--------------
-- Complete man page (c-arbint.3) documenting all exported APIs
-- Example code demonstrating library usage
-- Inline documentation for public API in arbint.h
 
 Known Limitations
 -----------------
