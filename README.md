@@ -7,6 +7,8 @@ Project homepage: https://github.com/iczelia/c-arbint
 
 [![CI](https://github.com/iczelia/c-arbint/actions/workflows/ci.yml/badge.svg?branch=trunk)](https://github.com/iczelia/c-arbint/actions/workflows/ci.yml)
 
+![AGPLv3](contrib/agplv3.png)
+
 ## Requirements
 
 - C compiler with C99 support
