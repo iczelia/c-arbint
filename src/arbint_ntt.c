@@ -16,6 +16,7 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "arbint_ntt.h"
+#include "arbint_ntt_segmented.h"
 #include "arbint_cpu.h"
 #include "arbint_internal_util.h"
 #include "config.h"
@@ -54,11 +55,22 @@ static arbint_mul_mag_ntt_fn_t arbint_select_mul_mag_ntt(void) {
 static arbint_mul_mag_ntt_fn_t g_mul_mag_ntt = NULL;
 
 /*  Public dispatch function for NTT multiplication.
-    Used by arbint_mul_mag_rec when operands exceed NTT threshold.  */
+    Used by arbint_mul_mag_rec when operands exceed NTT threshold.
+
+    If operands exceed ARBINT_NTT_MAX_SIZE, dispatches to segmented
+    multiplication which recursively splits operands until sub-products
+    fit within NTT limits.  */
 arbint_err_t arbint_mul_mag_ntt(arbint_limb_t * dst, size_t * out_used,
                                 const arbint_limb_t * a, size_t an,
                                 const arbint_limb_t * b, size_t bn,
                                 const arbint_alloc_t * alloc) {
+  /*  Check if operands exceed single-NTT capacity.
+      NTT requires transform size >= an + bn - 1, rounded up to power of 2.
+      If this exceeds ARBINT_NTT_MAX_SIZE, use segmented multiplication.  */
+  size_t conv_len = an + bn;
+  if (conv_len > ARBINT_NTT_MAX_SIZE)
+    return arbint_mul_mag_ntt_segmented(dst, out_used, a, an, b, bn, alloc);
+
   ARBINT_LAZY_INIT(g_mul_mag_ntt, arbint_select_mul_mag_ntt);
 
   return g_mul_mag_ntt(dst, out_used, a, an, b, bn, alloc);

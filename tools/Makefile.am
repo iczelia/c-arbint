@@ -2,12 +2,17 @@
 
 ## These are development/tuning tools, not installed by default.
 ## Build with: make -C tools tune_thresholds
+## Build with: make -C tools test_segmented_ntt
 
-noinst_PROGRAMS = tune_thresholds
+noinst_PROGRAMS = tune_thresholds test_segmented_ntt
 
 tune_thresholds_SOURCES = tune_thresholds.c
 tune_thresholds_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src
 tune_thresholds_LDADD = $(top_builddir)/src/libarbint.la
+
+test_segmented_ntt_SOURCES = test_segmented_ntt.c
+test_segmented_ntt_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src
+test_segmented_ntt_LDADD = $(top_builddir)/src/libarbint.la
 
 # Standalone subdir builds (make -C tools ...) must refresh src first.
 .PHONY: FORCE
@@ -15,6 +20,9 @@ $(top_builddir)/src/libarbint.la: FORCE
 	$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src libarbint.la
 FORCE:
 
-## Convenience target
+## Convenience targets
 tune: tune_thresholds
 	./tune_thresholds
+
+test-segmented: test_segmented_ntt
+	./test_segmented_ntt
