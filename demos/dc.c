@@ -29,6 +29,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(PACKAGE_VERSION)
+#define DC_PACKAGE_VERSION PACKAGE_VERSION
+#elif defined(VERSION)
+#define DC_PACKAGE_VERSION VERSION
+#else
+#define DC_PACKAGE_VERSION "unknown"
+#endif
+
 /*  Portable strdup.  */
 static char * dc_strdup(const char * s) {
   size_t len = strlen(s) + 1;
@@ -2053,53 +2061,194 @@ static int run_tests(void) {
 
 /*  Usage and main  */
 
-static void usage(const char * prog) {
-  fprintf(stderr, "Usage: %s [-e expression] [-f file] [--test] [file ...]\n",
+static void usage(FILE * out, const char * prog) {
+  fprintf(out,
+          "Usage: %s [options] [file ...]\n"
+          "Options:\n"
+          "  -h, --help              Show this help\n"
+          "  -v, --version           Show version\n"
+          "  -e, --expression EXPR   Execute expression\n"
+          "      --expression=EXPR   Execute expression\n"
+          "  -f, --file FILE         Execute file\n"
+          "      --file=FILE         Execute file\n"
+          "      --test              Run built-in test suite\n"
+          "  --                      End option parsing\n",
           prog);
-  fprintf(stderr, "  -e expr    Execute expression\n");
-  fprintf(stderr, "  -f file    Execute file\n");
-  fprintf(stderr, "  --test     Run built-in test suite\n");
-  fprintf(stderr, "  --help     Show this help\n");
+}
+
+static void print_version(void) {
+  printf("dc (c-arbint) %s\n", DC_PACKAGE_VERSION);
+  printf("Copyright 2026 Kamila Szewczyk (k@iczelia.net)\n");
+  printf("This is free software; see the source for copying conditions.  There is NO\n");
+  printf("warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE,\n");
+  printf("to the extent permitted by law.\n");
 }
 
 int main(int argc, char ** argv) {
   dc_state_t dc;
   int i;
   int had_input = 0;
+  int initialized = 0;
+  int end_of_options = 0;
 
-  /*  Handle --test before full init.  */
   for (i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "--test") == 0) {
-      return run_tests();
+    const char * arg = argv[i];
+
+    if (!end_of_options && strcmp(arg, "--") == 0) {
+      end_of_options = 1;
+      continue;
     }
-    if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-      usage(argv[0]);
+
+    if (!end_of_options &&
+        (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0)) {
+      usage(stdout, argv[0]);
+      if (initialized)
+        dc_cleanup(&dc);
       return 0;
     }
-  }
 
-  if (dc_init(&dc) < 0) {
-    fprintf(stderr, "dc: initialization failed\n");
-    return 1;
-  }
-
-  for (i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "-e") == 0 && i + 1 < argc) {
-      dc_run_expression(&dc, argv[++i]);
-      had_input = 1;
-    } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
-      dc_run_file(&dc, argv[++i]);
-      had_input = 1;
-    } else if (argv[i][0] != '-') {
-      dc_run_file(&dc, argv[i]);
-      had_input = 1;
+    if (!end_of_options &&
+        (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0)) {
+      print_version();
+      if (initialized)
+        dc_cleanup(&dc);
+      return 0;
     }
+
+    if (!end_of_options && strcmp(arg, "--test") == 0) {
+      if (initialized)
+        dc_cleanup(&dc);
+      return run_tests();
+    }
+
+    if (!end_of_options &&
+        (strcmp(arg, "--expression") == 0 || strcmp(arg, "-e") == 0)) {
+      const char * expr;
+      if (i + 1 >= argc) {
+        fprintf(stderr, "dc: option '%s' requires an argument\n", arg);
+        usage(stderr, argv[0]);
+        return 1;
+      }
+      expr = argv[++i];
+      if (!initialized) {
+        if (dc_init(&dc) < 0) {
+          fprintf(stderr, "dc: initialization failed\n");
+          return 1;
+        }
+        initialized = 1;
+      }
+      dc_run_expression(&dc, expr);
+      had_input = 1;
+      continue;
+    }
+
+    if (!end_of_options && strncmp(arg, "--expression=", 13) == 0) {
+      const char * expr = arg + 13;
+      if (!initialized) {
+        if (dc_init(&dc) < 0) {
+          fprintf(stderr, "dc: initialization failed\n");
+          return 1;
+        }
+        initialized = 1;
+      }
+      dc_run_expression(&dc, expr);
+      had_input = 1;
+      continue;
+    }
+
+    if (!end_of_options &&
+        (strcmp(arg, "--file") == 0 || strcmp(arg, "-f") == 0)) {
+      const char * file;
+      if (i + 1 >= argc) {
+        fprintf(stderr, "dc: option '%s' requires an argument\n", arg);
+        usage(stderr, argv[0]);
+        return 1;
+      }
+      file = argv[++i];
+      if (!initialized) {
+        if (dc_init(&dc) < 0) {
+          fprintf(stderr, "dc: initialization failed\n");
+          return 1;
+        }
+        initialized = 1;
+      }
+      dc_run_file(&dc, file);
+      had_input = 1;
+      continue;
+    }
+
+    if (!end_of_options && strncmp(arg, "--file=", 7) == 0) {
+      const char * file = arg + 7;
+      if (!initialized) {
+        if (dc_init(&dc) < 0) {
+          fprintf(stderr, "dc: initialization failed\n");
+          return 1;
+        }
+        initialized = 1;
+      }
+      dc_run_file(&dc, file);
+      had_input = 1;
+      continue;
+    }
+
+    if (!end_of_options && strncmp(arg, "-e", 2) == 0 && arg[2] != '\0') {
+      const char * expr = arg + 2;
+      if (!initialized) {
+        if (dc_init(&dc) < 0) {
+          fprintf(stderr, "dc: initialization failed\n");
+          return 1;
+        }
+        initialized = 1;
+      }
+      dc_run_expression(&dc, expr);
+      had_input = 1;
+      continue;
+    }
+
+    if (!end_of_options && strncmp(arg, "-f", 2) == 0 && arg[2] != '\0') {
+      const char * file = arg + 2;
+      if (!initialized) {
+        if (dc_init(&dc) < 0) {
+          fprintf(stderr, "dc: initialization failed\n");
+          return 1;
+        }
+        initialized = 1;
+      }
+      dc_run_file(&dc, file);
+      had_input = 1;
+      continue;
+    }
+
+    if (!end_of_options && arg[0] == '-') {
+      fprintf(stderr, "dc: unknown option '%s'\n", arg);
+      usage(stderr, argv[0]);
+      return 1;
+    }
+
+    if (!initialized) {
+      if (dc_init(&dc) < 0) {
+        fprintf(stderr, "dc: initialization failed\n");
+        return 1;
+      }
+      initialized = 1;
+    }
+    dc_run_file(&dc, arg);
+    had_input = 1;
   }
 
-  if (!had_input) {
+  if (!initialized) {
+    if (dc_init(&dc) < 0) {
+      fprintf(stderr, "dc: initialization failed\n");
+      return 1;
+    }
+    initialized = 1;
+  }
+
+  if (!had_input)
     dc_run_interactive(&dc);
-  }
 
-  dc_cleanup(&dc);
+  if (initialized)
+    dc_cleanup(&dc);
+
   return 0;
 }

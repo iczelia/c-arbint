@@ -1254,10 +1254,8 @@ jobs:
                 fi
                 ;;
               openbsd)
-                if ! as_root pkg_add -I gmake pkg-config; then
-                  if ! as_root pkg_add -I gmake; then
-                    echo "Warning: unable to install gmake; continuing with available tools"
-                  fi
+                if ! as_root pkg_add -I gmake; then
+                  echo "Warning: unable to install gmake; continuing with available tools"
                 fi
                 ;;
               netbsd)
@@ -1292,6 +1290,14 @@ jobs:
             srcdir="$(list_tar "$tarball" | head -n1 | cut -d/ -f1)"
             extract_tar "$tarball" dist
             cd "dist/$srcdir"
+
+            if command -v pkg-config >/dev/null 2>&1; then
+              export PKG_CONFIG="$(command -v pkg-config)"
+            elif command -v pkgconf >/dev/null 2>&1; then
+              export PKG_CONFIG="$(command -v pkgconf)"
+            else
+              export PKG_CONFIG=:
+            fi
 
             CC=cc ./configure --enable-lto=no --with-base-optimization=default
             jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
