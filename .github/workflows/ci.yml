@@ -1254,8 +1254,10 @@ jobs:
                 fi
                 ;;
               openbsd)
-                if ! as_root pkg_add -I gmake pkgconf; then
-                  echo "Warning: unable to install gmake/pkgconf; continuing with available tools"
+                if ! as_root pkg_add -I gmake pkg-config; then
+                  if ! as_root pkg_add -I gmake; then
+                    echo "Warning: unable to install gmake; continuing with available tools"
+                  fi
                 fi
                 ;;
               netbsd)
@@ -1273,11 +1275,22 @@ jobs:
             make_cmd="make"
             if command -v gmake >/dev/null 2>&1; then
               make_cmd="gmake"
+            else
+              echo "error: gmake is required for this BSD build but is not available" >&2
+              exit 1
             fi
 
             tarball="$(ls dist/*.tar.xz | head -n1)"
-            srcdir="$(tar -tJf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
-            tar -xJf "$tarball" -C dist
+
+            list_tar() {
+              tar -tf "$1" 2>/dev/null || tar -tXf "$1" 2>/dev/null || tar -tJf "$1" 2>/dev/null
+            }
+            extract_tar() {
+              tar -xf "$1" -C "$2" 2>/dev/null || tar -xXf "$1" -C "$2" 2>/dev/null || tar -xJf "$1" -C "$2" 2>/dev/null
+            }
+
+            srcdir="$(list_tar "$tarball" | head -n1 | cut -d/ -f1)"
+            extract_tar "$tarball" dist
             cd "dist/$srcdir"
 
             CC=cc ./configure --enable-lto=no --with-base-optimization=default
