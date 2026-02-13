@@ -556,8 +556,9 @@ ntt_butterfly_inverse_4_table(uint64_t * x, size_t k, size_t m_half,
 
 /* ========== AVX2 NTT Transforms ========== */
 
-/*  Forward NTT with AVX2 optimization: Cooley-Tukey decimation-in-time.
+/*  Forward NTT with AVX2 optimization: Gentleman-Sande decimation-in-frequency.
     x must be in Montgomery form on entry; remains in Montgomery form on exit.
+    Input is in natural order and output is in bit-reversed order.
 
     When precomputed full omega tables are available (omega_full[s] != NULL),
     we use direct table lookups instead of computing omega values on the fly.
@@ -568,26 +569,19 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
   size_t n = (size_t) 1u << log2_n;
   uint64_t p = mont->p;
 
-  /*  Bit-reversal permutation.  */
-  for (size_t i = 0u; i < n; ++i) {
-    size_t j = bit_reverse(i, log2_n);
-    if (i < j) {
-      uint64_t tmp = x[i];
-      x[i] = x[j];
-      x[j] = tmp;
-    }
-  }
-
-  /*  Cooley-Tukey butterfly iterations.  */
-  for (size_t s = 0u; s < log2_n; ++s) {
-    size_t m = (size_t) 1u << (s + 1u);
+  /*  Gentleman-Sande butterfly iterations.  */
+  for (size_t s = log2_n; s > 0u; --s) {
+    size_t m = (size_t) 1u << s;
     size_t m_half = m >> 1;
-    uint64_t omega_m = roots->omega[s];
+    size_t stage_idx = s - 1u; /* omega index for this stage */
+    uint64_t omega_m = roots->omega[stage_idx];
 
     /*  Check if precomputed full omega table is available for this stage.  */
     int use_full_table =
-        (roots->omega_full != NULL && s >= NTT_FULL_OMEGA_MIN_STAGE &&
-         s < roots->full_max_log2 && roots->omega_full[s] != NULL);
+        (roots->omega_full != NULL &&
+         stage_idx >= NTT_FULL_OMEGA_MIN_STAGE &&
+         stage_idx < roots->full_max_log2 &&
+         roots->omega_full[stage_idx] != NULL);
 
     if (m_half >= NTT_AVX2_BUTTERFLY_THRESHOLD) {
       /*  AVX2 path: process 4 butterflies at a time.  */
@@ -596,20 +590,20 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
 
         if (use_full_table) {
           /*  Use precomputed omega table for direct lookups.  */
-          const uint64_t * omega_table = roots->omega_full[s];
+          const uint64_t * omega_table = roots->omega_full[stage_idx];
 
           /*  Process groups of 4 using table lookups.  */
           for (; j + 4u <= m_half; j += 4u) {
-            ntt_butterfly_forward_4_table(x, k, m_half, omega_table, j, mont);
+            ntt_butterfly_inverse_4_table(x, k, m_half, omega_table, j, mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code using table.  */
           for (; j < m_half; ++j) {
             uint64_t omega = omega_table[j];
-            uint64_t t = mont_mul(omega, x[k + j + m_half], mont);
             uint64_t u = x[k + j];
-            x[k + j] = mod_add(u, t, p);
-            x[k + j + m_half] = mod_sub(u, t, p);
+            uint64_t v = x[k + j + m_half];
+            x[k + j] = mod_add(u, v, p);
+            x[k + j + m_half] = mont_mul(mod_sub(u, v, p), omega, mont);
           }
         } else {
           /*  Compute omega values on the fly.  */
@@ -618,16 +612,16 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
           /*  Process groups of 4.  */
           for (; j + 4u <= m_half; j += 4u) {
             __m256i omega_vec = ntt_prepare_omega_vec(omega, omega_m, mont);
-            omega = ntt_butterfly_forward_4(x, k + j, m_half, omega_vec,
+            omega = ntt_butterfly_inverse_4(x, k + j, m_half, omega_vec,
                                             omega_m, mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code.  */
           for (; j < m_half; ++j) {
-            uint64_t t = mont_mul(omega, x[k + j + m_half], mont);
             uint64_t u = x[k + j];
-            x[k + j] = mod_add(u, t, p);
-            x[k + j + m_half] = mod_sub(u, t, p);
+            uint64_t v = x[k + j + m_half];
+            x[k + j] = mod_add(u, v, p);
+            x[k + j + m_half] = mont_mul(mod_sub(u, v, p), omega, mont);
             omega = mont_mul(omega, omega_m, mont);
           }
         }
@@ -637,10 +631,10 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
       for (size_t k = 0u; k < n; k += m) {
         uint64_t omega = to_mont(1u, mont);
         for (size_t j = 0u; j < m_half; ++j) {
-          uint64_t t = mont_mul(omega, x[k + j + m_half], mont);
           uint64_t u = x[k + j];
-          x[k + j] = mod_add(u, t, p);
-          x[k + j + m_half] = mod_sub(u, t, p);
+          uint64_t v = x[k + j + m_half];
+          x[k + j] = mod_add(u, v, p);
+          x[k + j + m_half] = mont_mul(mod_sub(u, v, p), omega, mont);
           omega = mont_mul(omega, omega_m, mont);
         }
       }
@@ -648,9 +642,9 @@ static void ntt_forward(uint64_t * x, size_t log2_n,
   }
 }
 
-/*  Inverse NTT with AVX2 optimization: Gentleman-Sande
-    decimation-in-frequency. x must be in Montgomery form on entry. On exit,
-    x contains INTT(x) * n (not yet scaled by n^-1).
+/*  Inverse NTT with AVX2 optimization: Cooley-Tukey decimation-in-time.
+    x must be in Montgomery form on entry. Input is in bit-reversed order.
+    On exit, x contains INTT(x) * n in natural order (not yet scaled by n^-1).
 
     When precomputed full omega_inv tables are available (omega_inv_full[s] !=
     NULL), we use direct table lookups instead of computing omega_inv values
@@ -661,11 +655,11 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
   size_t n = (size_t) 1u << log2_n;
   uint64_t p = mont->p;
 
-  /*  Gentleman-Sande butterfly iterations (reverse order of forward).  */
-  for (size_t s = log2_n; s > 0u; --s) {
-    size_t m = (size_t) 1u << s;
+  /*  Cooley-Tukey butterfly iterations.  */
+  for (size_t s = 0u; s < log2_n; ++s) {
+    size_t m = (size_t) 1u << (s + 1u);
     size_t m_half = m >> 1;
-    size_t stage_idx = s - 1u; /* omega_inv index for this stage */
+    size_t stage_idx = s; /* omega_inv index for this stage */
     uint64_t omega_m_inv = roots->omega_inv[stage_idx];
 
     /*  Check if precomputed full omega_inv table is available
@@ -686,17 +680,17 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
 
           /*  Process groups of 4 using table lookups.  */
           for (; j + 4u <= m_half; j += 4u) {
-            ntt_butterfly_inverse_4_table(x, k, m_half, omega_inv_table, j,
+            ntt_butterfly_forward_4_table(x, k, m_half, omega_inv_table, j,
                                           mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code using table.  */
           for (; j < m_half; ++j) {
             uint64_t omega_inv = omega_inv_table[j];
+            uint64_t t = mont_mul(omega_inv, x[k + j + m_half], mont);
             uint64_t u = x[k + j];
-            uint64_t v = x[k + j + m_half];
-            x[k + j] = mod_add(u, v, p);
-            x[k + j + m_half] = mont_mul(mod_sub(u, v, p), omega_inv, mont);
+            x[k + j] = mod_add(u, t, p);
+            x[k + j + m_half] = mod_sub(u, t, p);
           }
         } else {
           /*  Compute omega_inv values on the fly.  */
@@ -706,16 +700,16 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
           for (; j + 4u <= m_half; j += 4u) {
             __m256i omega_inv_vec =
                 ntt_prepare_omega_vec(omega_inv, omega_m_inv, mont);
-            omega_inv = ntt_butterfly_inverse_4(
+            omega_inv = ntt_butterfly_forward_4(
                 x, k + j, m_half, omega_inv_vec, omega_m_inv, mont);
           }
 
           /*  Handle remaining elements (0-3) with scalar code.  */
           for (; j < m_half; ++j) {
+            uint64_t t = mont_mul(omega_inv, x[k + j + m_half], mont);
             uint64_t u = x[k + j];
-            uint64_t v = x[k + j + m_half];
-            x[k + j] = mod_add(u, v, p);
-            x[k + j + m_half] = mont_mul(mod_sub(u, v, p), omega_inv, mont);
+            x[k + j] = mod_add(u, t, p);
+            x[k + j + m_half] = mod_sub(u, t, p);
             omega_inv = mont_mul(omega_inv, omega_m_inv, mont);
           }
         }
@@ -725,23 +719,13 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
       for (size_t k = 0u; k < n; k += m) {
         uint64_t omega_inv = to_mont(1u, mont);
         for (size_t j = 0u; j < m_half; ++j) {
+          uint64_t t = mont_mul(omega_inv, x[k + j + m_half], mont);
           uint64_t u = x[k + j];
-          uint64_t v = x[k + j + m_half];
-          x[k + j] = mod_add(u, v, p);
-          x[k + j + m_half] = mont_mul(mod_sub(u, v, p), omega_inv, mont);
+          x[k + j] = mod_add(u, t, p);
+          x[k + j + m_half] = mod_sub(u, t, p);
           omega_inv = mont_mul(omega_inv, omega_m_inv, mont);
         }
       }
-    }
-  }
-
-  /*  Bit-reversal permutation.  */
-  for (size_t i = 0u; i < n; ++i) {
-    size_t j = bit_reverse(i, log2_n);
-    if (i < j) {
-      uint64_t tmp = x[i];
-      x[i] = x[j];
-      x[j] = tmp;
     }
   }
 }
