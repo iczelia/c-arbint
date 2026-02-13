@@ -1232,18 +1232,40 @@ jobs:
           run: |
             set -eu
 
+            as_root() {
+              if [ "$(id -u)" -eq 0 ]; then
+                "$@"
+              elif command -v sudo >/dev/null 2>&1; then
+                sudo "$@"
+              elif command -v doas >/dev/null 2>&1; then
+                doas "$@"
+              else
+                return 1
+              fi
+            }
+
             case "${{ matrix.os }}" in
               freebsd)
-                env ASSUME_ALWAYS_YES=yes pkg update -f || true
-                env ASSUME_ALWAYS_YES=yes pkg install -y gmake pkgconf || true
+                if ! as_root env ASSUME_ALWAYS_YES=yes pkg update -f; then
+                  echo "Warning: unable to run pkg update as root; continuing with base toolchain"
+                fi
+                if ! as_root env ASSUME_ALWAYS_YES=yes pkg install -y gmake pkgconf; then
+                  echo "Warning: unable to install gmake/pkgconf; continuing with available tools"
+                fi
                 ;;
               openbsd)
-                pkg_add -I gmake pkgconf || true
+                if ! as_root pkg_add -I gmake pkgconf; then
+                  echo "Warning: unable to install gmake/pkgconf; continuing with available tools"
+                fi
                 ;;
               netbsd)
                 if command -v pkgin >/dev/null 2>&1; then
-                  pkgin -y update || true
-                  pkgin -y install gmake pkgconf || true
+                  if ! as_root pkgin -y update; then
+                    echo "Warning: unable to run pkgin update as root; continuing"
+                  fi
+                  if ! as_root pkgin -y install gmake pkgconf; then
+                    echo "Warning: unable to install gmake/pkgconf; continuing with available tools"
+                  fi
                 fi
                 ;;
             esac
@@ -1254,8 +1276,8 @@ jobs:
             fi
 
             tarball="$(ls dist/*.tar.xz | head -n1)"
-            srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
-            tar -xf "$tarball" -C dist
+            srcdir="$(tar -tJf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+            tar -xJf "$tarball" -C dist
             cd "dist/$srcdir"
 
             CC=cc ./configure --enable-lto=no --with-base-optimization=default
