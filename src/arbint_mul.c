@@ -248,15 +248,9 @@ arbint_err_t arbint_pow_u32(arbint_t rop, const arbint_t base, uint32_t exp) {
   if (ctx == NULL)
     ctx = base[0]._ctx;
 
-  rc = arbint_init(acc, ctx);
+  rc = arbint_init_all(ctx, acc, b, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(b, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(acc);
-    return rc;
-  }
 
   /*  acc = 1, b = base.  */
   rc = arbint_set_i32(acc, 1);
@@ -288,8 +282,7 @@ arbint_err_t arbint_pow_u32(arbint_t rop, const arbint_t base, uint32_t exp) {
   rc = ARBINT_OK;
 
 cleanup:
-  arbint_clear(b);
-  arbint_clear(acc);
+  arbint_clear_all(acc, b, (arbint_t *) NULL);
   return rc;
 }
 
@@ -353,15 +346,9 @@ arbint_err_t arbint_pow_u32u32_tmod(arbint_t rop, const arbint_t base,
   if (ctx == NULL)
     ctx = base[0]._ctx;
 
-  rc = arbint_init(acc, ctx);
+  rc = arbint_init_all(ctx, acc, b, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(b, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(acc);
-    return rc;
-  }
 
   /* acc = 1, b = base mod mod. */
   rc = arbint_set_i32(acc, 1);
@@ -408,8 +395,7 @@ arbint_err_t arbint_pow_u32u32_tmod(arbint_t rop, const arbint_t base,
   rc = ARBINT_OK;
 
 cleanup:
-  arbint_clear(b);
-  arbint_clear(acc);
+  arbint_clear_all(acc, b, (arbint_t *) NULL);
   return rc;
 }
 
@@ -446,15 +432,9 @@ arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a) {
   if (ctx == NULL)
     ctx = a[0]._ctx;
 
-  rc = arbint_init(x, ctx);
+  rc = arbint_init_all(ctx, x, t, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(t, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(x);
-    return rc;
-  }
 
   /*  Initial guess: x = 1 << ((nbits(a) + 1) / 2).  */
   nbits = arbint_nbits(a);
@@ -489,8 +469,7 @@ arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a) {
   rc = arbint_set(rop, x);
 
 cleanup:
-  arbint_clear(t);
-  arbint_clear(x);
+  arbint_clear_all(x, t, (arbint_t *) NULL);
   return rc;
 }
 
@@ -555,22 +534,9 @@ arbint_err_t arbint_root(arbint_t rop, const arbint_t a, uint32_t k) {
     ctx = a[0]._ctx;
 
   /*  Initialize temporaries.  */
-  rc = arbint_init(x, ctx);
+  rc = arbint_init_all(ctx, x, t, xk1, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(t, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(x);
-    return rc;
-  }
-
-  rc = arbint_init(xk1, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(t);
-    arbint_clear(x);
-    return rc;
-  }
 
   /*  Initial guess: x = 1 << ceil(nbits(a) / k).
       Overflow-safe computation of ceil(nbits / k).  */
@@ -671,9 +637,7 @@ arbint_err_t arbint_root(arbint_t rop, const arbint_t a, uint32_t k) {
   rc = arbint_set(rop, x);
 
 cleanup:
-  arbint_clear(xk1);
-  arbint_clear(t);
-  arbint_clear(x);
+  arbint_clear_all(x, t, xk1, (arbint_t *) NULL);
   return rc;
 }
 

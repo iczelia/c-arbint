@@ -303,6 +303,7 @@ static arbint_err_t arbint_get_str_dc(const arbint_t op, char ** out_str,
   arbint_t high;
   arbint_t low;
   arbint_t base_arbint;
+  arbint_t abs_op;
   char * high_str;
   char * low_str;
   size_t high_len;
@@ -326,97 +327,55 @@ static arbint_err_t arbint_get_str_dc(const arbint_t op, char ** out_str,
   est_digits = arbint_sizeinbase(op, base);
   half_digits = est_digits / 2u;
 
-  /*  Compute divisor = base^half_digits.  */
-  rc = arbint_init(base_arbint, op[0]._ctx);
+  rc = arbint_init_all(op[0]._ctx, base_arbint, divisor, high, low, abs_op,
+                       (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  rc = arbint_set_i32(base_arbint, base);
-  if (rc != ARBINT_OK) {
-    arbint_clear(base_arbint);
-    return rc;
-  }
 
-  rc = arbint_init(divisor, op[0]._ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(base_arbint);
-    return rc;
-  }
+  /*  Compute divisor = base^half_digits.  */
+  rc = arbint_set_i32(base_arbint, base);
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   /*  Use binary exponentiation for base^half_digits.  */
   if (half_digits <= UINT32_MAX) {
     rc = arbint_pow_u32(divisor, base_arbint, (uint32_t) half_digits);
   } else {
     /*  Extremely large: fall back to blocking.  */
-    arbint_clear(divisor);
-    arbint_clear(base_arbint);
+    arbint_clear_all(base_arbint, divisor, high, low, abs_op,
+                     (arbint_t *) NULL);
     return arbint_get_str_block(op, out_str, base);
   }
-  arbint_clear(base_arbint);
 
-  if (rc != ARBINT_OK) {
-    arbint_clear(divisor);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   /*  Split: high = |op| / divisor, low = |op| % divisor.  */
-  rc = arbint_init(high, op[0]._ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(divisor);
-    return rc;
-  }
-  rc = arbint_init(low, op[0]._ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(high);
-    arbint_clear(divisor);
-    return rc;
-  }
+  rc = arbint_abs(abs_op, op);
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
-  /*  Work with absolute value.  */
-  {
-    arbint_t abs_op;
-    rc = arbint_init(abs_op, op[0]._ctx);
-    if (rc != ARBINT_OK) {
-      arbint_clear(low);
-      arbint_clear(high);
-      arbint_clear(divisor);
-      return rc;
-    }
-    rc = arbint_abs(abs_op, op);
-    if (rc != ARBINT_OK) {
-      arbint_clear(abs_op);
-      arbint_clear(low);
-      arbint_clear(high);
-      arbint_clear(divisor);
-      return rc;
-    }
-    rc = arbint_tdiv_qr(high, low, abs_op, divisor);
-    arbint_clear(abs_op);
-  }
-  arbint_clear(divisor);
-
-  if (rc != ARBINT_OK) {
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
+  rc = arbint_tdiv_qr(high, low, abs_op, divisor);
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   /*  Recursively convert high and low parts.  */
   high_str = NULL;
   low_str = NULL;
 
   rc = arbint_get_str(high, &high_str, base);
-  arbint_clear(high);
-  if (rc != ARBINT_OK) {
-    arbint_clear(low);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   rc = arbint_get_str(low, &low_str, base);
-  arbint_clear(low);
   if (rc != ARBINT_OK) {
     arbint_str_free(op, high_str);
-    return rc;
+    goto cleanup;
   }
+
+  /*  All arbints done; free them before string assembly.  */
+  arbint_clear_all(base_arbint, divisor, high, low, abs_op,
+                   (arbint_t *) NULL);
 
   /*  Combine: high_str + zero_pad + low_str.  */
   high_len = strlen(high_str);
@@ -455,6 +414,11 @@ static arbint_err_t arbint_get_str_dc(const arbint_t op, char ** out_str,
 
   *out_str = buf;
   return ARBINT_OK;
+
+cleanup:
+  arbint_clear_all(base_arbint, divisor, high, low, abs_op,
+                   (arbint_t *) NULL);
+  return rc;
 }
 
 /*  ========== arbint_set_str Implementation ==========  */
@@ -710,92 +674,51 @@ static arbint_err_t arbint_set_str_dc(arbint_t rop, const char * s, size_t len,
 
   half = len / 2u;
 
-  /*  Parse high and low halves recursively.  */
-  rc = arbint_init(high, rop[0]._ctx);
+  rc = arbint_init_all(rop[0]._ctx, high, low, base_arbint, base_power,
+                       (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
 
-  rc = arbint_init(low, rop[0]._ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(high);
-    return rc;
-  }
-
   /*  Parse s[0..half-1] -> high (unsigned).  */
   rc = arbint_set_str_dc(high, s, half, base, 1);
-  if (rc != ARBINT_OK) {
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   /*  Parse s[half..len-1] -> low (unsigned).  */
   rc = arbint_set_str_dc(low, s + half, len - half, base, 1);
-  if (rc != ARBINT_OK) {
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   /*  Compute base^(len - half).  */
-  rc = arbint_init(base_arbint, rop[0]._ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
   rc = arbint_set_i32(base_arbint, base);
-  if (rc != ARBINT_OK) {
-    arbint_clear(base_arbint);
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
-
-  rc = arbint_init(base_power, rop[0]._ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(base_arbint);
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   if ((len - half) <= UINT32_MAX) {
     rc = arbint_pow_u32(base_power, base_arbint, (uint32_t) (len - half));
   } else {
     /*  Extremely large exponent: fall back to blocking.  */
-    arbint_clear(base_power);
-    arbint_clear(base_arbint);
-    arbint_clear(low);
-    arbint_clear(high);
+    arbint_clear_all(high, low, base_arbint, base_power, (arbint_t *) NULL);
     return arbint_set_str_block(rop, s, len, base, sign);
   }
-  arbint_clear(base_arbint);
 
-  if (rc != ARBINT_OK) {
-    arbint_clear(base_power);
-    arbint_clear(low);
-    arbint_clear(high);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   /*  rop = high * base_power + low.  */
   rc = arbint_mul(rop, high, base_power);
-  arbint_clear(base_power);
-  arbint_clear(high);
-  if (rc != ARBINT_OK) {
-    arbint_clear(low);
-    return rc;
-  }
+  if (rc != ARBINT_OK)
+    goto cleanup;
 
   rc = arbint_add(rop, rop, low);
-  arbint_clear(low);
   if (rc != ARBINT_OK)
-    return rc;
+    goto cleanup;
 
   /*  Apply sign.  */
   if (sign < 0 && rop[0]._sz > 0)
     rop[0]._sz = -rop[0]._sz;
 
-  return ARBINT_OK;
+cleanup:
+  arbint_clear_all(high, low, base_arbint, base_power, (arbint_t *) NULL);
+  return rc;
 }

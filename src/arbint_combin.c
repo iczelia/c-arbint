@@ -55,21 +55,9 @@ static arbint_err_t fib_pair(arbint_t fn, arbint_t fn1, uint32_t n,
   }
 
   /*  Initialize temporaries.  */
-  rc = arbint_init(a, ctx);
+  rc = arbint_init_all(ctx, a, b, c, d, tmp, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  rc = arbint_init(b, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup_a;
-  rc = arbint_init(c, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup_b;
-  rc = arbint_init(d, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup_c;
-  rc = arbint_init(tmp, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup_d;
 
   /*  Start with (a, b) = (F(1), F(2)) = (1, 1).
       The MSB of n is implicitly 1, which sets this initial state.  */
@@ -143,15 +131,7 @@ static arbint_err_t fib_pair(arbint_t fn, arbint_t fn1, uint32_t n,
   rc = arbint_set(fn1, b);
 
 cleanup:
-  arbint_clear(tmp);
-cleanup_d:
-  arbint_clear(d);
-cleanup_c:
-  arbint_clear(c);
-cleanup_b:
-  arbint_clear(b);
-cleanup_a:
-  arbint_clear(a);
+  arbint_clear_all(a, b, c, d, tmp, (arbint_t *) NULL);
   return rc;
 }
 
@@ -280,15 +260,9 @@ arbint_err_t arbint_lucas_u32(arbint_t rop, uint32_t n) {
 
   ctx = rop[0]._ctx;
 
-  rc = arbint_init(fn, ctx);
+  rc = arbint_init_all(ctx, fn, fn1, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(fn1, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(fn);
-    return rc;
-  }
 
   /*  Compute F(n) and F(n+1).  */
   rc = fib_pair(fn, fn1, n, ctx);
@@ -302,8 +276,7 @@ arbint_err_t arbint_lucas_u32(arbint_t rop, uint32_t n) {
   rc = arbint_sub(rop, rop, fn);
 
 cleanup:
-  arbint_clear(fn1);
-  arbint_clear(fn);
+  arbint_clear_all(fn, fn1, (arbint_t *) NULL);
   return rc;
 }
 
@@ -475,15 +448,9 @@ arbint_err_t arbint_is_square(const arbint_t a, int * out) {
 
   ctx = a[0]._ctx;
 
-  rc = arbint_init(root, ctx);
+  rc = arbint_init_all(ctx, root, sq, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(sq, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(root);
-    return rc;
-  }
 
   /*  Compute root = floor(sqrt(a)).  */
   rc = arbint_isqrt(root, a);
@@ -499,8 +466,7 @@ arbint_err_t arbint_is_square(const arbint_t a, int * out) {
   rc = ARBINT_OK;
 
 cleanup:
-  arbint_clear(sq);
-  arbint_clear(root);
+  arbint_clear_all(root, sq, (arbint_t *) NULL);
   return rc;
 }
 
@@ -527,30 +493,9 @@ static arbint_err_t arbint_isprime_pow_u32_tmod(arbint_t x, uint32_t base,
   arbint_t acc, pow_base, e, tmp;
   arbint_err_t rc;
 
-  rc = arbint_init(acc, ctx);
+  rc = arbint_init_all(ctx, acc, pow_base, e, tmp, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(pow_base, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(acc);
-    return rc;
-  }
-
-  rc = arbint_init(e, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(pow_base);
-    arbint_clear(acc);
-    return rc;
-  }
-
-  rc = arbint_init(tmp, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(e);
-    arbint_clear(pow_base);
-    arbint_clear(acc);
-    return rc;
-  }
 
   rc = arbint_set_i32(acc, 1);
   if (rc != ARBINT_OK)
@@ -595,10 +540,7 @@ static arbint_err_t arbint_isprime_pow_u32_tmod(arbint_t x, uint32_t base,
   rc = arbint_set(x, acc);
 
 cleanup:
-  arbint_clear(tmp);
-  arbint_clear(e);
-  arbint_clear(pow_base);
-  arbint_clear(acc);
+  arbint_clear_all(acc, pow_base, e, tmp, (arbint_t *) NULL);
   return rc;
 }
 
@@ -612,15 +554,9 @@ static arbint_err_t arbint_isprime_mr_round(const arbint_t n, const arbint_t d,
   arbint_err_t rc;
   size_t i;
 
-  rc = arbint_init(x, ctx);
+  rc = arbint_init_all(ctx, x, tmp, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-
-  rc = arbint_init(tmp, ctx);
-  if (rc != ARBINT_OK) {
-    arbint_clear(x);
-    return rc;
-  }
 
   rc = arbint_isprime_pow_u32_tmod(x, base, d, n, ctx);
   if (rc != ARBINT_OK)
@@ -658,8 +594,7 @@ static arbint_err_t arbint_isprime_mr_round(const arbint_t n, const arbint_t d,
   rc = ARBINT_OK;
 
 cleanup:
-  arbint_clear(tmp);
-  arbint_clear(x);
+  arbint_clear_all(x, tmp, (arbint_t *) NULL);
   return rc;
 }
 
@@ -672,8 +607,6 @@ arbint_err_t arbint_isprime(const arbint_t n, int reps, int * out) {
   size_t i;
   size_t s = 0u;
   size_t rounds;
-  int init_n_minus_1 = 0;
-  int init_d = 0;
   arbint_err_t rc;
 
   if (n == NULL || out == NULL)
@@ -725,15 +658,9 @@ arbint_err_t arbint_isprime(const arbint_t n, int reps, int * out) {
   }
 
   ctx = n[0]._ctx;
-  rc = arbint_init(n_minus_1, ctx);
+  rc = arbint_init_all(ctx, n_minus_1, d, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  init_n_minus_1 = 1;
-
-  rc = arbint_init(d, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_d = 1;
 
   rc = arbint_sub_i32(n_minus_1, n, 1);
   if (rc != ARBINT_OK)
@@ -772,10 +699,7 @@ arbint_err_t arbint_isprime(const arbint_t n, int reps, int * out) {
   rc = ARBINT_OK;
 
 cleanup:
-  if (init_d)
-    arbint_clear(d);
-  if (init_n_minus_1)
-    arbint_clear(n_minus_1);
+  arbint_clear_all(n_minus_1, d, (arbint_t *) NULL);
   return rc;
 }
 
