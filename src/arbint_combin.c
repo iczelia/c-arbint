@@ -938,9 +938,6 @@ arbint_err_t arbint_is_power(const arbint_t a, int * out) {
   size_t i;
   int a_neg;
   int is_sq;
-  int init_abs = 0;
-  int init_r = 0;
-  int init_rpow = 0;
 
   if (a == NULL || out == NULL)
     return ARBINT_EINVAL;
@@ -966,20 +963,9 @@ arbint_err_t arbint_is_power(const arbint_t a, int * out) {
   ctx = a[0]._ctx;
 
   /*  Allocate temporaries.  */
-  rc = arbint_init(abs_a, ctx);
+  rc = arbint_init_all(ctx, abs_a, r, r_pow, (arbint_t *) NULL);
   if (rc != ARBINT_OK)
     return rc;
-  init_abs = 1;
-
-  rc = arbint_init(r, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_r = 1;
-
-  rc = arbint_init(r_pow, ctx);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  init_rpow = 1;
 
   /*  Get |a|.  */
   rc = arbint_abs(abs_a, a);
@@ -1086,12 +1072,7 @@ arbint_err_t arbint_is_power(const arbint_t a, int * out) {
   rc = ARBINT_OK;
 
 cleanup:
-  if (init_rpow)
-    arbint_clear(r_pow);
-  if (init_r)
-    arbint_clear(r);
-  if (init_abs)
-    arbint_clear(abs_a);
+  arbint_clear_all(abs_a, r, r_pow, (arbint_t *) NULL);
   return rc;
 }
 
