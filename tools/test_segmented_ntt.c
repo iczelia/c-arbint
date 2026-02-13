@@ -130,20 +130,9 @@ static int test_algebraic_identity(arbint_ctx_t * ctx, size_t n_limbs) {
          size_str);
   fflush(stdout);
 
-  rc = arbint_init(a, ctx);
-  if (rc != ARBINT_OK) {
-    printf("FAIL (init a)\n");
-    return 0;
-  }
-
-  rc = arbint_init(ap1, ctx);
-  rc |= arbint_init(am1, ctx);
-  rc |= arbint_init(prod, ctx);
-  rc |= arbint_init(sqr, ctx);
-  rc |= arbint_init(sqr_m1, ctx);
+  rc = arbint_init_all(ctx, a, ap1, am1, prod, sqr, sqr_m1, (arbint_t *) NULL);
   if (rc != ARBINT_OK) {
     printf("FAIL (init)\n");
-    arbint_clear(a);
     return 0;
   }
 
@@ -202,12 +191,7 @@ static int test_algebraic_identity(arbint_ctx_t * ctx, size_t n_limbs) {
   printf("OK (%s)\n", time_str);
 
 cleanup:
-  arbint_clear(sqr_m1);
-  arbint_clear(sqr);
-  arbint_clear(prod);
-  arbint_clear(am1);
-  arbint_clear(ap1);
-  arbint_clear(a);
+  arbint_clear_all(a, ap1, am1, prod, sqr, sqr_m1, (arbint_t *) NULL);
 
   return result;
 }
@@ -235,14 +219,7 @@ static int test_distributive(arbint_ctx_t * ctx, size_t n_limbs) {
          size_str);
   fflush(stdout);
 
-  rc = arbint_init(a, ctx);
-  rc |= arbint_init(b, ctx);
-  rc |= arbint_init(c, ctx);
-  rc |= arbint_init(bc, ctx);
-  rc |= arbint_init(a_bc, ctx);
-  rc |= arbint_init(ab, ctx);
-  rc |= arbint_init(ac, ctx);
-  rc |= arbint_init(ab_ac, ctx);
+  rc = arbint_init_all(ctx, a, b, c, bc, a_bc, ab, ac, ab_ac, (arbint_t *) NULL);
   if (rc != ARBINT_OK) {
     printf("FAIL (init)\n");
     return 0;
@@ -305,14 +282,7 @@ static int test_distributive(arbint_ctx_t * ctx, size_t n_limbs) {
   printf("OK (%s)\n", time_str);
 
 cleanup:
-  arbint_clear(ab_ac);
-  arbint_clear(ac);
-  arbint_clear(ab);
-  arbint_clear(a_bc);
-  arbint_clear(bc);
-  arbint_clear(c);
-  arbint_clear(b);
-  arbint_clear(a);
+  arbint_clear_all(a, b, c, bc, a_bc, ab, ac, ab_ac, (arbint_t *) NULL);
 
   return result;
 }
@@ -337,9 +307,7 @@ static int test_large_mul(arbint_ctx_t * ctx, size_t n_limbs) {
   printf("  Allocating operands... ");
   fflush(stdout);
 
-  rc = arbint_init(a, ctx);
-  rc |= arbint_init(b, ctx);
-  rc |= arbint_init(r, ctx);
+  rc = arbint_init_all(ctx, a, b, r, (arbint_t *) NULL);
   if (rc != ARBINT_OK) {
     printf("FAIL\n");
     return 0;
@@ -390,9 +358,7 @@ static int test_large_mul(arbint_ctx_t * ctx, size_t n_limbs) {
     ++g_tests_failed;
 
 cleanup:
-  arbint_clear(r);
-  arbint_clear(b);
-  arbint_clear(a);
+  arbint_clear_all(a, b, r, (arbint_t *) NULL);
 
   return result;
 }
@@ -551,6 +517,7 @@ int main(int argc, char ** argv) {
 
   arbint_ctx_clear(&ctx);
   arbint_rng_clear(&g_rng);
+  arbint_drop_caches();
 
   return (g_tests_failed > 0) ? 1 : 0;
 }
