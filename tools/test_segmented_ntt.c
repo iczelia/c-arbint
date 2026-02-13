@@ -50,6 +50,8 @@
 #include <time.h>
 
 #include "arbint_base.h"
+#include "arbint_ntt.h"
+#include "arbint_ntt_segmented.h"
 
 /*  Test result tracking.  */
 static int g_tests_passed = 0;
@@ -363,6 +365,211 @@ cleanup:
   return result;
 }
 
+/*  Test NTT squaring directly by calling the internal API.
+    Compares arbint_sqr_mag_ntt against arbint_sqr to verify correctness.  */
+static int test_ntt_sqr_direct(arbint_ctx_t * ctx, size_t n_limbs) {
+  arbint_t a;
+  arbint_t sqr_public;
+  arbint_limb_t * a_limbs = NULL;
+  arbint_limb_t * dst_limbs = NULL;
+  arbint_err_t rc;
+  int result = 1;
+  char size_str[32];
+  char time_str[32];
+  uint64_t start;
+  uint64_t end;
+  size_t dst_cap;
+  size_t out_used;
+
+  format_size(n_limbs, size_str, sizeof(size_str));
+  printf("  Testing NTT squaring direct at %zu limbs (%s)... ", n_limbs,
+         size_str);
+  fflush(stdout);
+
+  rc = arbint_init_all(ctx, a, sqr_public, (arbint_t *) NULL);
+  if (rc != ARBINT_OK) {
+    printf("FAIL (init)\n");
+    return 0;
+  }
+
+  /*  Generate random a with n limbs.  */
+  rc = build_random(a, n_limbs);
+  if (rc != ARBINT_OK) {
+    printf("FAIL (random)\n");
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Compute a^2 using public API.  */
+  rc = arbint_sqr(sqr_public, a);
+  if (rc != ARBINT_OK) {
+    printf("FAIL (public sqr)\n");
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Now compute using direct NTT API.  */
+  dst_cap = 2u * n_limbs + 1u;
+  a_limbs = arbint_alloc_limbs(&ctx->a, n_limbs);
+  dst_limbs = arbint_alloc_limbs(&ctx->a, dst_cap);
+
+  if (!a_limbs || !dst_limbs) {
+    printf("FAIL (alloc)\n");
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Copy limbs from arbint.  */
+  memcpy(a_limbs, ARBINT_CLIMBS(a), n_limbs * sizeof(arbint_limb_t));
+
+  start = get_time_ns();
+  rc = arbint_sqr_mag_ntt(dst_limbs, &out_used, a_limbs, n_limbs, &ctx->a);
+  end = get_time_ns();
+
+  if (rc != ARBINT_OK) {
+    printf("FAIL (ntt sqr: %d)\n", rc);
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Compare results.  */
+  {
+    size_t pub_sz = arbint_abs_sz(sqr_public[0]._sz);
+    const arbint_limb_t * pub_limbs = ARBINT_CLIMBS(sqr_public);
+    size_t i;
+
+    if (out_used != pub_sz) {
+      printf("FAIL (size mismatch: ntt=%zu public=%zu)\n", out_used, pub_sz);
+      result = 0;
+      goto cleanup;
+    }
+
+    for (i = 0; i < out_used; ++i) {
+      if (dst_limbs[i] != pub_limbs[i]) {
+        printf("FAIL (limb mismatch at %zu)\n", i);
+        result = 0;
+        goto cleanup;
+      }
+    }
+  }
+
+  format_time(end - start, time_str, sizeof(time_str));
+  printf("OK (%s)\n", time_str);
+
+cleanup:
+  arbint_free_limbs(&ctx->a, a_limbs);
+  arbint_free_limbs(&ctx->a, dst_limbs);
+  arbint_clear_all(a, sqr_public, (arbint_t *) NULL);
+
+  return result;
+}
+
+/*  Test NTT multiplication directly by calling the internal API.
+    Compares arbint_mul_mag_ntt against arbint_mul to verify correctness.  */
+static int test_ntt_mul_direct(arbint_ctx_t * ctx, size_t n_limbs) {
+  arbint_t a;
+  arbint_t b;
+  arbint_t mul_public;
+  arbint_limb_t * a_limbs = NULL;
+  arbint_limb_t * b_limbs = NULL;
+  arbint_limb_t * dst_limbs = NULL;
+  arbint_err_t rc;
+  int result = 1;
+  char size_str[32];
+  char time_str[32];
+  uint64_t start;
+  uint64_t end;
+  size_t dst_cap;
+  size_t out_used;
+
+  format_size(n_limbs, size_str, sizeof(size_str));
+  printf("  Testing NTT multiplication direct at %zu limbs (%s)... ", n_limbs,
+         size_str);
+  fflush(stdout);
+
+  rc = arbint_init_all(ctx, a, b, mul_public, (arbint_t *) NULL);
+  if (rc != ARBINT_OK) {
+    printf("FAIL (init)\n");
+    return 0;
+  }
+
+  /*  Generate random operands.  */
+  rc = build_random(a, n_limbs);
+  rc |= build_random(b, n_limbs);
+  if (rc != ARBINT_OK) {
+    printf("FAIL (random)\n");
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Compute a*b using public API.  */
+  rc = arbint_mul(mul_public, a, b);
+  if (rc != ARBINT_OK) {
+    printf("FAIL (public mul)\n");
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Now compute using direct NTT API.  */
+  dst_cap = 2u * n_limbs + 1u;
+  a_limbs = arbint_alloc_limbs(&ctx->a, n_limbs);
+  b_limbs = arbint_alloc_limbs(&ctx->a, n_limbs);
+  dst_limbs = arbint_alloc_limbs(&ctx->a, dst_cap);
+
+  if (!a_limbs || !b_limbs || !dst_limbs) {
+    printf("FAIL (alloc)\n");
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Copy limbs from arbints.  */
+  memcpy(a_limbs, ARBINT_CLIMBS(a), n_limbs * sizeof(arbint_limb_t));
+  memcpy(b_limbs, ARBINT_CLIMBS(b), n_limbs * sizeof(arbint_limb_t));
+
+  start = get_time_ns();
+  rc = arbint_mul_mag_ntt(dst_limbs, &out_used, a_limbs, n_limbs, b_limbs,
+                          n_limbs, &ctx->a);
+  end = get_time_ns();
+
+  if (rc != ARBINT_OK) {
+    printf("FAIL (ntt mul: %d)\n", rc);
+    result = 0;
+    goto cleanup;
+  }
+
+  /*  Compare results.  */
+  {
+    size_t pub_sz = arbint_abs_sz(mul_public[0]._sz);
+    const arbint_limb_t * pub_limbs = ARBINT_CLIMBS(mul_public);
+    size_t i;
+
+    if (out_used != pub_sz) {
+      printf("FAIL (size mismatch: ntt=%zu public=%zu)\n", out_used, pub_sz);
+      result = 0;
+      goto cleanup;
+    }
+
+    for (i = 0; i < out_used; ++i) {
+      if (dst_limbs[i] != pub_limbs[i]) {
+        printf("FAIL (limb mismatch at %zu)\n", i);
+        result = 0;
+        goto cleanup;
+      }
+    }
+  }
+
+  format_time(end - start, time_str, sizeof(time_str));
+  printf("OK (%s)\n", time_str);
+
+cleanup:
+  arbint_free_limbs(&ctx->a, a_limbs);
+  arbint_free_limbs(&ctx->a, b_limbs);
+  arbint_free_limbs(&ctx->a, dst_limbs);
+  arbint_clear_all(a, b, mul_public, (arbint_t *) NULL);
+
+  return result;
+}
+
 /*  Run quick test suite.  */
 static void run_quick_tests(arbint_ctx_t * ctx) {
   size_t sizes[] = {1000, 5000, 10000, 50000, 100000};
@@ -388,6 +595,28 @@ static void run_quick_tests(arbint_ctx_t * ctx) {
 
   /*  Test larger size that approaches NTT threshold.  */
   if (test_large_mul(ctx, 500000))
+    ++g_tests_passed;
+  else
+    ++g_tests_failed;
+
+  /*  Test direct NTT API calls at a few sizes.  */
+  printf("\n=== Direct NTT API Tests ===\n");
+  if (test_ntt_mul_direct(ctx, 2048))
+    ++g_tests_passed;
+  else
+    ++g_tests_failed;
+
+  if (test_ntt_sqr_direct(ctx, 2048))
+    ++g_tests_passed;
+  else
+    ++g_tests_failed;
+
+  if (test_ntt_mul_direct(ctx, 8192))
+    ++g_tests_passed;
+  else
+    ++g_tests_failed;
+
+  if (test_ntt_sqr_direct(ctx, 8192))
     ++g_tests_passed;
   else
     ++g_tests_failed;

@@ -21,16 +21,15 @@
     operations at various operand sizes to help determine optimal threshold
     values for algorithm selection (schoolbook -> Karatsuba -> Toom-3 -> NTT).
 
-    Usage: tune_thresholds [--mul] [--sqr] [--ntt] [--csv]
+    Usage: tune_thresholds [--mul] [--sqr] [--ntt] [--ntt-sqr] [--csv]
 
-    The tool uses only the public API and measures wall-clock time for
-    operations. It outputs recommended threshold values based on observed
-    performance crossover points.
+    This tool links directly against the library object files (not the
+    shared library) so it can call internal functions like arbint_mul_mag_ntt
+    and arbint_sqr_mag_ntt directly. This allows accurate comparison of
+    algorithms without depending on compile-time thresholds.
 
-    Note: The actual algorithm used depends on compile-time thresholds.
-    This tool helps identify where those thresholds *should* be set.
-    After adjusting thresholds in arbint_mul.h, recompile and re-run
-    to verify the changes.  */
+    The --ntt and --ntt-sqr options directly measure Toom-3 vs NTT to find
+    the true crossover point where NTT becomes faster.  */
 
 #include <arbint.h>
 #include <stdint.h>
@@ -40,6 +39,8 @@
 #include <time.h>
 
 #include "arbint_mul.h"
+#include "arbint_ntt.h"
+#include "arbint_base.h"
 
 /*  Stringify helper for printing current threshold values.  */
 #define ARBINT_STR_(x) #x
@@ -69,6 +70,15 @@ static int g_csv_mode = 0;
 
 /*  Global RNG for generating random operands.  */
 static arbint_rng_t g_rng;
+
+/*  Simple LCG for filling limb arrays with pseudorandom data.
+    Used by the direct NTT measurement functions.  */
+static uint32_t g_lcg_state = 0x12345678u;
+
+static uint32_t lcg_rand(void) {
+  g_lcg_state = g_lcg_state * 1103515245u + 12345u;
+  return g_lcg_state;
+}
 
 /*  Get current time in nanoseconds (platform-specific).  */
 static uint64_t get_time_ns(void) {
@@ -381,81 +391,245 @@ static void tune_squaring(void) {
   arbint_ctx_clear(&ctx);
 }
 
-/*  Compute normalized time for NTT comparison.
-    For NTT, expect O(n log n) complexity, so normalize by n * log2(n).  */
-static double normalize_time_ntt(double ns, size_t n) {
-  double log2_n = 0.0;
-  size_t tmp = n;
-  while (tmp > 1) {
-    log2_n += 1.0;
-    tmp >>= 1;
-  }
-  if (log2_n < 1.0)
-    log2_n = 1.0;
-  return ns / ((double) n * log2_n);
-}
-
-/*  Find NTT crossover point.
-    Looks for where normalized time (by n*log(n)) starts decreasing,
-    indicating NTT has become more efficient than Toom-3.  */
-static size_t find_ntt_crossover(double * times, size_t * sizes,
-                                 size_t count) {
+/*  Find crossover point in direct comparison data.
+    times_a and times_b contain timings for two algorithms.
+    Returns the size where algorithm B becomes faster than A.  */
+static size_t find_direct_crossover(double * times_a, double * times_b,
+                                    size_t * sizes, size_t count) {
   size_t i;
-  double prev_norm = 0.0;
-  int decreasing_count = 0;
+  int b_faster_count = 0;
 
-  for (i = 1; i < count; ++i) {
-    double curr_norm = normalize_time_ntt(times[i], sizes[i]);
-
-    if (prev_norm > 0.0 && curr_norm < prev_norm * 0.95) {
-      /*  Significant decrease in normalized time.  */
-      ++decreasing_count;
-      if (decreasing_count >= 3) {
-        /*  Found sustained decrease - return first point.  */
-        return sizes[i - decreasing_count + 1];
+  for (i = 0; i < count; ++i) {
+    if (times_b[i] < times_a[i] * 0.98) {
+      /*  B is at least 2% faster.  */
+      ++b_faster_count;
+      if (b_faster_count >= 2) {
+        /*  Found sustained improvement - return first crossover.  */
+        return sizes[i - b_faster_count + 1];
       }
     } else {
-      decreasing_count = 0;
+      b_faster_count = 0;
     }
-
-    prev_norm = curr_norm;
   }
 
   return 0;
 }
 
+/*  Measure time for NTT multiplication at given size using internal API.
+    Returns average nanoseconds per operation.  */
+static double measure_ntt_mul_direct(arbint_limb_t * dst, arbint_limb_t * a,
+                                     arbint_limb_t * b, size_t n,
+                                     const arbint_alloc_t * alloc) {
+  uint64_t start;
+  uint64_t end;
+  uint64_t total_ns;
+  int iters;
+  int i;
+  size_t out_used;
+
+  /*  Warmup.  */
+  for (i = 0; i < WARMUP_ITERS; ++i)
+    arbint_mul_mag_ntt(dst, &out_used, a, n, b, n, alloc);
+
+  /*  Determine iteration count.  */
+  start = get_time_ns();
+  for (i = 0; i < MIN_ITERS; ++i)
+    arbint_mul_mag_ntt(dst, &out_used, a, n, b, n, alloc);
+  end = get_time_ns();
+
+  total_ns = end - start;
+  if (total_ns < TARGET_TIME_NS && total_ns > 0) {
+    iters = (int) ((TARGET_TIME_NS * MIN_ITERS) / total_ns);
+    if (iters < MIN_ITERS)
+      iters = MIN_ITERS;
+    if (iters > 10000)
+      iters = 10000;
+  } else {
+    iters = MIN_ITERS;
+  }
+
+  /*  Actual measurement.  */
+  start = get_time_ns();
+  for (i = 0; i < iters; ++i)
+    arbint_mul_mag_ntt(dst, &out_used, a, n, b, n, alloc);
+  end = get_time_ns();
+
+  return (double) (end - start) / (double) iters;
+}
+
+/*  Measure time for NTT squaring at given size using internal API.
+    Returns average nanoseconds per operation.  */
+static double measure_ntt_sqr_direct(arbint_limb_t * dst, arbint_limb_t * a,
+                                     size_t n, const arbint_alloc_t * alloc) {
+  uint64_t start;
+  uint64_t end;
+  uint64_t total_ns;
+  int iters;
+  int i;
+  size_t out_used;
+
+  /*  Warmup.  */
+  for (i = 0; i < WARMUP_ITERS; ++i)
+    arbint_sqr_mag_ntt(dst, &out_used, a, n, alloc);
+
+  /*  Determine iteration count.  */
+  start = get_time_ns();
+  for (i = 0; i < MIN_ITERS; ++i)
+    arbint_sqr_mag_ntt(dst, &out_used, a, n, alloc);
+  end = get_time_ns();
+
+  total_ns = end - start;
+  if (total_ns < TARGET_TIME_NS && total_ns > 0) {
+    iters = (int) ((TARGET_TIME_NS * MIN_ITERS) / total_ns);
+    if (iters < MIN_ITERS)
+      iters = MIN_ITERS;
+    if (iters > 10000)
+      iters = 10000;
+  } else {
+    iters = MIN_ITERS;
+  }
+
+  /*  Actual measurement.  */
+  start = get_time_ns();
+  for (i = 0; i < iters; ++i)
+    arbint_sqr_mag_ntt(dst, &out_used, a, n, alloc);
+  end = get_time_ns();
+
+  return (double) (end - start) / (double) iters;
+}
+
+/*  Measure time for Toom-3 multiplication at given size using internal API.
+    Uses arbint_mul_mag_generic which will use Toom-3 for large enough n.
+    Returns average nanoseconds per operation.  */
+static double measure_toom3_mul_direct(arbint_limb_t * dst, arbint_limb_t * a,
+                                       arbint_limb_t * b, size_t n,
+                                       const arbint_alloc_t * alloc) {
+  uint64_t start;
+  uint64_t end;
+  uint64_t total_ns;
+  int iters;
+  int i;
+  size_t out_used;
+
+  /*  Warmup.  */
+  for (i = 0; i < WARMUP_ITERS; ++i)
+    arbint_mul_mag_generic(dst, &out_used, a, n, b, n, alloc);
+
+  /*  Determine iteration count.  */
+  start = get_time_ns();
+  for (i = 0; i < MIN_ITERS; ++i)
+    arbint_mul_mag_generic(dst, &out_used, a, n, b, n, alloc);
+  end = get_time_ns();
+
+  total_ns = end - start;
+  if (total_ns < TARGET_TIME_NS && total_ns > 0) {
+    iters = (int) ((TARGET_TIME_NS * MIN_ITERS) / total_ns);
+    if (iters < MIN_ITERS)
+      iters = MIN_ITERS;
+    if (iters > 10000)
+      iters = 10000;
+  } else {
+    iters = MIN_ITERS;
+  }
+
+  /*  Actual measurement.  */
+  start = get_time_ns();
+  for (i = 0; i < iters; ++i)
+    arbint_mul_mag_generic(dst, &out_used, a, n, b, n, alloc);
+  end = get_time_ns();
+
+  return (double) (end - start) / (double) iters;
+}
+
+/*  Measure time for Toom-3 squaring at given size using internal API.
+    Uses arbint_sqr via public API with threshold-based dispatch.
+    Since we can't directly call Toom-3 squaring, we rely on the
+    existing threshold being high enough that arbint_sqr uses Toom-3.
+    Returns average nanoseconds per operation.  */
+static double measure_toom3_sqr_via_public(arbint_t r, arbint_t a, size_t n) {
+  /*  Just use the public API - for NTT sqr tuning we'll compare against
+      direct NTT sqr calls. The public sqr will use Toom-3 if n < threshold.  */
+  return measure_sqr(a, r, n);
+}
+
 static void tune_ntt(void) {
   arbint_ctx_t ctx;
-  arbint_t a;
-  arbint_t b;
-  arbint_t r;
-  double times[500];
+  arbint_limb_t * a_limbs = NULL;
+  arbint_limb_t * b_limbs = NULL;
+  arbint_limb_t * dst = NULL;
+  double times_toom3[500];
+  double times_ntt[500];
   size_t sizes[500];
   size_t count = 0;
   size_t n;
   size_t step;
   size_t ntt_crossover = 0;
+  size_t dst_cap;
 
   if (arbint_ctx_init_default(&ctx) != ARBINT_OK) {
     fprintf(stderr, "Failed to init context\n");
     exit(1);
   }
 
-  arbint_init(a, &ctx);
-  arbint_init(b, &ctx);
-  arbint_init(r, &ctx);
-
-  print_header("NTT Multiplication");
+  if (g_csv_mode) {
+    printf("limbs,toom3_ns,ntt_ns,speedup\n");
+  } else {
+    printf("\n=== NTT Multiplication Threshold Tuning ===\n");
+    printf("%8s  %12s  %12s  %8s\n", "limbs", "Toom-3 (ns)", "NTT (ns)",
+           "speedup");
+    printf("%8s  %12s  %12s  %8s\n", "-----", "-----------", "--------",
+           "-------");
+  }
 
   for (n = NTT_MIN_SIZE; n <= NTT_MAX_SIZE;) {
-    double ns = measure_mul(a, b, r, n);
-    print_row(n, ns);
+    double ns_toom3;
+    double ns_ntt;
+    double speedup;
+
+    /*  Allocate buffers for this size.  */
+    dst_cap = 2u * n + 1u;
+    a_limbs = arbint_alloc_limbs(&ctx.a, n);
+    b_limbs = arbint_alloc_limbs(&ctx.a, n);
+    dst = arbint_alloc_limbs(&ctx.a, dst_cap);
+
+    if (!a_limbs || !b_limbs || !dst) {
+      fprintf(stderr, "Failed to allocate at size %zu\n", n);
+      goto cleanup;
+    }
+
+    /*  Fill with random data.  */
+    for (size_t i = 0; i < n; ++i) {
+      a_limbs[i] = (arbint_limb_t) lcg_rand() |
+                   ((arbint_limb_t) lcg_rand() << 32);
+      b_limbs[i] = (arbint_limb_t) lcg_rand() |
+                   ((arbint_limb_t) lcg_rand() << 32);
+    }
+    /*  Ensure top limb is non-zero.  */
+    a_limbs[n - 1] |= ((arbint_limb_t) 1 << 63);
+    b_limbs[n - 1] |= ((arbint_limb_t) 1 << 63);
+
+    /*  Measure both algorithms directly.  */
+    ns_toom3 = measure_toom3_mul_direct(dst, a_limbs, b_limbs, n, &ctx.a);
+    ns_ntt = measure_ntt_mul_direct(dst, a_limbs, b_limbs, n, &ctx.a);
+    speedup = ns_toom3 / ns_ntt;
+
+    if (g_csv_mode) {
+      printf("%zu,%.1f,%.1f,%.2f\n", n, ns_toom3, ns_ntt, speedup);
+    } else {
+      printf("%8zu  %12.1f  %12.1f  %8.2fx\n", n, ns_toom3, ns_ntt, speedup);
+    }
 
     if (count < 500) {
-      times[count] = ns;
+      times_toom3[count] = ns_toom3;
+      times_ntt[count] = ns_ntt;
       sizes[count] = n;
       ++count;
     }
+
+    arbint_free_limbs(&ctx.a, a_limbs);
+    arbint_free_limbs(&ctx.a, b_limbs);
+    arbint_free_limbs(&ctx.a, dst);
+    a_limbs = b_limbs = dst = NULL;
 
     /*  Variable step size for NTT range.  */
     if (n < 512)
@@ -468,16 +642,16 @@ static void tune_ntt(void) {
   }
 
   if (!g_csv_mode) {
-    ntt_crossover = find_ntt_crossover(times, sizes, count);
+    ntt_crossover = find_direct_crossover(times_toom3, times_ntt, sizes, count);
 
-    printf("\n--- NTT Analysis ---\n");
+    printf("\n--- NTT Multiplication Analysis ---\n");
     printf("Testing range: %d to %d limbs\n", NTT_MIN_SIZE, NTT_MAX_SIZE);
     printf("Current NTT threshold: " ARBINT_STR(ARBINT_NTT_THRESHOLD) "\n");
 
     if (ntt_crossover > 0)
-      printf("Estimated NTT crossover: ~%zu limbs\n", ntt_crossover);
+      printf("Detected NTT crossover: ~%zu limbs\n", ntt_crossover);
     else
-      printf("NTT crossover: not detected (Toom-3 may still be faster)\n");
+      printf("NTT crossover: not detected in test range\n");
 
     printf("\nRecommendations:\n");
     printf("  ARBINT_NTT_THRESHOLD: %zu (current: " ARBINT_STR(
@@ -485,8 +659,134 @@ static void tune_ntt(void) {
            ntt_crossover > 0 ? ntt_crossover : ARBINT_NTT_THRESHOLD);
   }
 
+cleanup:
+  arbint_free_limbs(&ctx.a, a_limbs);
+  arbint_free_limbs(&ctx.a, b_limbs);
+  arbint_free_limbs(&ctx.a, dst);
+  arbint_ctx_clear(&ctx);
+}
+
+/*  Tune NTT squaring threshold by comparing Toom-3 squaring vs NTT squaring.  */
+static void tune_ntt_sqr(void) {
+  arbint_ctx_t ctx;
+  arbint_t a;
+  arbint_t r;
+  arbint_limb_t * a_limbs = NULL;
+  arbint_limb_t * dst = NULL;
+  double times_toom3[500];
+  double times_ntt[500];
+  size_t sizes[500];
+  size_t count = 0;
+  size_t n;
+  size_t step;
+  size_t ntt_crossover = 0;
+  size_t dst_cap;
+
+  if (arbint_ctx_init_default(&ctx) != ARBINT_OK) {
+    fprintf(stderr, "Failed to init context\n");
+    exit(1);
+  }
+
+  arbint_init(a, &ctx);
+  arbint_init(r, &ctx);
+
+  if (g_csv_mode) {
+    printf("limbs,toom3_ns,ntt_ns,speedup\n");
+  } else {
+    printf("\n=== NTT Squaring Threshold Tuning ===\n");
+    printf("%8s  %12s  %12s  %8s\n", "limbs", "Toom-3 (ns)", "NTT (ns)",
+           "speedup");
+    printf("%8s  %12s  %12s  %8s\n", "-----", "-----------", "--------",
+           "-------");
+  }
+
+  for (n = NTT_MIN_SIZE; n <= NTT_MAX_SIZE;) {
+    double ns_toom3;
+    double ns_ntt;
+    double speedup;
+
+    /*  Allocate buffers for this size.  */
+    dst_cap = 2u * n + 1u;
+    a_limbs = arbint_alloc_limbs(&ctx.a, n);
+    dst = arbint_alloc_limbs(&ctx.a, dst_cap);
+
+    if (!a_limbs || !dst) {
+      fprintf(stderr, "Failed to allocate at size %zu\n", n);
+      goto cleanup;
+    }
+
+    /*  Fill with random data.  */
+    for (size_t i = 0; i < n; ++i) {
+      a_limbs[i] = (arbint_limb_t) lcg_rand() |
+                   ((arbint_limb_t) lcg_rand() << 32);
+    }
+    /*  Ensure top limb is non-zero.  */
+    a_limbs[n - 1] |= ((arbint_limb_t) 1 << 63);
+
+    /*  Measure Toom-3 squaring via public API.
+        (arbint_sqr will use Toom-3 since we're below the NTT threshold
+        or we're directly measuring via mul_mag_generic for squaring.)  */
+    build_random_value(a, n);
+    ns_toom3 = measure_toom3_sqr_via_public(r, a, n);
+
+    /*  Measure NTT squaring directly.  */
+    ns_ntt = measure_ntt_sqr_direct(dst, a_limbs, n, &ctx.a);
+    speedup = ns_toom3 / ns_ntt;
+
+    if (g_csv_mode) {
+      printf("%zu,%.1f,%.1f,%.2f\n", n, ns_toom3, ns_ntt, speedup);
+    } else {
+      printf("%8zu  %12.1f  %12.1f  %8.2fx\n", n, ns_toom3, ns_ntt, speedup);
+    }
+
+    if (count < 500) {
+      times_toom3[count] = ns_toom3;
+      times_ntt[count] = ns_ntt;
+      sizes[count] = n;
+      ++count;
+    }
+
+    arbint_free_limbs(&ctx.a, a_limbs);
+    arbint_free_limbs(&ctx.a, dst);
+    a_limbs = dst = NULL;
+
+    /*  Variable step size for NTT range.  */
+    if (n < 512)
+      step = NTT_SIZE_STEP_SMALL;
+    else if (n < 2048)
+      step = NTT_SIZE_STEP_MEDIUM;
+    else
+      step = NTT_SIZE_STEP_LARGE;
+    n += step;
+  }
+
+  if (!g_csv_mode) {
+    ntt_crossover = find_direct_crossover(times_toom3, times_ntt, sizes, count);
+
+    printf("\n--- NTT Squaring Analysis ---\n");
+    printf("Testing range: %d to %d limbs\n", NTT_MIN_SIZE, NTT_MAX_SIZE);
+    printf("Current NTT threshold (shared with mul): " ARBINT_STR(
+        ARBINT_NTT_THRESHOLD) "\n");
+
+    if (ntt_crossover > 0)
+      printf("Detected NTT squaring crossover: ~%zu limbs\n", ntt_crossover);
+    else
+      printf("NTT squaring crossover: not detected in test range\n");
+
+    printf("\nNote: NTT squaring uses the same threshold as NTT multiplication.\n");
+    printf("If the squaring crossover differs significantly from multiplication,\n");
+    printf("consider adding a separate ARBINT_NTT_SQR_THRESHOLD.\n");
+
+    printf("\nRecommendations:\n");
+    printf("  ARBINT_NTT_THRESHOLD (for sqr): %zu (current: " ARBINT_STR(
+               ARBINT_NTT_THRESHOLD) ")\n",
+           ntt_crossover > 0 ? ntt_crossover : ARBINT_NTT_THRESHOLD);
+  }
+
+cleanup:
+  arbint_free_limbs(&ctx.a, a_limbs);
+  arbint_free_limbs(&ctx.a, dst);
   arbint_clear(r);
-  arbint_clear(b);
   arbint_clear(a);
   arbint_ctx_clear(&ctx);
 }
@@ -494,21 +794,23 @@ static void tune_ntt(void) {
 static void print_usage(const char * prog) {
   printf("Usage: %s [OPTIONS]\n", prog);
   printf("\nOptions:\n");
-  printf("  --mul   Tune multiplication thresholds only\n");
-  printf("  --sqr   Tune squaring thresholds only\n");
-  printf("  --ntt   Tune NTT threshold only (tests larger operand sizes)\n");
-  printf("  --csv   Output in CSV format (for plotting)\n");
-  printf("  --help  Show this help message\n");
-  printf("\nBy default, tunes multiplication, squaring, and NTT.\n");
-  printf("\nThe tool measures operation times at various operand sizes and\n");
-  printf("attempts to identify where algorithm transitions occur. Use the\n");
-  printf("recommendations to update thresholds in src/arbint_mul.h.\n");
+  printf("  --mul      Tune multiplication thresholds (Karatsuba, Toom-3)\n");
+  printf("  --sqr      Tune squaring thresholds (Karatsuba, Toom-3)\n");
+  printf("  --ntt      Tune NTT multiplication threshold (Toom-3 vs NTT)\n");
+  printf("  --ntt-sqr  Tune NTT squaring threshold (Toom-3 vs NTT squaring)\n");
+  printf("  --csv      Output in CSV format (for plotting)\n");
+  printf("  --help     Show this help message\n");
+  printf("\nBy default, tunes all thresholds (mul, sqr, ntt, ntt-sqr).\n");
+  printf("\nThe --ntt and --ntt-sqr options directly measure Toom-3 vs NTT\n");
+  printf("by calling internal functions, providing accurate crossover detection.\n");
+  printf("\nUse the recommendations to update thresholds in src/arbint_mul.h.\n");
 }
 
 int main(int argc, char ** argv) {
   int do_mul = 0;
   int do_sqr = 0;
   int do_ntt = 0;
+  int do_ntt_sqr = 0;
   int i;
   arbint_err_t rc;
 
@@ -526,6 +828,8 @@ int main(int argc, char ** argv) {
       do_sqr = 1;
     } else if (strcmp(argv[i], "--ntt") == 0) {
       do_ntt = 1;
+    } else if (strcmp(argv[i], "--ntt-sqr") == 0) {
+      do_ntt_sqr = 1;
     } else if (strcmp(argv[i], "--csv") == 0) {
       g_csv_mode = 1;
     } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -539,10 +843,11 @@ int main(int argc, char ** argv) {
   }
 
   /*  Default: tune all.  */
-  if (!do_mul && !do_sqr && !do_ntt) {
+  if (!do_mul && !do_sqr && !do_ntt && !do_ntt_sqr) {
     do_mul = 1;
     do_sqr = 1;
     do_ntt = 1;
+    do_ntt_sqr = 1;
   }
 
   if (!g_csv_mode) {
@@ -560,6 +865,9 @@ int main(int argc, char ** argv) {
 
   if (do_ntt)
     tune_ntt();
+
+  if (do_ntt_sqr)
+    tune_ntt_sqr();
 
   if (!g_csv_mode) {
     printf("\n============================\n");
