@@ -204,7 +204,6 @@ jobs:
             - `sh4-linux` - Linux Hitachi SuperH
             - `alpha-linux` - Linux DEC Alpha
             - `amd64-freebsd` - FreeBSD x86-64
-            - `amd64-openbsd` - OpenBSD x86-64
             - `amd64-netbsd` - NetBSD x86-64
             - `arm64-darwin` - macOS ARM64
             - `amd64-windows` - Windows x86-64

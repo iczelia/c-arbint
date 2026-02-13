@@ -91,3 +91,6 @@ Primary platforms (with LTO support):
 Exotic architectures (no LTO, tested via Docker QEMU emulation):
 - Linux: riscv64 (Debian sid, Alpine edge; gcc), s390x (Debian, Alpine; clang/gcc), ppc64le (Debian, Alpine; clang/gcc), mips64le (Debian; gcc/clang), arm32v7 (Debian, Alpine; gcc), arm32v5 (Debian; gcc)
 - Linux (Debian ports): ppc64 big-endian (gcc), powerpc 32-bit (gcc), hppa/PA-RISC (gcc), m68k/Motorola 68000 (gcc), sh4/SuperH (gcc), alpha/DEC Alpha (gcc)
+
+BSD support (no LTO, tested in CI via BSD VMs):
+- x86-64: FreeBSD, NetBSD (system `cc`/`gmake`)

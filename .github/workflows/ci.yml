@@ -1208,8 +1208,6 @@ jobs:
         include:
           - os: freebsd
             version: "15.0"
-          - os: openbsd
-            version: "7.8"
           - os: netbsd
             version: "10.1"
     name: build-bsd (${{ matrix.os }}, amd64, lto-off, tune-off)
@@ -1251,11 +1249,6 @@ jobs:
                 fi
                 if ! as_root env ASSUME_ALWAYS_YES=yes pkg install -y gmake pkgconf; then
                   echo "Warning: unable to install gmake/pkgconf; continuing with available tools"
-                fi
-                ;;
-              openbsd)
-                if ! as_root pkg_add -I gmake; then
-                  echo "Warning: unable to install gmake; continuing with available tools"
                 fi
                 ;;
               netbsd)
@@ -1523,10 +1516,9 @@ jobs:
               tuple="alpha-linux"
               compiler="gcc"
               lto="off"
-            elif [[ "$artifact_name" =~ ^build-bsd-(freebsd|openbsd|netbsd)-amd64-([^-]+)-lto(on|off|auto)$ ]]; then
+            elif [[ "$artifact_name" =~ ^build-bsd-(freebsd|netbsd)-amd64-([^-]+)-lto(on|off|auto)$ ]]; then
               case "${BASH_REMATCH[1]}" in
                 freebsd) tuple="amd64-freebsd" ;;
-                openbsd) tuple="amd64-openbsd" ;;
                 netbsd) tuple="amd64-netbsd" ;;
               esac
               compiler="${BASH_REMATCH[2]}"
