@@ -123,7 +123,7 @@ jobs:
       - name: Install binary bundling dependencies
         run: |
           sudo apt -o Acquire::Retries=5 update
-          sudo apt -o Acquire::Retries=5 install -y bzip3 zip xz-utils
+          sudo apt -o Acquire::Retries=5 install -y bzip3 xz-utils
 
       - name: Organize artifacts
         run: |
@@ -149,9 +149,8 @@ jobs:
             cd "$bundle_dir"
             tar -cJf "../final-artifacts/${bundle_dir}.tar.xz" .
             tar -cf "../final-artifacts/${bundle_dir}.tar" .
-            zip -r "../final-artifacts/${bundle_dir}.zip" .
+            tar -cf - . | bzip3 -vfe > "../final-artifacts/${bundle_dir}.tar.bz3"
           )
-          bzip3 -vfe "final-artifacts/${bundle_dir}.tar"
 
           rm -rf "$bundle_dir" binary-staging
 
@@ -184,7 +183,7 @@ jobs:
             #### Pre-built Shared Libraries
             - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.tar.xz`
             - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.tar.bz3`
-            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.zip`
+            - `c-arbint-${{ needs.create-release-artifacts.outputs.version }}-bin.tar`
 
             Binary naming convention: `libarbint-{tuple}-{compiler}.{ext}`
 
@@ -204,6 +203,9 @@ jobs:
             - `m68k-linux` - Linux Motorola 68000
             - `sh4-linux` - Linux Hitachi SuperH
             - `alpha-linux` - Linux DEC Alpha
+            - `amd64-freebsd` - FreeBSD x86-64
+            - `amd64-openbsd` - OpenBSD x86-64
+            - `amd64-netbsd` - NetBSD x86-64
             - `arm64-darwin` - macOS ARM64
             - `amd64-windows` - Windows x86-64
             - `i386-windows` - Windows x86 (32-bit)
@@ -211,7 +213,7 @@ jobs:
             - `wasm64-emscripten` - WebAssembly 64-bit (Memory64)
 
             **Compiler suffixes:**
-            - `-c` = Clang (no LTO)
+            - `-c` = Clang / system `cc` (no LTO)
             - `-g` = GCC (no LTO)
             - `-lc` = Clang with LTO
             - `-lg` = GCC with LTO
@@ -225,7 +227,7 @@ jobs:
             - `libarbint-i386-windows-lm.dll` - Windows x86, MSVC with LTO
             - `libarbint-wasm32-emscripten-le.wasm` - WebAssembly 32-bit, Emscripten with LTO
 
-            **Note:** macOS builds use Clang only. Windows MSVC builds always use LTO. Exotic architectures (ppc64, ppc, hppa, m68k, sh4, alpha, armv5te) are built without LTO due to toolchain limitations.
+            **Note:** macOS builds use Clang only. Windows MSVC builds always use LTO. Exotic architectures (ppc64, ppc, hppa, m68k, sh4, alpha, armv5te) and BSD targets are built without LTO.
 
             ### Building from Source
 

@@ -1199,6 +1199,83 @@ jobs:
           path: artifacts/*
           if-no-files-found: warn
 
+  build-bsd:
+    runs-on: ubuntu-24.04
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: freebsd
+            version: "15.0"
+          - os: openbsd
+            version: "7.8"
+          - os: netbsd
+            version: "10.1"
+    name: build-bsd (${{ matrix.os }}, amd64, lto-off, tune-off)
+
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c-arbint-dist
+          path: dist
+
+      - name: Build and test in BSD VM
+        uses: cross-platform-actions/action@v0.32.0
+        with:
+          operating_system: ${{ matrix.os }}
+          architecture: x86-64
+          version: ${{ matrix.version }}
+          shell: sh
+          sync_files: true
+          run: |
+            set -eu
+
+            case "${{ matrix.os }}" in
+              freebsd)
+                env ASSUME_ALWAYS_YES=yes pkg update -f || true
+                env ASSUME_ALWAYS_YES=yes pkg install -y gmake pkgconf || true
+                ;;
+              openbsd)
+                pkg_add -I gmake pkgconf || true
+                ;;
+              netbsd)
+                if command -v pkgin >/dev/null 2>&1; then
+                  pkgin -y update || true
+                  pkgin -y install gmake pkgconf || true
+                fi
+                ;;
+            esac
+
+            make_cmd="make"
+            if command -v gmake >/dev/null 2>&1; then
+              make_cmd="gmake"
+            fi
+
+            tarball="$(ls dist/*.tar.xz | head -n1)"
+            srcdir="$(tar -tf "$tarball" 2>/dev/null | head -n1 | cut -d/ -f1)"
+            tar -xf "$tarball" -C dist
+            cd "dist/$srcdir"
+
+            CC=cc ./configure --enable-lto=no --with-base-optimization=default
+            jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
+            "$make_cmd" -j"$jobs"
+            "$make_cmd" check
+            echo "=== Contents of src/.libs ==="
+            ls -la src/.libs/ || true
+
+            mkdir -p ../../artifacts
+            find src/.libs -type f \( -name "*.so" -o -name "*.so.*" \) \
+              -exec cp {} ../../artifacts/ \;
+
+      - name: Upload shared library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-bsd-${{ matrix.os }}-amd64-cc-ltooff
+          path: artifacts/*
+          if-no-files-found: warn
+
   build-wasm:
     runs-on: ubuntu-24.04
     needs: package
@@ -1291,7 +1368,7 @@ jobs:
 
   repack-artifacts:
     runs-on: ubuntu-24.04
-    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-debian-ports, build-macos, build-wasm]
+    needs: [build-ubuntu, build-linux-x86-32, build-windows-mingw-64, build-windows-mingw-32, build-windows-msvc, build-exotic-arch, build-debian-ports, build-macos, build-bsd, build-wasm]
     if: always()
 
     steps:
@@ -1405,6 +1482,14 @@ jobs:
               tuple="alpha-linux"
               compiler="gcc"
               lto="off"
+            elif [[ "$artifact_name" =~ ^build-bsd-(freebsd|openbsd|netbsd)-amd64-([^-]+)-lto(on|off|auto)$ ]]; then
+              case "${BASH_REMATCH[1]}" in
+                freebsd) tuple="amd64-freebsd" ;;
+                openbsd) tuple="amd64-openbsd" ;;
+                netbsd) tuple="amd64-netbsd" ;;
+              esac
+              compiler="${BASH_REMATCH[2]}"
+              lto="${BASH_REMATCH[3]}"
             elif [[ "$artifact_name" =~ ^build-macos-arm64-lto(on|off|auto)$ ]]; then
               tuple="arm64-darwin"
               compiler="clang"
@@ -1438,6 +1523,7 @@ jobs:
             case "$compiler" in
               gcc) compiler="g" ;;
               clang) compiler="c" ;;
+              cc) compiler="c" ;;
               msvc) compiler="m" ;;
               emcc) compiler="e" ;;
               *) echo "Warning: Unknown compiler: $compiler"; return 1 ;;
