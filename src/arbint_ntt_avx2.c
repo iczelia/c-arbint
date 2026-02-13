@@ -151,6 +151,36 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
     }                                                                         \
   } while (0)
 
+/*  AVX2-optimized pointwise squaring loop.
+    Same as multiplication but a == b, avoiding redundant loads.  */
+#define NTT_POINTWISE_SQR(dst, a, n, mont)                                    \
+  do {                                                                        \
+    size_t _i = 0u;                                                           \
+    if ((n) >= NTT_AVX2_LOOP_THRESHOLD) {                                     \
+      for (; _i + 4u <= (n); _i += 4u) {                                      \
+        if (_i + 16u < (n)) {                                                 \
+          _mm_prefetch((const char *) &(a)[_i + 16u], _MM_HINT_T0);           \
+        }                                                                     \
+        __m256i _va = _mm256_loadu_si256((const __m256i *) &(a)[_i]);         \
+        uint64_t _a0 = (uint64_t) _mm256_extract_epi64(_va, 0);               \
+        uint64_t _a1 = (uint64_t) _mm256_extract_epi64(_va, 1);               \
+        uint64_t _a2 = (uint64_t) _mm256_extract_epi64(_va, 2);               \
+        uint64_t _a3 = (uint64_t) _mm256_extract_epi64(_va, 3);               \
+        uint64_t _r0 = mont_mul(_a0, _a0, mont);                              \
+        uint64_t _r1 = mont_mul(_a1, _a1, mont);                              \
+        uint64_t _r2 = mont_mul(_a2, _a2, mont);                              \
+        uint64_t _r3 = mont_mul(_a3, _a3, mont);                              \
+        __m256i _result =                                                     \
+            _mm256_set_epi64x((long long) _r3, (long long) _r2,               \
+                              (long long) _r1, (long long) _r0);              \
+        _mm256_storeu_si256((__m256i *) &(dst)[_i], _result);                 \
+      }                                                                       \
+    }                                                                         \
+    for (; _i < (n); ++_i) {                                                  \
+      (dst)[_i] = mont_mul((a)[_i], (a)[_i], mont);                           \
+    }                                                                         \
+  } while (0)
+
 /*  AVX2-optimized scale and from_mont conversion loop.  */
 #define NTT_SCALE_FROM_MONT(x, n, scale, mont)                                \
   do {                                                                        \
@@ -183,6 +213,7 @@ static void ntt_inverse(uint64_t * x, size_t log2_n,
     We need the helper functions before defining our custom transforms.  */
 #define ARBINT_NTT_CACHE_CLEAR_FN arbint_ntt_cache_clear_avx2
 #define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_avx2
+#define ARBINT_NTT_SQR_MAG_FN arbint_sqr_mag_ntt_avx2
 #include "arbint_ntt_core.inc"
 
 /* ========== AVX2 Vectorized Modular Arithmetic ========== */

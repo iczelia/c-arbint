@@ -36,4 +36,5 @@ static inline void ntt_umul(uint64_t * hi, uint64_t * lo, uint64_t a,
 
 #define ARBINT_NTT_CACHE_CLEAR_FN arbint_ntt_cache_clear_generic
 #define ARBINT_NTT_MUL_MAG_FN arbint_mul_mag_ntt_generic
+#define ARBINT_NTT_SQR_MAG_FN arbint_sqr_mag_ntt_generic
 #include "arbint_ntt_core.inc"

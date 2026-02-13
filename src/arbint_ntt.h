@@ -169,6 +169,38 @@ arbint_err_t arbint_mul_mag_ntt(arbint_limb_t * dst, size_t * out_used,
                                 const arbint_limb_t * b, size_t bn,
                                 const arbint_alloc_t * alloc);
 
+/*  Core NTT magnitude squaring.
+    dst must have capacity for 2*an limbs.
+    Returns result limb count via out_used.
+
+    Squaring optimization: only one forward NTT (vs two for multiplication),
+    pointwise squaring (vs pointwise multiplication), then inverse NTT.
+    Saves ~33% of NTT work compared to multiplication.
+
+    Preconditions:
+    - an >= ARBINT_NTT_THRESHOLD  */
+arbint_err_t arbint_sqr_mag_ntt_generic(arbint_limb_t * dst, size_t * out_used,
+                                        const arbint_limb_t * a, size_t an,
+                                        const arbint_alloc_t * alloc);
+
+#if HAS_BMI2
+arbint_err_t arbint_sqr_mag_ntt_bmi2(arbint_limb_t * dst, size_t * out_used,
+                                     const arbint_limb_t * a, size_t an,
+                                     const arbint_alloc_t * alloc);
+#endif
+
+#if HAS_AVX2
+arbint_err_t arbint_sqr_mag_ntt_avx2(arbint_limb_t * dst, size_t * out_used,
+                                     const arbint_limb_t * a, size_t an,
+                                     const arbint_alloc_t * alloc);
+#endif
+
+/*  Public dispatch function for NTT squaring.
+    Selects optimal implementation based on CPU features.  */
+arbint_err_t arbint_sqr_mag_ntt(arbint_limb_t * dst, size_t * out_used,
+                                const arbint_limb_t * a, size_t an,
+                                const arbint_alloc_t * alloc);
+
 /*  Drop per-variant NTT global caches (idempotent).  */
 void arbint_ntt_cache_clear_generic(void);
 #if HAS_BMI2

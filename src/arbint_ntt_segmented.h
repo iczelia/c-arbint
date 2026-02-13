@@ -67,10 +67,38 @@ arbint_err_t arbint_mul_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used
                                           const arbint_limb_t * b, size_t bn,
                                           const arbint_alloc_t * alloc);
 
+/*  Segmented NTT squaring: dst = a^2 for very large operands.
+
+    Splits operand into segments and uses Karatsuba decomposition:
+      A = A_hi * B^k + A_lo
+      A^2 = A_hi^2 * B^(2k) + 2*A_hi*A_lo * B^k + A_lo^2
+
+    Using the identity for squaring:
+      (A_lo + A_hi)^2 = A_lo^2 + A_hi^2 + 2*A_lo*A_hi
+      => 2*A_lo*A_hi = (A_lo + A_hi)^2 - A_lo^2 - A_hi^2
+
+    All three sub-products are squares (not general multiplications),
+    so the squaring optimization applies recursively at every level.
+
+    Preconditions:
+    - an exceeds ARBINT_NTT_MAX_SIZE (requires segmentation)
+    - dst must have capacity for 2*an limbs
+
+    Returns result limb count via out_used.  */
+arbint_err_t arbint_sqr_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used,
+                                          const arbint_limb_t * a, size_t an,
+                                          const arbint_alloc_t * alloc);
+
 /*  Check if operands require segmented multiplication.
     Returns 1 if either operand exceeds ARBINT_NTT_MAX_SIZE.  */
 static inline int arbint_needs_segmented_ntt(size_t an, size_t bn) {
   return (an > ARBINT_NTT_MAX_SIZE || bn > ARBINT_NTT_MAX_SIZE) ? 1 : 0;
+}
+
+/*  Check if operand requires segmented squaring.
+    Returns 1 if operand exceeds ARBINT_NTT_MAX_SIZE.  */
+static inline int arbint_needs_segmented_ntt_sqr(size_t an) {
+  return (an > ARBINT_NTT_MAX_SIZE) ? 1 : 0;
 }
 
 #endif /*  ARBINT_NTT_SEGMENTED_H  */

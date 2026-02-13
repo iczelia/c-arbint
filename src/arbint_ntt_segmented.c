@@ -398,3 +398,194 @@ arbint_err_t arbint_mul_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used
 
   return arbint_mul_mag_segmented_rec(dst, out_used, a, an, b, bn, alloc);
 }
+
+/*  Forward declaration for recursive squaring.  */
+static arbint_err_t arbint_sqr_mag_segmented_rec(arbint_limb_t * dst,
+                                                  size_t * out_used,
+                                                  const arbint_limb_t * a,
+                                                  size_t an,
+                                                  const arbint_alloc_t * alloc);
+
+/*  Karatsuba-style segmented squaring.
+
+    Splits operand at k = ARBINT_NTT_SEGMENT_SIZE:
+      A = A1 * B^k + A0
+
+    Computes using Karatsuba identity for squaring:
+      z0 = A0^2
+      z2 = A1^2
+      z1 = (A0 + A1)^2 - z0 - z2  (this equals 2*A0*A1)
+
+    Result: z2 * B^(2k) + z1 * B^k + z0
+
+    All three sub-products are squares, so the squaring optimization
+    applies recursively.  */
+static arbint_err_t karatsuba_sqr_segment(arbint_limb_t * dst, size_t * out_used,
+                                           const arbint_limb_t * a, size_t an,
+                                           size_t k,
+                                           const arbint_alloc_t * alloc) {
+  arbint_err_t rc = ARBINT_OK;
+  arbint_limb_t * work = NULL;
+  arbint_limb_t * z0;
+  arbint_limb_t * z2;
+  arbint_limb_t * z1;
+  arbint_limb_t * sa;
+  size_t z0_cap;
+  size_t z2_cap;
+  size_t z1_cap;
+  size_t sa_cap;
+  size_t total;
+  size_t a0n;
+  size_t a1n;
+  const arbint_limb_t * a0;
+  const arbint_limb_t * a1;
+  size_t z0n = 0u;
+  size_t z2n = 0u;
+  size_t z1n = 0u;
+  size_t san;
+  size_t cap;
+  size_t used;
+
+  /*  Split operand.  */
+  a0 = a;
+  a0n = (k < an) ? k : an;
+  a0n = arbint_norm_used(a0, a0n);
+
+  if (an > k) {
+    a1 = a + k;
+    a1n = an - k;
+    a1n = arbint_norm_used(a1, a1n);
+  } else {
+    a1 = a;
+    a1n = 0u;
+  }
+
+  /*  Handle degenerate case where high half is zero.  */
+  if (a1n == 0u) {
+    /*  Single-segment: just square.  */
+    return arbint_sqr_mag_segmented_rec(dst, out_used, a0, a0n, alloc);
+  }
+
+  /*  Full Karatsuba squaring case.  */
+
+  /*  Calculate workspace sizes.
+      z0 needs 2*a0n limbs, z2 needs 2*a1n limbs.
+      sa = a0 + a1 needs max(a0n, a1n) + 1 limbs.
+      z1 = sa^2 needs 2*sa_cap limbs.  */
+  z0_cap = 2u * a0n + 1u;
+  z2_cap = 2u * a1n + 1u;
+  sa_cap = ((a0n > a1n) ? a0n : a1n) + 1u;
+  z1_cap = 2u * sa_cap + 1u;
+
+  total = z0_cap + z2_cap + z1_cap + sa_cap;
+
+  work = arbint_alloc_limbs(alloc, total);
+  if (work == NULL)
+    return ARBINT_ENOMEM;
+
+  z0 = work;
+  z2 = z0 + z0_cap;
+  z1 = z2 + z2_cap;
+  sa = z1 + z1_cap;
+
+  /*  Compute z0 = A0^2.  */
+  rc = arbint_sqr_mag_segmented_rec(z0, &z0n, a0, a0n, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Compute z2 = A1^2.  */
+  rc = arbint_sqr_mag_segmented_rec(z2, &z2n, a1, a1n, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  Compute sa = A0 + A1.  */
+  san = arbint__add_mag(sa, a0, a0n, a1, a1n);
+
+  /*  Compute z1 = (A0 + A1)^2.  */
+  rc = arbint_sqr_mag_segmented_rec(z1, &z1n, sa, san, alloc);
+  if (rc != ARBINT_OK)
+    goto cleanup;
+
+  /*  z1 = z1 - z0 - z2 = 2*A0*A1.  */
+  z1n = arbint__sub_mag(z1, z1, z1n, z0, z0n);
+  z1n = arbint__sub_mag(z1, z1, z1n, z2, z2n);
+
+  /*  Assemble result: dst = z2 * B^(2k) + z1 * B^k + z0.  */
+  cap = 2u * an + 1u;
+  memset(dst, 0u, cap * sizeof(arbint_limb_t));
+
+  /*  Copy z0 to dst[0..].  */
+  if (z0n > 0u)
+    memcpy(dst, z0, z0n * sizeof(arbint_limb_t));
+
+  /*  Add z2 at offset 2k.  */
+  used = z0n;
+  if (z2n > 0u) {
+    if (2u * k + z2n > cap) {
+      rc = ARBINT_EOVERFLOW;
+      goto cleanup;
+    }
+    memcpy(dst + 2u * k, z2, z2n * sizeof(arbint_limb_t));
+    if (2u * k + z2n > used)
+      used = 2u * k + z2n;
+  }
+
+  /*  Add z1 at offset k.  */
+  used = add_at_offset(dst, used, cap, z1, z1n, k);
+
+  *out_used = arbint_norm_used(dst, used);
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_free_limbs(alloc, work);
+  return rc;
+}
+
+/*  Recursive segmented squaring.
+    Dispatches to NTT for operands that fit, or to Karatsuba segmentation
+    for larger operands.  */
+static arbint_err_t arbint_sqr_mag_segmented_rec(arbint_limb_t * dst,
+                                                  size_t * out_used,
+                                                  const arbint_limb_t * a,
+                                                  size_t an,
+                                                  const arbint_alloc_t * alloc) {
+  size_t k;
+
+  if (an == 0u) {
+    dst[0] = 0u;
+    *out_used = 0u;
+    return ARBINT_OK;
+  }
+
+  /*  Check if operand fits within single NTT.
+      For squaring, conv_len = 2*an - 1, so we need 2*an <= MAX_SIZE.  */
+  if (2u * an <= ARBINT_NTT_MAX_SIZE) {
+    /*  Use standard NTT squaring.  */
+    return arbint_sqr_mag_ntt(dst, out_used, a, an, alloc);
+  }
+
+  /*  Choose segment size.
+      We want each sub-product to fit within NTT limits.
+      The largest sub-product is (a0 + a1)^2, which can be
+      up to 2*(k+1) = 2k+2 limbs for inputs of k limbs each.
+      So we need 2k+2 <= ARBINT_NTT_MAX_SIZE, thus k <= (MAX_SIZE-2)/2.
+
+      We use ARBINT_NTT_SEGMENT_SIZE = MAX_SIZE/2 which satisfies this.  */
+  k = ARBINT_NTT_SEGMENT_SIZE;
+
+  /*  Apply Karatsuba squaring decomposition.  */
+  return karatsuba_sqr_segment(dst, out_used, a, an, k, alloc);
+}
+
+/*  Public entry point for segmented NTT squaring.  */
+arbint_err_t arbint_sqr_mag_ntt_segmented(arbint_limb_t * dst, size_t * out_used,
+                                          const arbint_limb_t * a, size_t an,
+                                          const arbint_alloc_t * alloc) {
+  if (dst == NULL || out_used == NULL || a == NULL)
+    return ARBINT_EINVAL;
+
+  if (alloc == NULL || alloc->realloc == NULL)
+    return ARBINT_EINVAL;
+
+  return arbint_sqr_mag_segmented_rec(dst, out_used, a, an, alloc);
+}

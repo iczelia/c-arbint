@@ -1103,6 +1103,7 @@ static arbint_err_t arbint_mul_mag_rec(arbint_limb_t * dst, size_t * out_used,
 /*  Recursive squaring using Karatsuba identity for large operands.
     Falls back to schoolbook squaring below ARBINT_SQR_KARATSUBA_THRESHOLD.
     Uses Toom-Cook-3 for operands >= ARBINT_SQR_TOOM3_THRESHOLD.
+    Uses NTT for very large operands >= ARBINT_NTT_THRESHOLD.
     Splits a into halves a = a1*B^k + a0 and uses:
       a^2 = a1^2*B^(2k) + ((a0+a1)^2 - a0^2 - a1^2)*B^k + a0^2.
     All three sub-products are themselves squarings, so the optimization
@@ -1128,6 +1129,12 @@ static arbint_err_t arbint_sqr_mag_rec(arbint_limb_t * dst, size_t * out_used,
     *out_used = arbint_sqr_schoolbook(dst, a, an);
     return ARBINT_OK;
   }
+
+  /*  NTT for very large operands.
+      NTT provides O(n log n) complexity vs Toom-3's O(n^1.465).
+      Dispatch when an >= NTT threshold.  */
+  if (an >= ARBINT_NTT_THRESHOLD)
+    return arbint_sqr_mag_ntt(dst, out_used, a, an, alloc);
 
   /*  Toom-Cook-3 for large operands.  */
   if (an >= ARBINT_SQR_TOOM3_THRESHOLD)

@@ -838,6 +838,10 @@ static inline size_t log2_of_pow2(size_t n) {
   return log2_n;
 }
 
+#ifndef ARBINT_NTT_SQR_MAG_FN
+  #error "Including translation unit must define ARBINT_NTT_SQR_MAG_FN"
+#endif
+
 arbint_err_t ARBINT_NTT_MUL_MAG_FN(arbint_limb_t * dst, size_t * out_used,
                                    const arbint_limb_t * a, size_t an,
                                    const arbint_limb_t * b, size_t bn,
@@ -973,6 +977,147 @@ arbint_err_t ARBINT_NTT_MUL_MAG_FN(arbint_limb_t * dst, size_t * out_used,
 
   /*  The actual product has at most an + bn limbs. Copy to dst.  */
   size_t max_out = an + bn;
+  if (crt_used > max_out) {
+    /*  This shouldn't happen for correct inputs, but truncate safely.  */
+    crt_used = max_out;
+  }
+
+  memcpy(dst, crt_tmp, crt_used * sizeof(arbint_limb_t));
+
+  /*  Normalize result (trim leading zeros).  */
+  *out_used = arbint_norm_used(dst, crt_used);
+
+  /*  Cleanup.  */
+  alloc->realloc(alloc->ud, work, 0);
+
+  return ARBINT_OK;
+}
+
+/*  NTT-based squaring: dst = a^2 for large operands.
+
+    Squaring optimization over multiplication:
+    1. Only one forward NTT (vs two for multiplication) - saves ~33% of work
+    2. Pointwise squaring instead of multiplication
+
+    The convolution length for squaring is 2*an - 1 (vs an + bn - 1 for mul).
+    Transform size is next power of 2 >= 2*an - 1.  */
+arbint_err_t ARBINT_NTT_SQR_MAG_FN(arbint_limb_t * dst, size_t * out_used,
+                                   const arbint_limb_t * a, size_t an,
+                                   const arbint_alloc_t * alloc) {
+  arbint_err_t rc;
+  uint64_t * work = NULL;
+
+  if (dst == NULL || out_used == NULL || a == NULL)
+    return ARBINT_EINVAL;
+
+  if (an == 0u) {
+    dst[0] = 0u;
+    *out_used = 0u;
+    return ARBINT_OK;
+  }
+
+  /*  Ensure NTT context is initialized.  */
+  rc = arbint_ntt_ensure_init();
+  if (rc != ARBINT_OK)
+    return rc;
+
+  /*  Determine NTT size: next power of 2 >= 2*an - 1.
+      For squaring, conv_len = 2*an - 1.  */
+  size_t conv_len = 2u * an - 1u;
+  size_t ntt_size = next_pow2(conv_len);
+  size_t log2_n = log2_of_pow2(ntt_size);
+
+  if (log2_n > ARBINT_NTT_MAX_LOG2)
+    return ARBINT_EOVERFLOW;
+
+  /*  Ensure root tables are large enough.  */
+  rc = ensure_roots(log2_n, alloc);
+  if (rc != ARBINT_OK)
+    return rc;
+
+#ifdef NTT_USE_FULL_OMEGA_TABLES
+  /*  Ensure full omega tables are allocated for AVX2 table-based butterflies.  */
+  rc = ensure_full_roots(log2_n, alloc);
+  if (rc != ARBINT_OK)
+    return rc;
+#endif
+
+  /*  Allocate workspace.
+      Layout: work_a[ntt_size],
+              result_0[ntt_size], result_1[ntt_size], result_2[ntt_size],
+              crt_tmp[conv_len + 3] (extra space for CRT carry overflow).
+
+      Note: no work_b needed since we square work_a in place.  */
+  size_t crt_tmp_size = conv_len + 3u;
+  size_t work_size = 4u * ntt_size + crt_tmp_size;
+  work = (uint64_t *) alloc->realloc(alloc->ud, NULL,
+                                     work_size * sizeof(uint64_t));
+  if (work == NULL)
+    return ARBINT_ENOMEM;
+
+  uint64_t * work_a = work;
+  uint64_t * result[3];
+  result[0] = work_a + ntt_size;
+  result[1] = result[0] + ntt_size;
+  result[2] = result[1] + ntt_size;
+  arbint_limb_t * crt_tmp = (arbint_limb_t *) (result[2] + ntt_size);
+
+  /*  Process each prime.  */
+  for (int pi = 0; pi < 3; ++pi) {
+    const arbint_ntt_prime_t * prime = &g_ntt_ctx.primes[pi];
+    const arbint_mont_params_t * mont = &prime->mont;
+    const arbint_ntt_roots_t * roots = &g_ntt_ctx.roots[pi];
+
+    /*  Convert operand a to Montgomery form and zero-pad.  */
+#ifdef NTT_TO_MONT_LOOP
+    NTT_TO_MONT_LOOP(work_a, a, an, mont);
+#else
+    for (size_t i = 0u; i < an; ++i) {
+#if ARBINT_LIMB_BITS == 64
+      work_a[i] = to_mont(a[i], mont);
+#elif ARBINT_LIMB_BITS == 32
+      work_a[i] = to_mont((uint64_t) a[i], mont);
+#endif
+    }
+#endif
+    memset(&work_a[an], 0, (ntt_size - an) * sizeof(uint64_t));
+
+    /*  Forward NTT - only one transform needed for squaring.  */
+    ntt_forward(work_a, log2_n, roots, mont);
+
+    /*  Pointwise squaring (vs multiplication for two distinct operands).
+        If NTT_POINTWISE_SQR is defined, use custom implementation.  */
+#ifdef NTT_POINTWISE_SQR
+    NTT_POINTWISE_SQR(result[pi], work_a, ntt_size, mont);
+#else
+    for (size_t i = 0u; i < ntt_size; ++i) {
+      result[pi][i] = mont_mul(work_a[i], work_a[i], mont);
+    }
+#endif
+
+    /*  Inverse NTT.  */
+    ntt_inverse(result[pi], log2_n, roots, mont);
+
+    /*  Scale by n^(-1) and convert from Montgomery form.  */
+    uint64_t n_inv = modinv(ntt_size, prime->p);
+    uint64_t n_inv_mont = to_mont(n_inv, mont);
+#ifdef NTT_SCALE_FROM_MONT
+    NTT_SCALE_FROM_MONT(result[pi], ntt_size, n_inv_mont, mont);
+#else
+    for (size_t i = 0u; i < ntt_size; ++i) {
+      result[pi][i] =
+          from_mont(mont_mul(result[pi][i], n_inv_mont, mont), mont);
+    }
+#endif
+  }
+
+  /*  CRT reconstruction into temporary buffer.  */
+  size_t crt_used = 0u;
+  ntt_crt_combine(crt_tmp, &crt_used, result[0], result[1], result[2],
+                  conv_len, &g_ntt_ctx.crt);
+
+  /*  The actual product has at most 2*an limbs. Copy to dst.  */
+  size_t max_out = 2u * an;
   if (crt_used > max_out) {
     /*  This shouldn't happen for correct inputs, but truncate safely.  */
     crt_used = max_out;
