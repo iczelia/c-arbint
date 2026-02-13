@@ -26,6 +26,144 @@
 #include <limits.h>
 #include <string.h>
 
+arbint_limb_t arbint_limb_add_n(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                const arbint_limb_t * bp, size_t n) {
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+  unsigned char carry = 0u;
+  arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
+  size_t i;
+
+  for (i = 0u; i < n; ++i) {
+    carry = ARBINT_X86_ADDCARRY(carry, (arbint_x86_carry_word_t) ap[i],
+                                (arbint_x86_carry_word_t) bp[i], &out);
+    rp[i] = (arbint_limb_t) out;
+  }
+  return (arbint_limb_t) carry;
+#else
+  arbint_limb_t carry = 0u;
+  size_t i;
+
+  for (i = 0u; i < n; ++i) {
+    arbint_limb_t s = ap[i] + bp[i];
+    arbint_limb_t c1 = (s < ap[i]) ? 1u : 0u;
+    arbint_limb_t s2 = s + carry;
+    arbint_limb_t c2 = (s2 < s) ? 1u : 0u;
+    rp[i] = s2;
+    carry = c1 | c2;
+  }
+  return carry;
+#endif
+}
+
+arbint_limb_t arbint_limb_sub_n(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                const arbint_limb_t * bp, size_t n) {
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+  unsigned char borrow = 0u;
+  arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
+  size_t i;
+
+  for (i = 0u; i < n; ++i) {
+    borrow = ARBINT_X86_SUBBORROW(borrow, (arbint_x86_carry_word_t) ap[i],
+                                  (arbint_x86_carry_word_t) bp[i], &out);
+    rp[i] = (arbint_limb_t) out;
+  }
+  return (arbint_limb_t) borrow;
+#else
+  arbint_limb_t borrow = 0u;
+  size_t i;
+
+  for (i = 0u; i < n; ++i) {
+    arbint_limb_t d = ap[i] - bp[i];
+    arbint_limb_t b1 = (d > ap[i]) ? 1u : 0u;
+    arbint_limb_t d2 = d - borrow;
+    arbint_limb_t b2 = (d2 > d) ? 1u : 0u;
+    rp[i] = d2;
+    borrow = b1 | b2;
+  }
+  return borrow;
+#endif
+}
+
+arbint_limb_t arbint_limb_add_1(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                size_t n, arbint_limb_t b) {
+  size_t i;
+
+  if (n == 0u)
+    return b;
+
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+  {
+    unsigned char carry;
+    arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
+
+    carry = ARBINT_X86_ADDCARRY(0u, (arbint_x86_carry_word_t) ap[0],
+                                (arbint_x86_carry_word_t) b, &out);
+    rp[0] = (arbint_limb_t) out;
+    for (i = 1u; i < n && carry != 0u; ++i) {
+      carry = ARBINT_X86_ADDCARRY(carry, (arbint_x86_carry_word_t) ap[i],
+                                  (arbint_x86_carry_word_t) 0u, &out);
+      rp[i] = (arbint_limb_t) out;
+    }
+    if (rp != ap && i < n)
+      memcpy(rp + i, ap + i, (n - i) * sizeof(arbint_limb_t));
+    return (arbint_limb_t) carry;
+  }
+#else
+  {
+    arbint_limb_t carry = b;
+
+    for (i = 0u; i < n && carry != 0u; ++i) {
+      arbint_limb_t s = ap[i] + carry;
+      carry = (s < ap[i]) ? 1u : 0u;
+      rp[i] = s;
+    }
+    if (rp != ap && i < n)
+      memcpy(rp + i, ap + i, (n - i) * sizeof(arbint_limb_t));
+    return carry;
+  }
+#endif
+}
+
+arbint_limb_t arbint_limb_sub_1(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                size_t n, arbint_limb_t b) {
+  size_t i;
+
+  if (n == 0u)
+    return b;
+
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+  {
+    unsigned char borrow;
+    arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
+
+    borrow = ARBINT_X86_SUBBORROW(0u, (arbint_x86_carry_word_t) ap[0],
+                                  (arbint_x86_carry_word_t) b, &out);
+    rp[0] = (arbint_limb_t) out;
+    for (i = 1u; i < n && borrow != 0u; ++i) {
+      borrow = ARBINT_X86_SUBBORROW(borrow, (arbint_x86_carry_word_t) ap[i],
+                                    (arbint_x86_carry_word_t) 0u, &out);
+      rp[i] = (arbint_limb_t) out;
+    }
+    if (rp != ap && i < n)
+      memcpy(rp + i, ap + i, (n - i) * sizeof(arbint_limb_t));
+    return (arbint_limb_t) borrow;
+  }
+#else
+  {
+    arbint_limb_t borrow = b;
+
+    for (i = 0u; i < n && borrow != 0u; ++i) {
+      arbint_limb_t d = ap[i] - borrow;
+      borrow = (d > ap[i]) ? 1u : 0u;
+      rp[i] = d;
+    }
+    if (rp != ap && i < n)
+      memcpy(rp + i, ap + i, (n - i) * sizeof(arbint_limb_t));
+    return borrow;
+  }
+#endif
+}
+
 /*  Add magnitudes of two multi-limb integers.
     Handles operands in any order (swaps if nx < ny for efficiency).
     Returns result limb count (max(nx,ny) or max(nx,ny)+1 if final carry).  */

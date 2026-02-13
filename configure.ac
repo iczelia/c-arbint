@@ -666,6 +666,28 @@ AM_CONDITIONAL([ARBINT_HAS_ARC4RANDOM],
 AM_CONDITIONAL([ARBINT_HOST_EMSCRIPTEN],
                [test "x$arbint_host_emscripten" = "xyes"])
 
+dnl GMP detection for optional benchmark tools
+dnl bench_pi compares c-arbint vs GMP using the Chudnovsky algorithm.
+AC_ARG_WITH([gmp],
+  [AS_HELP_STRING([--with-gmp], [Enable GMP benchmark tools (default: auto)])],
+  [],
+  [with_gmp=auto])
+
+arbint_have_gmp=no
+AS_IF([test "x$with_gmp" != "xno"], [
+  AC_CHECK_HEADER([gmp.h], [
+    AC_CHECK_LIB([gmp], [__gmpz_init], [
+      arbint_have_gmp=yes
+      GMP_LIBS="-lgmp"
+    ])
+  ])
+  AS_IF([test "x$with_gmp" = "xyes" && test "x$arbint_have_gmp" != "xyes"], [
+    AC_MSG_ERROR([--with-gmp requested but GMP not found])
+  ])
+])
+AM_CONDITIONAL([ARBINT_HAVE_GMP], [test "x$arbint_have_gmp" = "xyes"])
+AC_SUBST([GMP_LIBS])
+
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
   Makefile

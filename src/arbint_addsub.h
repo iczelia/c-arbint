@@ -65,4 +65,15 @@ size_t arbint__dbl_mag_avx2(arbint_limb_t * dst, const arbint_limb_t * x,
                             size_t nx);
 #endif /* HAS_AVX2 */
 
+/*  Fixed-width limb helpers for mpn-style code paths.
+    These operate on exactly n limbs and return carry/borrow out (0 or 1).  */
+arbint_limb_t arbint_limb_add_n(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                const arbint_limb_t * bp, size_t n);
+arbint_limb_t arbint_limb_sub_n(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                const arbint_limb_t * bp, size_t n);
+arbint_limb_t arbint_limb_add_1(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                size_t n, arbint_limb_t b);
+arbint_limb_t arbint_limb_sub_1(arbint_limb_t * rp, const arbint_limb_t * ap,
+                                size_t n, arbint_limb_t b);
+
 #endif /* ARBINT_ADDSUB_H */

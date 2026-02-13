@@ -20,6 +20,8 @@
 #include "config.h"
 
 #include "arbint_div.h"
+#include "arbint_isqrt.h"
+#include "arbint_shift.h"
 
 typedef size_t (*arbint_mul_limb_1_fn_t)(arbint_limb_t * dst,
                                          const arbint_limb_t * a, size_t an,
@@ -399,22 +401,16 @@ cleanup:
   return rc;
 }
 
-/*  Compute rop = floor(sqrt(a)) via Newton's method (integer Heron).
+/*  Compute rop = floor(sqrt(a)) using Karatsuba divide-and-conquer.
 
-    The iteration x_{n+1} = floor((x_n + floor(a / x_n)) / 2) converges
-    quadratically from above. Termination: when x_{n+1} >= x_n, x_n is
-    the answer.
-
-    Initial guess: x_0 = 1 << ((nbits(a) + 1) / 2), which is always
-    >= floor(sqrt(a)) and at most 2x too large.
+    For small inputs (< KARATSUBA_THRESHOLD limbs), uses simple Newton.
+    For large inputs, uses O(M(n)) Karatsuba square root algorithm.
 
     Returns ARBINT_EDOM if a < 0.  */
 arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a) {
   arbint_ctx_t * ctx;
-  arbint_t x;
-  arbint_t t;
   arbint_err_t rc;
-  size_t nbits;
+  size_t an;
 
   if (rop == NULL || a == NULL)
     return ARBINT_EINVAL;
@@ -432,45 +428,124 @@ arbint_err_t arbint_isqrt(arbint_t rop, const arbint_t a) {
   if (ctx == NULL)
     ctx = a[0]._ctx;
 
-  rc = arbint_init_all(ctx, x, t, (arbint_t *) NULL);
-  if (rc != ARBINT_OK)
+  an = arbint_abs_sz(a[0]._sz);
+
+  /*  For small inputs, use simple Newton iteration.  */
+  if (an <= ARBINT_ISQRT_KARATSUBA_THRESHOLD)
+    return arbint_isqrt_newton_mag(rop, a);
+
+  /*  Large input: use Karatsuba square root.
+
+      The algorithm requires input to have exactly 2n limbs (even count)
+      and be normalized (top limb has bits in top quarter).
+
+      Strategy:
+      1. Normalize input by left-shifting so top 2 bits are in position
+      2. Pad to even limb count if needed
+      3. Run Karatsuba sqrt
+      4. Undo normalization of result  */
+  {
+    const arbint_alloc_t * alloc = ctx ? &ctx->a : NULL;
+    arbint_limb_t * np = NULL;    /*  Normalized input (2n limbs).  */
+    arbint_limb_t * sp = NULL;    /*  Result (n limbs).  */
+    arbint_limb_t * scratch = NULL;
+    size_t n;                      /*  Result limb count (input has 2n).  */
+    size_t shift;
+    arbint_limb_t top;
+
+    /*  Compute n = ceil(an / 2).  */
+    n = (an + 1) / 2;
+
+    /*  Allocate working space.  */
+    np = arbint_alloc_limbs(alloc, 2 * n + 2);
+    sp = arbint_alloc_limbs(alloc, n + 1);
+    scratch = arbint_alloc_limbs(alloc, 2 * n + 2);
+    if (!np || !sp || !scratch) {
+      rc = ARBINT_ENOMEM;
+      goto cleanup_karatsuba;
+    }
+
+    /*  Copy input to np, zero-padding to 2n limbs if needed.  */
+    memcpy(np, ARBINT_CLIMBS(a), an * sizeof(arbint_limb_t));
+    for (size_t i = an; i < 2 * n; ++i)
+      np[i] = 0;
+
+    /*  Normalize: shift so that np[2n-1] >= 2^(LIMB_BITS - 2).
+        We need the top 2 bits to be nonzero for the algorithm.
+
+        For odd limb count input, the top limb after padding is 0.
+        We need to compute total shift = limb_shift * LIMB_BITS + bit_shift,
+        then left-shift the entire input by that amount.  */
+    {
+      size_t limb_shift = 0;
+      unsigned bit_shift;
+
+      /*  Find actual top limb.  */
+      top = np[2 * n - 1];
+      while (top == 0 && limb_shift < 2 * n - 1) {
+        ++limb_shift;
+        top = np[2 * n - 1 - limb_shift];
+      }
+
+      if (top == 0) {
+        /*  Input was zero - shouldn't happen, but handle gracefully.  */
+        memset(sp, 0, n * sizeof(arbint_limb_t));
+        shift = 0;
+        goto copy_result;
+      }
+
+      bit_shift = arbint_clz_limb(top);
+
+      /*  Shift by an even amount while keeping the value inside 2n limbs.
+          Using the largest even bit-shift <= clz(top) places the new top
+          limb in the upper quarter, satisfying np[2n-1] >= B/4. */
+      shift = limb_shift * ARBINT_LIMB_BITS + (size_t) (bit_shift & ~1u);
+    }
+
+    if (shift > 0) {
+      size_t shifted_n = arbint_lshift_limbs_inplace(np, 2 * n, shift, 2 * n + 2);
+      if (shifted_n == 0u) {
+        rc = ARBINT_EOVERFLOW;
+        goto cleanup_karatsuba;
+      }
+      shifted_n = arbint_norm_used(np, shifted_n);
+      if (shifted_n > 2u * n) {
+        rc = ARBINT_EOVERFLOW;
+        goto cleanup_karatsuba;
+      }
+      for (size_t i = shifted_n; i < 2u * n; ++i)
+        np[i] = 0u;
+    }
+
+    /*  Run Karatsuba sqrt backend.  */
+    if (arbint_isqrt_dc(sp, np, n, scratch, alloc) < 0) {
+      rc = ARBINT_ENOMEM;
+      goto cleanup_karatsuba;
+    }
+
+    /*  Undo normalization: result needs to be right-shifted by shift/2.  */
+    if (shift > 0) {
+      arbint_rshift_limbs_inplace(sp, n, shift / 2u);
+    }
+
+  copy_result:
+    /*  Copy result to rop.  */
+    {
+      size_t rn = arbint_norm_used(sp, n);
+      rc = arbint_resize(rop, rn);
+      if (rc != ARBINT_OK)
+        goto cleanup_karatsuba;
+      memcpy(ARBINT_LIMBS(rop), sp, rn * sizeof(arbint_limb_t));
+      rop[0]._sz = (ptrdiff_t) rn;
+    }
+    rc = ARBINT_OK;
+
+  cleanup_karatsuba:
+    arbint_free_limbs(alloc, scratch);
+    arbint_free_limbs(alloc, sp);
+    arbint_free_limbs(alloc, np);
     return rc;
-
-  /*  Initial guess: x = 1 << ((nbits(a) + 1) / 2).  */
-  nbits = arbint_nbits(a);
-  rc = arbint_set_i32(x, 1);
-  if (rc != ARBINT_OK)
-    goto cleanup;
-  rc = arbint_shl(x, x, (uint32_t) ((nbits + 1u) / 2u));
-  if (rc != ARBINT_OK)
-    goto cleanup;
-
-  /*  Newton iteration: t = (x + a/x) / 2.
-      Terminate when t >= x (sequence is monotonically decreasing).  */
-  for (;;) {
-    rc = arbint_tdiv_q(t, a, x);
-    if (rc != ARBINT_OK)
-      goto cleanup;
-    rc = arbint_add(t, t, x);
-    if (rc != ARBINT_OK)
-      goto cleanup;
-    rc = arbint_shr(t, t, 1u);
-    if (rc != ARBINT_OK)
-      goto cleanup;
-
-    if (arbint_cmp(t, x) >= 0)
-      break;
-
-    rc = arbint_set(x, t);
-    if (rc != ARBINT_OK)
-      goto cleanup;
   }
-
-  rc = arbint_set(rop, x);
-
-cleanup:
-  arbint_clear_all(x, t, (arbint_t *) NULL);
-  return rc;
 }
 
 /*  Compute rop = floor(a^(1/k)) via integer Newton iteration.
