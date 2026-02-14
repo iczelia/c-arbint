@@ -599,8 +599,12 @@ arbint_err_t arbint_div_mag_knuth(const arbint_limb_t * np, size_t nn,
   if (dp[dn - 1u] == 0u)
     return ARBINT_EINVAL;
 
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+  /* The specialized 3-by-2 path is currently validated only with the x86
+     carry-kernel code path. Keep portable targets on full Knuth-D. */
   if (dn == 2u)
     return arbint_div_mag_two_limb(np, nn, dp, qp, rp);
+#endif
 
   /* Allocate working storage for normalized dividend and divisor.
      u needs nn+1 limbs (extra limb for carry from normalization).

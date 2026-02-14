@@ -23,18 +23,8 @@
 #include "arbint_cpu.h"
 #include "arbint_internal_util.h"
 
-#if ARBINT_COMPILER_MSVC
-  #include <malloc.h>
-#else
-  #include <alloca.h>
-#endif
-
 #include <limits.h>
 #include <string.h>
-
-#ifndef ARBINT_TDIV_STACK_REM_LIMBS_MAX
-#define ARBINT_TDIV_STACK_REM_LIMBS_MAX 8u
-#endif
 
 /*  Power-of-two truncated division: q = n / 2^k, r = n % 2^k.
     Truncated division semantics:
@@ -454,17 +444,12 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
       return ARBINT_ENOMEM;
   }
 
-  rmag_needs_free = 0;
-  if (r == NULL && rcap <= ARBINT_TDIV_STACK_REM_LIMBS_MAX) {
-    rmag = (arbint_limb_t *) alloca(rcap * sizeof(arbint_limb_t));
-  } else {
-    rmag = arbint_alloc_limbs(alloc, rcap);
-    if (rmag == NULL) {
-      arbint_free_limbs(alloc, qmag);
-      return ARBINT_ENOMEM;
-    }
-    rmag_needs_free = 1;
+  rmag = arbint_alloc_limbs(alloc, rcap);
+  if (rmag == NULL) {
+    arbint_free_limbs(alloc, qmag);
+    return ARBINT_ENOMEM;
   }
+  rmag_needs_free = 1;
 
   if (dn >= 2u) {
     if (dn == 2u) {
