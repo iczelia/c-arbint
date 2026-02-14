@@ -20,7 +20,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
 # Sources and headers shared between all platforms.
 ARBINT_CORE_SOURCES = \
   arbint_base.c arbint_assign.c arbint_cmp.c arbint_addsub.c \
-  arbint_div.c arbint_div_newton.c arbint_tdiv.c arbint_fdiv.c arbint_cdiv.c \
+  arbint_div.c arbint_div_newton.c arbint_div_bz.c arbint_tdiv.c arbint_fdiv.c arbint_cdiv.c \
   arbint_iex.c arbint_cpu.c arbint_mul.c arbint_isqrt.c \
   arbint_mul_generic.c arbint_div_generic.c arbint_bitops.c \
   arbint_shift.c arbint_random.c arbint_hash.c arbint_hash_generic.c \
@@ -30,12 +30,12 @@ ARBINT_CORE_SOURCES = \
 
 noinst_HEADERS = \
   arbint_base.h arbint_assign.h arbint_cmp.h arbint_addsub.h \
-  arbint_div.h arbint_div_newton.h arbint_iex.h arbint_cpu.h arbint_mul.h arbint_isqrt.h \
+  arbint_div.h arbint_div_newton.h arbint_div_bz.h arbint_iex.h arbint_cpu.h arbint_mul.h arbint_isqrt.h \
   arbint_mul_core.inc arbint_div_barrett_core.inc \
-  arbint_internal_util.h \
+  arbint_internal_util.h arbint_dispatch.h \
   arbint_bitops.h arbint_shift.h arbint_random.h \
   arbint_hash.h arbint_ntt.h arbint_ntt_core.inc arbint_ntt_segmented.h \
-  arbint_gcd.h arbint_cache.h arbint_str.h
+  arbint_gcd.h arbint_gcd_lehmer_core.inc arbint_cache.h arbint_str.h
 
 # Platform-specific sources: distributed but compiled only via generated rules.
 # See platform-objects.txt for the data table and build-aux/gen-platform-rules.sh

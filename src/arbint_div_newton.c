@@ -77,6 +77,19 @@ const unsigned char arbint_inv_tab[128] = {
 #define ARBINT_MUL_HIGH_SCHOOLBOOK_THRESHOLD 128u
 #endif
 
+#ifndef ARBINT_INVERT_POLISH_ITERS
+#define ARBINT_INVERT_POLISH_ITERS 21u
+#endif
+
+static arbint_err_t
+arbint_mul_mag_dispatch(arbint_limb_t * dst, size_t * out_used,
+                        const arbint_limb_t * a, size_t an,
+                        const arbint_limb_t * b, size_t bn,
+                        const arbint_alloc_t * alloc) {
+  return arbint_mul_kernel_table_get()->mul_mag(dst, out_used, a, an, b, bn,
+                                                 alloc);
+}
+
 /*  Checked addition for size_t.  */
 static inline int arbint_size_add(size_t a, size_t b, size_t * out) {
   size_t sum = a + b;
@@ -136,7 +149,7 @@ static arbint_err_t arbint_mul_high_full(arbint_limb_t * out, size_t * out_n,
   if (prod == NULL)
     return ARBINT_ENOMEM;
 
-  rc = arbint_mul_mag_generic(prod, &prod_n, a, an, b, bn, alloc);
+  rc = arbint_mul_mag_dispatch(prod, &prod_n, a, an, b, bn, alloc);
   if (rc != ARBINT_OK) {
     arbint_free_limbs(alloc, prod);
     return rc;
@@ -256,32 +269,6 @@ static arbint_err_t arbint_mul_high(arbint_limb_t * out, size_t * out_n,
   }
 
   return arbint_mul_high_full(out, out_n, a, an, b, bn, cut, out_cap, alloc);
-}
-
-/*  Compare x against B^p_limbs.
-    Returns -1 if x < B^p, 0 if x == B^p, 1 if x > B^p.  */
-static int arbint_cmp_mag_pow_limb(const arbint_limb_t * x, size_t xn,
-                                   size_t p_limbs) {
-  size_t i;
-
-  while (xn > 0 && x[xn - 1] == 0)
-    --xn;
-
-  if (xn < p_limbs + 1)
-    return -1;
-  if (xn > p_limbs + 1)
-    return 1;
-
-  if (x[p_limbs] < 1)
-    return -1;
-  if (x[p_limbs] > 1)
-    return 1;
-
-  for (i = 0; i < p_limbs; ++i) {
-    if (x[i] != 0)
-      return 1;
-  }
-  return 0;
 }
 
 /* ========================================================================= */
@@ -431,12 +418,12 @@ static arbint_err_t arbint_invert_newton_core(arbint_limb_t * v, size_t * v_n,
         We want v' to approximate 2^((target_n)*BITS) / d_top[0..target_n-1].  */
 
     /*  Compute v^2.  */
-    rc = arbint_mul_mag_generic(vv, &vv_n, v, *v_n, v, *v_n, alloc);
+    rc = arbint_mul_mag_dispatch(vv, &vv_n, v, *v_n, v, *v_n, alloc);
     if (rc != ARBINT_OK)
       goto cleanup;
 
     /*  Compute v^2 * d_top.  */
-    rc = arbint_mul_mag_generic(vvd, &vvd_n, vv, vv_n, d_top, target_n, alloc);
+    rc = arbint_mul_mag_dispatch(vvd, &vvd_n, vv, vv_n, d_top, target_n, alloc);
     if (rc != ARBINT_OK)
       goto cleanup;
 
@@ -467,11 +454,11 @@ static arbint_err_t arbint_invert_newton_core(arbint_limb_t * v, size_t * v_n,
       new_v_n = 0;
     }
 
-    /*  Trim to target_n limbs.  */
-    if (new_v_n > target_n) {
-      memmove(v, v + (new_v_n - target_n), target_n * sizeof(arbint_limb_t));
+    /*  Trim to target_n limbs.
+        v is little-endian and represents a fixed-point integer modulo B^n.
+        Keep the low limbs and drop only high overflow limbs.  */
+    if (new_v_n > target_n)
       new_v_n = target_n;
-    }
 
     /*  Zero-pad if needed.  */
     for (j = new_v_n; j < target_n; ++j)
@@ -535,6 +522,122 @@ cleanup:
   return rc;
 }
 
+/*  Fixed-scale Newton polishing at precision p_limbs.
+    Refines v using:
+      v <- 2*v - floor(d * v^2 / B^p)
+    where B = 2^ARBINT_LIMB_BITS and p = p_limbs.  */
+static arbint_err_t arbint_invert_newton_polish(arbint_limb_t * v, size_t * v_n,
+                                                 const arbint_limb_t * d,
+                                                 size_t dn, size_t p_limbs,
+                                                 size_t v_cap,
+                                                 const arbint_alloc_t * alloc) {
+  size_t vv_cap, vvd_cap, two_cap, work_cap;
+  arbint_limb_t * work = NULL;
+  arbint_limb_t * vv = NULL;
+  arbint_limb_t * vvd = NULL;
+  arbint_limb_t * two = NULL;
+  size_t vv_n, vvd_n, two_n;
+  size_t iter;
+  arbint_err_t rc;
+
+  if (v == NULL || v_n == NULL || d == NULL || dn == 0 || v_cap == 0)
+    return ARBINT_EINVAL;
+
+  if (!arbint_size_add(v_cap, v_cap, &vv_cap))
+    return ARBINT_EOVERFLOW;
+  if (!arbint_size_add(vv_cap, 2, &vv_cap))
+    return ARBINT_EOVERFLOW;
+  if (!arbint_size_add(vv_cap, dn, &vvd_cap))
+    return ARBINT_EOVERFLOW;
+  if (!arbint_size_add(vvd_cap, 2, &vvd_cap))
+    return ARBINT_EOVERFLOW;
+  if (!arbint_size_add(v_cap, 2, &two_cap))
+    return ARBINT_EOVERFLOW;
+  if (!arbint_size_add(vv_cap, vvd_cap, &work_cap))
+    return ARBINT_EOVERFLOW;
+  if (!arbint_size_add(work_cap, two_cap, &work_cap))
+    return ARBINT_EOVERFLOW;
+
+  work = arbint_alloc_limbs(alloc, work_cap);
+  if (work == NULL)
+    return ARBINT_ENOMEM;
+
+  vv = work;
+  vvd = vv + vv_cap;
+  two = vvd + vvd_cap;
+
+  for (iter = 0u; iter < ARBINT_INVERT_POLISH_ITERS; ++iter) {
+    size_t drop_limbs;
+    const arbint_limb_t * vv_use;
+    size_t vv_use_n;
+    size_t cut_limbs;
+
+    if (*v_n == 0 || *v_n > v_cap) {
+      rc = ARBINT_EINVAL;
+      goto cleanup;
+    }
+
+    rc = arbint_mul_mag_dispatch(vv, &vv_n, v, *v_n, v, *v_n, alloc);
+    if (rc != ARBINT_OK)
+      goto cleanup;
+
+    /*  We only need floor((vv * d) / B^p). Discarding the lowest
+        (p - dn) limbs of vv is exact here: their product with d is < B^p
+        and cannot affect the shifted result. This avoids pathological
+        >2:1 multiply ratios that force slow schoolbook multiplication.  */
+    drop_limbs = p_limbs - dn;
+    vv_use = vv;
+    vv_use_n = vv_n;
+    cut_limbs = p_limbs;
+
+    if (drop_limbs > 0u) {
+      if (vv_use_n <= drop_limbs) {
+        vvd_n = 0u;
+      } else {
+        vv_use += drop_limbs;
+        vv_use_n -= drop_limbs;
+        cut_limbs = p_limbs - drop_limbs;
+        rc = arbint_mul_mag_dispatch(vvd, &vvd_n, vv_use, vv_use_n, d, dn,
+                                     alloc);
+        if (rc != ARBINT_OK)
+          goto cleanup;
+      }
+    } else {
+      rc = arbint_mul_mag_dispatch(vvd, &vvd_n, vv_use, vv_use_n, d, dn, alloc);
+      if (rc != ARBINT_OK)
+        goto cleanup;
+    }
+
+    if (vvd_n > cut_limbs) {
+      memmove(vvd, vvd + cut_limbs, (vvd_n - cut_limbs) * sizeof(arbint_limb_t));
+      vvd_n -= cut_limbs;
+    } else {
+      vvd_n = 0u;
+    }
+
+    two_n = arbint__dbl_mag(two, v, *v_n);
+    if (arbint_cmp_mag_limbs(two, two_n, vvd, vvd_n) <= 0) {
+      rc = ARBINT_EINVAL;
+      goto cleanup;
+    }
+
+    *v_n = arbint__sub_mag(v, two, two_n, vvd, vvd_n);
+    if (*v_n > v_cap)
+      *v_n = v_cap;
+    *v_n = arbint_norm_used(v, *v_n);
+    if (*v_n == 0u) {
+      rc = ARBINT_EINVAL;
+      goto cleanup;
+    }
+  }
+
+  rc = ARBINT_OK;
+
+cleanup:
+  arbint_free_limbs(alloc, work);
+  return rc;
+}
+
 /*  Internal: compute reciprocal v = floor(2^(p_limbs * BITS) / d).  */
 static arbint_err_t arbint_invert_newton_prec(arbint_limb_t * v, size_t * v_n,
                                               const arbint_limb_t * d,
@@ -552,9 +655,6 @@ static arbint_err_t arbint_invert_newton_prec(arbint_limb_t * v, size_t * v_n,
     size_t result_cap;
     size_t result_n;
     size_t adjust;
-    int cmp_pow;
-    arbint_limb_t * check_prod = NULL;
-    size_t check_prod_n;
 
     if (!arbint_size_add(p_limbs - dn, 2, &result_cap))
       return ARBINT_EOVERFLOW;
@@ -588,66 +688,43 @@ static arbint_err_t arbint_invert_newton_prec(arbint_limb_t * v, size_t * v_n,
     if (result_n == 0 || result_n > result_cap)
       return arbint_invert_direct(v, v_n, d, dn, p_limbs, alloc);
 
-    check_prod = arbint_alloc_limbs(alloc, result_cap + dn + 4);
-    if (check_prod == NULL)
-      return ARBINT_ENOMEM;
-
-    rc = arbint_mul_mag_generic(check_prod, &check_prod_n, v, result_n, d, dn,
-                                 alloc);
-    if (rc != ARBINT_OK)
-      goto fallback_direct;
-
-    /*  Enforce v*d <= B^p.  */
-    adjust = 0;
-    while ((cmp_pow = arbint_cmp_mag_pow_limb(check_prod, check_prod_n,
-                                              p_limbs)) > 0) {
-      if (adjust++ >= 64 || (result_n == 1 && v[0] == 0))
-        goto fallback_direct;
-      arbint_limb_sub_1(v, v, result_n, 1);
-      result_n = arbint_norm_used(v, result_n);
-      if (result_n == 0)
-        goto fallback_direct;
-      check_prod_n = arbint__sub_mag(check_prod, check_prod, check_prod_n, d,
-                                     dn);
-    }
-
-    /*  Enforce (v+1)*d > B^p.  */
-    adjust = 0;
-    while (1) {
-      size_t vp1_n;
-      arbint_limb_t carry;
-
-      if (adjust++ >= 64)
-        goto fallback_direct;
-
-      vp1_n = arbint__add_mag(check_prod, check_prod, check_prod_n, d, dn);
-      if (arbint_cmp_mag_pow_limb(check_prod, vp1_n, p_limbs) > 0) {
-        check_prod_n = arbint__sub_mag(check_prod, check_prod, vp1_n, d, dn);
-        break;
+    /*  For normalized d and p >= dn, floor(B^p / d) must have at least
+        (p - dn + 1) limbs.  If Newton lands one scale unit low, restore
+        fixed-point scale by shifting left in limb space.  */
+    {
+      size_t min_n = p_limbs - dn + 1;
+      if (result_n < min_n) {
+        size_t pad = min_n - result_n;
+        if (result_n > SIZE_MAX - pad || result_n + pad > result_cap)
+          return arbint_invert_direct(v, v_n, d, dn, p_limbs, alloc);
+        memmove(v + pad, v, result_n * sizeof(arbint_limb_t));
+        memset(v, 0, pad * sizeof(arbint_limb_t));
+        result_n += pad;
       }
-      carry = arbint_limb_add_1(v, v, result_n, 1);
-      if (carry != 0) {
-        if (result_n >= result_cap)
-          goto fallback_direct;
-        v[result_n++] = carry;
-      }
-      check_prod_n = vp1_n;
     }
-
-    arbint_free_limbs(alloc, check_prod);
 
     *v_n = arbint_norm_used(v, result_n);
+    if (*v_n == 0u)
+      return arbint_invert_direct(v, v_n, d, dn, p_limbs, alloc);
+
+    /*  Close to maximal Newton precision (p ~= 2*dn), the raw core output
+        can be too coarse and force expensive quotient-correction fallback.
+        Apply fixed-scale Newton polishing to stabilize reciprocal quality.  */
+    if (two_dn >= 8u && p_limbs + 8u >= two_dn) {
+      rc = arbint_invert_newton_polish(v, v_n, d, dn, p_limbs, result_cap,
+                                       alloc);
+      if (rc != ARBINT_OK) {
+        if (rc == ARBINT_ENOMEM)
+          return rc;
+        return arbint_invert_direct(v, v_n, d, dn, p_limbs, alloc);
+      }
+    }
+
+    /*  Accept Newton reciprocal directly.
+        Exact floor(B^p / d) is not required here: division applies a
+        remainder-based correction loop after q approximation.  */
     if (*v_n == 0)
       *v_n = 1;
-    for (adjust = *v_n; adjust < result_cap; ++adjust)
-      v[adjust] = 0;
-    return ARBINT_OK;
-
-fallback_direct:
-    arbint_free_limbs(alloc, check_prod);
-    rc = arbint_invert_direct(v, v_n, d, dn, p_limbs, alloc);
-    if (rc != ARBINT_OK)
-      return rc;
     for (adjust = *v_n; adjust < result_cap; ++adjust)
       v[adjust] = 0;
     return ARBINT_OK;
@@ -819,7 +896,7 @@ arbint_err_t arbint_div_mag_newton(const arbint_limb_t * np, size_t nn,
 
   /*  Compute r = n_norm - q * d_norm.  */
   if (q_n > 0) {
-    rc = arbint_mul_mag_generic(qd, &qd_n, q_tmp, q_n, d_norm, dn, alloc);
+    rc = arbint_mul_mag_dispatch(qd, &qd_n, q_tmp, q_n, d_norm, dn, alloc);
     if (rc != ARBINT_OK)
       goto cleanup;
   } else {

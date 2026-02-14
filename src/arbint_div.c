@@ -16,6 +16,7 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "arbint_div.h"
+#include "arbint_div_bz.h"
 #include "arbint_div_newton.h"
 
 #include "arbint_dispatch.h"
@@ -426,11 +427,14 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
       else
         rc = arbint_div_mag_knuth(np, nn, dp, dn, qmag, rmag);
     } else {
-      /*  Choose between Newton-Raphson and Knuth Algorithm D.
-          Newton is O(M(n)) vs Knuth's O(n*m), but has higher constant factor.
-          Use Newton for large divisors where asymptotic advantage dominates.  */
+      /*  Choose between Newton-Raphson, Burnikel-Ziegler, and Knuth Algorithm D.
+          Newton is O(M(n)) for very large divisors.
+          BZ is O(n^1.58) for medium divisors where Knuth's O(n*m) is too slow.
+          Knuth is best for small divisors due to lower constant factor.  */
       if (dn >= ARBINT_NEWTON_DIV_THRESHOLD) {
         rc = arbint_div_mag_newton(np, nn, dp, dn, qmag, rmag, alloc);
+      } else if (dn >= ARBINT_BZ_THRESHOLD) {
+        rc = arbint_div_mag_bz(np, nn, dp, dn, qmag, rmag, alloc);
       } else {
         rc = arbint_div_mag_knuth(np, nn, dp, dn, qmag, rmag);
       }
