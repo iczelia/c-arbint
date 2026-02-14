@@ -40,7 +40,7 @@ static inline void arbint_umul(arbint_limb_t * hi, arbint_limb_t * lo,
   arbint_umul_limb_generic(hi, lo, a, b);
 }
 
-/*  Shared reciprocal and division-step core.  */
+/*  Shared reciprocal, division-step, and 3-by-2 division core.  */
 #define ARBINT_DIV_PREPARE_FN arbint_prepare_barrett
 #define ARBINT_DIV_STEP_FN arbint_ubarrett
 #define ARBINT_DIV_UMUL_FN arbint_umul
@@ -359,8 +359,9 @@ arbint_get_shifted_limb(const arbint_limb_t * np, size_t nn, unsigned shift,
   return (np[idx] << shift) | (np[idx - 1u] >> (ARBINT_LIMB_BITS - shift));
 }
 
-/*  Specialized 3-by-2 long division for dn == 2, allocation-free.
-    Uses Knuth D quotient estimation/correction on a rolling 3-limb window.  */
+/*  Generic 3-by-2 long division for dn == 2.
+    Uses fused arbint_div_3by2 with 2-limb reciprocal for ~3 wide muls
+    per quotient digit.  */
 static arbint_err_t
 arbint_div_mag_two_limb(const arbint_limb_t * np, size_t nn,
                         const arbint_limb_t * dp, arbint_limb_t * qp,
@@ -368,16 +369,18 @@ arbint_div_mag_two_limb(const arbint_limb_t * np, size_t nn,
   unsigned shift;
   arbint_limb_t d0;
   arbint_limb_t d1;
-  arbint_limb_t di;
+  arbint_limb_t dinv;
   arbint_limb_t r1;
   arbint_limb_t r0;
   size_t j;
+  size_t qn;
 
   if (np == NULL || dp == NULL || rp == NULL)
     return ARBINT_EINVAL;
   if (nn < 2u || dp[1] == 0u)
     return ARBINT_EINVAL;
 
+  /*  Normalize divisor: shift so MSB of d1 is set.  */
   shift = arbint_clz_limb(dp[1]);
   if (shift != 0u) {
     d0 = dp[0] << shift;
@@ -386,140 +389,73 @@ arbint_div_mag_two_limb(const arbint_limb_t * np, size_t nn,
     d0 = dp[0];
     d1 = dp[1];
   }
-  di = arbint_prepare_barrett(d1);
 
-  r1 = arbint_get_shifted_limb(np, nn, shift, nn);
-  r0 = arbint_get_shifted_limb(np, nn, shift, nn - 1u);
+  /*  Compute 2-limb reciprocal ONCE (outside the loop).  */
+  arbint_recip_2limb(&dinv, d1, d0);
 
-  for (j = nn - 1u; j-- != 0u;) {
-    arbint_limb_t u0 = arbint_get_shifted_limb(np, nn, shift, j);
-    arbint_limb_t qhat;
+  /*  Check for shift overflow: when shift > 0, the normalized dividend may
+      have an extra leading limb (shifted[nn] = np[nn-1] >> (64 - shift)).
+      If this is non-zero, the quotient may have nn limbs instead of nn-1.  */
+  {
+    arbint_limb_t overflow =
+        (shift != 0u) ? (np[nn - 1u] >> (ARBINT_LIMB_BITS - shift)) : 0u;
 
-    if (r1 >= d1) {
-      qhat = ~(arbint_limb_t) 0u;
+    if (overflow != 0u) {
+      /*  With overflow: quotient has up to nn limbs.
+          Initialize (r1, r0) from (shifted[nn], shifted[nn-1]).  */
+      r1 = overflow;
+      r0 = arbint_get_shifted_limb(np, nn, shift, nn - 1u);
+      qn = nn;
     } else {
-      arbint_limb_t rhat;
-      arbint_limb_t prod_hi_test;
-      arbint_limb_t prod_lo_test;
-
-      arbint_ubarrett(&qhat, &rhat, r1, r0, d1, di);
-      while (1) {
-        arbint_umul(&prod_hi_test, &prod_lo_test, qhat, d0);
-        if (prod_hi_test > rhat ||
-            (prod_hi_test == rhat && prod_lo_test > u0)) {
-          qhat--;
-          rhat += d1;
-          if (rhat < d1)
-            break;
-        } else {
-          break;
-        }
-      }
+      /*  No overflow: quotient has up to nn-1 limbs.
+          Initialize (r1, r0) from (shifted[nn-1], shifted[nn-2]).  */
+      r1 = arbint_get_shifted_limb(np, nn, shift, nn - 1u);
+      r0 = arbint_get_shifted_limb(np, nn, shift, nn - 2u);
+      qn = nn - 1u;
     }
-
-    {
-      arbint_limb_t v0;
-      arbint_limb_t v1;
-      arbint_limb_t prod0_hi;
-      arbint_limb_t prod0_lo;
-      arbint_limb_t prod1_hi;
-      arbint_limb_t prod1_lo;
-      arbint_limb_t p0;
-      arbint_limb_t p1;
-      arbint_limb_t p2;
-
-      arbint_umul(&prod0_hi, &prod0_lo, qhat, d0);
-      arbint_umul(&prod1_hi, &prod1_lo, qhat, d1);
-      p0 = prod0_lo;
-      p1 = prod1_lo + prod0_hi;
-      p2 = prod1_hi + ((p1 < prod1_lo) ? 1u : 0u);
-
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-      {
-        unsigned char borrow;
-        unsigned char carry;
-        arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
-
-        borrow = ARBINT_X86_SUBBORROW(
-            0u, (arbint_x86_carry_word_t) u0, (arbint_x86_carry_word_t) p0,
-            &out);
-        v0 = (arbint_limb_t) out;
-        borrow = ARBINT_X86_SUBBORROW(
-            borrow, (arbint_x86_carry_word_t) r0, (arbint_x86_carry_word_t) p1,
-            &out);
-        v1 = (arbint_limb_t) out;
-        borrow = ARBINT_X86_SUBBORROW(
-            borrow, (arbint_x86_carry_word_t) r1, (arbint_x86_carry_word_t) p2,
-            &out);
-        if (borrow != 0u) {
-          carry = ARBINT_X86_ADDCARRY(0u, (arbint_x86_carry_word_t) v0,
-                                      (arbint_x86_carry_word_t) d0, &out);
-          v0 = (arbint_limb_t) out;
-          carry = ARBINT_X86_ADDCARRY(carry, (arbint_x86_carry_word_t) v1,
-                                      (arbint_x86_carry_word_t) d1, &out);
-          v1 = (arbint_limb_t) out;
-          (void) carry;
-          qhat--;
-        }
-      }
-#else
-      {
-        arbint_limb_t borrow = 0u;
-        arbint_limb_t old_top;
-        arbint_limb_t top_after_sub;
-
-        {
-          arbint_limb_t t = u0 - p0;
-          arbint_limb_t borrow1 = (t > u0) ? 1u : 0u;
-          arbint_limb_t t2 = t - borrow;
-          arbint_limb_t borrow2 = (t2 > t) ? 1u : 0u;
-          v0 = t2;
-          borrow = borrow1 | borrow2;
-        }
-        {
-          arbint_limb_t t = r0 - p1;
-          arbint_limb_t borrow1 = (t > r0) ? 1u : 0u;
-          arbint_limb_t t2 = t - borrow;
-          arbint_limb_t borrow2 = (t2 > t) ? 1u : 0u;
-          v1 = t2;
-          borrow = borrow1 | borrow2;
-        }
-
-        old_top = r1;
-        {
-          arbint_limb_t borrow_in = borrow;
-          arbint_limb_t t = old_top - p2;
-          arbint_limb_t borrow1 = (t > old_top) ? 1u : 0u;
-          top_after_sub = t - borrow_in;
-          borrow = borrow1 | ((top_after_sub > t) ? 1u : 0u);
-        }
-        if (borrow != 0u) {
-          arbint_limb_t carry = 0u;
-          arbint_limb_t sum_lo = v0 + carry;
-          arbint_limb_t carry1 = (sum_lo < carry) ? 1u : 0u;
-          arbint_limb_t sum = sum_lo + d0;
-          arbint_limb_t carry2 = (sum < sum_lo) ? 1u : 0u;
-          v0 = sum;
-          carry = carry1 + carry2;
-
-          sum_lo = v1 + carry;
-          carry1 = (sum_lo < carry) ? 1u : 0u;
-          sum = sum_lo + d1;
-          carry2 = (sum < sum_lo) ? 1u : 0u;
-          v1 = sum;
-          qhat--;
-        }
-      }
-#endif
-
-      r1 = v1;
-      r0 = v0;
-    }
-
-    if (qp != NULL)
-      qp[j] = qhat;
   }
 
+  /*  Handle MSQ: ensure r1 < d1 before entering main loop.
+      This satisfies arbint_div_3by2's precondition: n2 < d1.  */
+  if (r1 > d1 || (r1 == d1 && r0 >= d0)) {
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+    arbint_x86_carry_word_t _lo;
+    arbint_x86_carry_word_t _hi;
+    unsigned char _cy;
+    _cy = ARBINT_X86_SUBBORROW(0, r0, d0, &_lo);
+    (void) ARBINT_X86_SUBBORROW(_cy, r1, d1, &_hi);
+    r0 = (arbint_limb_t) _lo;
+    r1 = (arbint_limb_t) _hi;
+#else
+    {
+      arbint_limb_t _x = r0 - d0;
+      r1 = r1 - d1 - (r0 < d0);
+      r0 = _x;
+    }
+#endif
+    if (qp != NULL)
+      qp[qn - 1u] = 1u;
+  } else {
+    if (qp != NULL)
+      qp[qn - 1u] = 0u;
+  }
+
+  /*  Main division loop: each iteration produces one quotient limb.
+      After the MSQ handling above, r1 < d1 is guaranteed.
+
+      Index mapping: for quotient position j, we bring in normalized dividend
+      limb at index j (with/without overflow accounted for in qn).  */
+  for (j = qn - 1u; j-- != 0u;) {
+    arbint_limb_t u0 = arbint_get_shifted_limb(np, nn, shift, j);
+    arbint_limb_t q_digit;
+
+    arbint_div_3by2(&q_digit, &r1, &r0, r1, r0, u0, d1, d0, dinv);
+
+    if (qp != NULL)
+      qp[j] = q_digit;
+  }
+
+  /*  Un-normalize remainder.  */
   if (shift != 0u) {
     rp[0] = (r0 >> shift) | (r1 << (ARBINT_LIMB_BITS - shift));
     rp[1] = r1 >> shift;
