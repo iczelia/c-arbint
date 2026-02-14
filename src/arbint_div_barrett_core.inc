@@ -150,108 +150,187 @@ static inline void arbint_recip_2limb(arbint_limb_t * dinv, arbint_limb_t d1,
 /*  Divide 3-limb by 2-limb, producing 1-limb quotient and 2-limb remainder.
 
     Preconditions:
-      - d1 has MSB set (normalized divisor), i.e., d1 >= B/2.
-      - d = d1*B + d0 is the 2-limb divisor.
-      - n = n2*B^2 + n1*B + n0 is the 3-limb dividend.
-      - CRITICAL: n < d*B, which means n2 < d1 (quotient fits in one limb).
-      - dinv was computed by arbint_recip_2limb(d1, d0) for this divisor.
+      - _d1 has MSB set (normalized divisor), i.e., _d1 >= B/2.
+      - d = _d1*B + _d0 is the 2-limb divisor.
+      - n = _n2*B^2 + _n1*B + _n0 is the 3-limb dividend.
+      - CRITICAL: n < d*B, which means _n2 < _d1 (quotient fits in one limb).
+      - _dinv was computed by arbint_recip_2limb(_d1, _d0) for this divisor.
 
     Postconditions:
-      - *q = floor(n / d), a single limb (guaranteed by precondition).
-      - (*r1, *r0) = n mod d, a 2-limb remainder with 0 <= r < d.
-      - Mathematical identity: n = q * d + r.  */
-static inline void arbint_div_3by2(arbint_limb_t * q, arbint_limb_t * r1,
-                                   arbint_limb_t * r0, arbint_limb_t n2,
-                                   arbint_limb_t n1, arbint_limb_t n0,
-                                   arbint_limb_t d1, arbint_limb_t d0,
-                                   arbint_limb_t dinv) {
-  arbint_limb_t _q;
-  arbint_limb_t _q0;
-  arbint_limb_t _r1;
-  arbint_limb_t _r0;
-  arbint_limb_t _t1;
-  arbint_limb_t _t0;
-  arbint_limb_t _mask;
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-  arbint_x86_carry_word_t _lo;
-  arbint_x86_carry_word_t _hi;
-  unsigned char _cy;
+      - _q_out = floor(n / d), a single limb (guaranteed by precondition).
+      - (_r1_out, _r0_out) = n mod d, a 2-limb remainder with 0 <= r < d.
+      - Mathematical identity: n = q * d + r.
+
+    _umul is the wide multiply function (arbint_umul or similar).  */
+#if defined(ARBINT_USE_BMI2_INTRIN) && HAS_BMI2 && ARBINT_LIMB_BITS == 64 && \
+    ARBINT_HAVE_X86_CARRY_KERNEL
+/*  BMI2 version using _mulx_u64 directly for minimal register pressure.  */
+#define ARBINT_DIV_3BY2(_q_out, _r1_out, _r0_out, _n2, _n1, _n0, _d1, _d0, \
+                        _dinv, _umul)                                      \
+  do {                                                                     \
+    unsigned long long _q3b2_hi_;                                          \
+    unsigned long long _q3b2_;                                             \
+    unsigned long long _q0_3b2_;                                           \
+    unsigned long long _r1_3b2_;                                           \
+    unsigned long long _r0_3b2_;                                           \
+    unsigned long long _t1_3b2_;                                           \
+    unsigned long long _t0_3b2_;                                           \
+    unsigned long long _mask_3b2_;                                         \
+    arbint_x86_carry_word_t _lo_3b2_;                                      \
+    arbint_x86_carry_word_t _hi_3b2_;                                      \
+    unsigned char _cy_3b2_;                                                \
+                                                                           \
+    _q0_3b2_ = _mulx_u64((_n2), (_dinv), &_q3b2_hi_);                       \
+    _q3b2_ = _q3b2_hi_;                                                    \
+    _cy_3b2_ = ARBINT_X86_ADDCARRY(0, _q0_3b2_, (_n1), &_lo_3b2_);          \
+    (void) ARBINT_X86_ADDCARRY(_cy_3b2_, _q3b2_, (_n2), &_hi_3b2_);         \
+    _q0_3b2_ = _lo_3b2_;                                                   \
+    _q3b2_ = _hi_3b2_;                                                     \
+                                                                           \
+    _r1_3b2_ = (_n1) - (_d1) * _q3b2_;                                     \
+                                                                           \
+    _cy_3b2_ = ARBINT_X86_SUBBORROW(0, (_n0), (_d0), &_lo_3b2_);            \
+    (void) ARBINT_X86_SUBBORROW(_cy_3b2_, _r1_3b2_, (_d1), &_hi_3b2_);      \
+    _r0_3b2_ = _lo_3b2_;                                                   \
+    _r1_3b2_ = _hi_3b2_;                                                   \
+                                                                           \
+    _t0_3b2_ = _mulx_u64((_d0), _q3b2_, &_t1_3b2_);                         \
+    _cy_3b2_ = ARBINT_X86_SUBBORROW(0, _r0_3b2_, _t0_3b2_, &_lo_3b2_);      \
+    (void) ARBINT_X86_SUBBORROW(_cy_3b2_, _r1_3b2_, _t1_3b2_, &_hi_3b2_);   \
+    _r0_3b2_ = _lo_3b2_;                                                   \
+    _r1_3b2_ = _hi_3b2_;                                                   \
+                                                                           \
+    _q3b2_++;                                                              \
+                                                                           \
+    _mask_3b2_ = 0ull - (unsigned long long) (_r1_3b2_ >= _q0_3b2_);        \
+    _q3b2_ += _mask_3b2_;                                                  \
+    _cy_3b2_ = ARBINT_X86_ADDCARRY(0, _r0_3b2_, _mask_3b2_ & (_d0), &_lo_3b2_); \
+    (void) ARBINT_X86_ADDCARRY(_cy_3b2_, _r1_3b2_, _mask_3b2_ & (_d1), &_hi_3b2_); \
+    _r0_3b2_ = _lo_3b2_;                                                   \
+    _r1_3b2_ = _hi_3b2_;                                                   \
+                                                                           \
+    if (_r1_3b2_ >= (_d1)) {                                               \
+      if (_r1_3b2_ > (_d1) || _r0_3b2_ >= (_d0)) {                          \
+        _q3b2_++;                                                          \
+        _cy_3b2_ = ARBINT_X86_SUBBORROW(0, _r0_3b2_, (_d0), &_lo_3b2_);     \
+        (void) ARBINT_X86_SUBBORROW(_cy_3b2_, _r1_3b2_, (_d1), &_hi_3b2_);  \
+        _r0_3b2_ = _lo_3b2_;                                               \
+        _r1_3b2_ = _hi_3b2_;                                               \
+      }                                                                    \
+    }                                                                      \
+                                                                           \
+    (_q_out) = (arbint_limb_t) _q3b2_;                                     \
+    (_r1_out) = (arbint_limb_t) _r1_3b2_;                                  \
+    (_r0_out) = (arbint_limb_t) _r0_3b2_;                                  \
+  } while (0)
+#elif ARBINT_HAVE_X86_CARRY_KERNEL
+#define ARBINT_DIV_3BY2(_q_out, _r1_out, _r0_out, _n2, _n1, _n0, _d1, _d0, \
+                        _dinv, _umul)                                      \
+  do {                                                                     \
+    arbint_limb_t _q3b2_;                                                  \
+    arbint_limb_t _q0_3b2_;                                                \
+    arbint_limb_t _r1_3b2_;                                                \
+    arbint_limb_t _r0_3b2_;                                                \
+    arbint_limb_t _t1_3b2_;                                                \
+    arbint_limb_t _t0_3b2_;                                                \
+    arbint_limb_t _mask_3b2_;                                              \
+    arbint_x86_carry_word_t _lo_3b2_;                                      \
+    arbint_x86_carry_word_t _hi_3b2_;                                      \
+    unsigned char _cy_3b2_;                                                \
+                                                                           \
+    _umul(&_q3b2_, &_q0_3b2_, (_n2), (_dinv));                              \
+    _cy_3b2_ = ARBINT_X86_ADDCARRY(0, _q0_3b2_, (_n1), &_lo_3b2_);          \
+    (void) ARBINT_X86_ADDCARRY(_cy_3b2_, _q3b2_, (_n2), &_hi_3b2_);         \
+    _q0_3b2_ = (arbint_limb_t) _lo_3b2_;                                   \
+    _q3b2_ = (arbint_limb_t) _hi_3b2_;                                     \
+                                                                           \
+    _r1_3b2_ = (_n1) - (_d1) * _q3b2_;                                     \
+                                                                           \
+    _cy_3b2_ = ARBINT_X86_SUBBORROW(0, (_n0), (_d0), &_lo_3b2_);            \
+    (void) ARBINT_X86_SUBBORROW(_cy_3b2_, _r1_3b2_, (_d1), &_hi_3b2_);      \
+    _r0_3b2_ = (arbint_limb_t) _lo_3b2_;                                   \
+    _r1_3b2_ = (arbint_limb_t) _hi_3b2_;                                   \
+                                                                           \
+    _umul(&_t1_3b2_, &_t0_3b2_, (_d0), _q3b2_);                             \
+    _cy_3b2_ = ARBINT_X86_SUBBORROW(0, _r0_3b2_, _t0_3b2_, &_lo_3b2_);      \
+    (void) ARBINT_X86_SUBBORROW(_cy_3b2_, _r1_3b2_, _t1_3b2_, &_hi_3b2_);   \
+    _r0_3b2_ = (arbint_limb_t) _lo_3b2_;                                   \
+    _r1_3b2_ = (arbint_limb_t) _hi_3b2_;                                   \
+                                                                           \
+    _q3b2_++;                                                              \
+                                                                           \
+    _mask_3b2_ = (arbint_limb_t) 0u - (arbint_limb_t) (_r1_3b2_ >= _q0_3b2_); \
+    _q3b2_ += _mask_3b2_;                                                  \
+    _cy_3b2_ = ARBINT_X86_ADDCARRY(0, _r0_3b2_, _mask_3b2_ & (_d0), &_lo_3b2_); \
+    (void) ARBINT_X86_ADDCARRY(_cy_3b2_, _r1_3b2_, _mask_3b2_ & (_d1), &_hi_3b2_); \
+    _r0_3b2_ = (arbint_limb_t) _lo_3b2_;                                   \
+    _r1_3b2_ = (arbint_limb_t) _hi_3b2_;                                   \
+                                                                           \
+    if (_r1_3b2_ >= (_d1)) {                                               \
+      if (_r1_3b2_ > (_d1) || _r0_3b2_ >= (_d0)) {                          \
+        _q3b2_++;                                                          \
+        _cy_3b2_ = ARBINT_X86_SUBBORROW(0, _r0_3b2_, (_d0), &_lo_3b2_);     \
+        (void) ARBINT_X86_SUBBORROW(_cy_3b2_, _r1_3b2_, (_d1), &_hi_3b2_);  \
+        _r0_3b2_ = (arbint_limb_t) _lo_3b2_;                               \
+        _r1_3b2_ = (arbint_limb_t) _hi_3b2_;                               \
+      }                                                                    \
+    }                                                                      \
+                                                                           \
+    (_q_out) = _q3b2_;                                                     \
+    (_r1_out) = _r1_3b2_;                                                  \
+    (_r0_out) = _r0_3b2_;                                                  \
+  } while (0)
 #else
-  arbint_limb_t _x;
+#define ARBINT_DIV_3BY2(_q_out, _r1_out, _r0_out, _n2, _n1, _n0, _d1, _d0, \
+                        _dinv, _umul)                                      \
+  do {                                                                     \
+    arbint_limb_t _q3b2_;                                                  \
+    arbint_limb_t _q0_3b2_;                                                \
+    arbint_limb_t _r1_3b2_;                                                \
+    arbint_limb_t _r0_3b2_;                                                \
+    arbint_limb_t _t1_3b2_;                                                \
+    arbint_limb_t _t0_3b2_;                                                \
+    arbint_limb_t _mask_3b2_;                                              \
+    arbint_limb_t _x_3b2_;                                                 \
+                                                                           \
+    _umul(&_q3b2_, &_q0_3b2_, (_n2), (_dinv));                              \
+    _x_3b2_ = _q0_3b2_ + (_n1);                                            \
+    _q3b2_ = _q3b2_ + (_n2) + (_x_3b2_ < _q0_3b2_);                         \
+    _q0_3b2_ = _x_3b2_;                                                    \
+                                                                           \
+    _r1_3b2_ = (_n1) - (_d1) * _q3b2_;                                     \
+                                                                           \
+    _x_3b2_ = (_n0) - (_d0);                                               \
+    _r1_3b2_ = _r1_3b2_ - (_d1) - ((_n0) < (_d0));                          \
+    _r0_3b2_ = _x_3b2_;                                                    \
+                                                                           \
+    _umul(&_t1_3b2_, &_t0_3b2_, (_d0), _q3b2_);                             \
+    _x_3b2_ = _r0_3b2_ - _t0_3b2_;                                         \
+    _r1_3b2_ = _r1_3b2_ - _t1_3b2_ - (_r0_3b2_ < _t0_3b2_);                 \
+    _r0_3b2_ = _x_3b2_;                                                    \
+                                                                           \
+    _q3b2_++;                                                              \
+                                                                           \
+    _mask_3b2_ = (arbint_limb_t) 0u - (arbint_limb_t) (_r1_3b2_ >= _q0_3b2_); \
+    _q3b2_ += _mask_3b2_;                                                  \
+    _x_3b2_ = _r0_3b2_ + (_mask_3b2_ & (_d0));                              \
+    _r1_3b2_ = _r1_3b2_ + (_mask_3b2_ & (_d1)) + (_x_3b2_ < _r0_3b2_);      \
+    _r0_3b2_ = _x_3b2_;                                                    \
+                                                                           \
+    if (_r1_3b2_ >= (_d1)) {                                               \
+      if (_r1_3b2_ > (_d1) || _r0_3b2_ >= (_d0)) {                          \
+        _q3b2_++;                                                          \
+        _x_3b2_ = _r0_3b2_ - (_d0);                                        \
+        _r1_3b2_ = _r1_3b2_ - (_d1) - (_r0_3b2_ < (_d0));                   \
+        _r0_3b2_ = _x_3b2_;                                                \
+      }                                                                    \
+    }                                                                      \
+                                                                           \
+    (_q_out) = _q3b2_;                                                     \
+    (_r1_out) = _r1_3b2_;                                                  \
+    (_r0_out) = _r0_3b2_;                                                  \
+  } while (0)
 #endif
-
-  ARBINT_DIV_UMUL_FN(&_q, &_q0, n2, dinv);
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-  _cy = ARBINT_X86_ADDCARRY(0, _q0, n1, &_lo);
-  (void) ARBINT_X86_ADDCARRY(_cy, _q, n2, &_hi);
-  _q0 = (arbint_limb_t) _lo;
-  _q = (arbint_limb_t) _hi;
-#else
-  _x = _q0 + n1;
-  _q = _q + n2 + (_x < _q0);
-  _q0 = _x;
-#endif
-
-  _r1 = n1 - d1 * _q;
-
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-  _cy = ARBINT_X86_SUBBORROW(0, n0, d0, &_lo);
-  (void) ARBINT_X86_SUBBORROW(_cy, _r1, d1, &_hi);
-  _r0 = (arbint_limb_t) _lo;
-  _r1 = (arbint_limb_t) _hi;
-#else
-  _x = n0 - d0;
-  _r1 = _r1 - d1 - (n0 < d0);
-  _r0 = _x;
-#endif
-
-  ARBINT_DIV_UMUL_FN(&_t1, &_t0, d0, _q);
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-  _cy = ARBINT_X86_SUBBORROW(0, _r0, _t0, &_lo);
-  (void) ARBINT_X86_SUBBORROW(_cy, _r1, _t1, &_hi);
-  _r0 = (arbint_limb_t) _lo;
-  _r1 = (arbint_limb_t) _hi;
-#else
-  _x = _r0 - _t0;
-  _r1 = _r1 - _t1 - (_r0 < _t0);
-  _r0 = _x;
-#endif
-
-  _q++;
-
-  _mask = (arbint_limb_t) 0u - (arbint_limb_t) (_r1 >= _q0);
-  _q += _mask;
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-  _cy = ARBINT_X86_ADDCARRY(0, _r0, _mask & d0, &_lo);
-  (void) ARBINT_X86_ADDCARRY(_cy, _r1, _mask & d1, &_hi);
-  _r0 = (arbint_limb_t) _lo;
-  _r1 = (arbint_limb_t) _hi;
-#else
-  _x = _r0 + (_mask & d0);
-  _r1 = _r1 + (_mask & d1) + (_x < _r0);
-  _r0 = _x;
-#endif
-
-  if (_r1 >= d1) {
-    if (_r1 > d1 || _r0 >= d0) {
-      _q++;
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-      _cy = ARBINT_X86_SUBBORROW(0, _r0, d0, &_lo);
-      (void) ARBINT_X86_SUBBORROW(_cy, _r1, d1, &_hi);
-      _r0 = (arbint_limb_t) _lo;
-      _r1 = (arbint_limb_t) _hi;
-#else
-      _x = _r0 - d0;
-      _r1 = _r1 - d1 - (_r0 < d0);
-      _r0 = _x;
-#endif
-    }
-  }
-
-  *q = _q;
-  *r1 = _r1;
-  *r0 = _r0;
-}
 #endif /*  ARBINT_DIV_OMIT_STEP  */
 
 #undef ARBINT_DIV_PREPARE_FN

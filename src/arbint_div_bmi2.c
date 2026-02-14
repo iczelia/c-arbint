@@ -202,7 +202,7 @@ arbint_err_t arbint_div_mag_two_limb_bmi2(const arbint_limb_t * np, size_t nn,
     arbint_limb_t u0 = arbint_get_shifted_limb_bmi2(np, nn, shift, j);
     arbint_limb_t q_digit;
 
-    arbint_div_3by2(&q_digit, &r1, &r0, r1, r0, u0, d1, d0, dinv);
+    ARBINT_DIV_3BY2(q_digit, r1, r0, r1, r0, u0, d1, d0, dinv, arbint_umul);
 
     if (qp != NULL)
       qp[j] = q_digit;
