@@ -247,10 +247,11 @@ arbint_err_t arbint_div_mag_two_limb_bmi2(const arbint_limb_t * np, size_t nn,
 
         old_top = r1;
         {
+          arbint_limb_t borrow_in = borrow;
           arbint_limb_t t = old_top - p2;
           arbint_limb_t borrow1 = (t > old_top) ? 1u : 0u;
-          top_after_sub = t - borrow;
-          borrow |= borrow1 | ((top_after_sub > t) ? 1u : 0u);
+          top_after_sub = t - borrow_in;
+          borrow = borrow1 | ((top_after_sub > t) ? 1u : 0u);
         }
         if (borrow != 0u) {
           arbint_limb_t carry = 0u;

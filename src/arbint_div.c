@@ -282,15 +282,25 @@ static arbint_tdiv_q_3_fn_t arbint_select_tdiv_q_3(void) {
 #endif
 }
 
+#if !HAS_BMI2_ALWAYS
+static arbint_err_t
+arbint_div_mag_two_limb_generic_dispatch(const arbint_limb_t * np, size_t nn,
+                                         const arbint_limb_t * dp,
+                                         arbint_limb_t * qp,
+                                         arbint_limb_t * rp) {
+  return arbint_div_mag_knuth(np, nn, dp, 2u, qp, rp);
+}
+#endif
+
 static arbint_div_mag_two_limb_fn_t arbint_select_div_mag_two_limb(void) {
 #if HAS_BMI2_ALWAYS
   return arbint_div_mag_two_limb_bmi2;
 #elif HAS_BMI2
   return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
              ? arbint_div_mag_two_limb_bmi2
-             : NULL;
+             : arbint_div_mag_two_limb_generic_dispatch;
 #else
-  return NULL;
+  return arbint_div_mag_two_limb_generic_dispatch;
 #endif
 }
 

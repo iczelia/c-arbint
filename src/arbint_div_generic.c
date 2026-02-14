@@ -487,10 +487,11 @@ arbint_div_mag_two_limb(const arbint_limb_t * np, size_t nn,
 
         old_top = r1;
         {
+          arbint_limb_t borrow_in = borrow;
           arbint_limb_t t = old_top - p2;
           arbint_limb_t borrow1 = (t > old_top) ? 1u : 0u;
-          top_after_sub = t - borrow;
-          borrow |= borrow1 | ((top_after_sub > t) ? 1u : 0u);
+          top_after_sub = t - borrow_in;
+          borrow = borrow1 | ((top_after_sub > t) ? 1u : 0u);
         }
         if (borrow != 0u) {
           arbint_limb_t carry = 0u;
@@ -599,12 +600,8 @@ arbint_err_t arbint_div_mag_knuth(const arbint_limb_t * np, size_t nn,
   if (dp[dn - 1u] == 0u)
     return ARBINT_EINVAL;
 
-#if ARBINT_HAVE_X86_CARRY_KERNEL
-  /* The specialized 3-by-2 path is currently validated only with the x86
-     carry-kernel code path. Keep portable targets on full Knuth-D. */
   if (dn == 2u)
     return arbint_div_mag_two_limb(np, nn, dp, qp, rp);
-#endif
 
   /* Allocate working storage for normalized dividend and divisor.
      u needs nn+1 limbs (extra limb for carry from normalization).
