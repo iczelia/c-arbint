@@ -17,9 +17,7 @@
 
 #include "arbint_hash.h"
 
-#include "config.h"
-
-#include "arbint_cpu.h"
+#include "arbint_dispatch.h"
 #include "arbint_internal_util.h"
 
 #include <string.h>
@@ -34,41 +32,41 @@ typedef void (*arbint_sha256_compress_fn_t)(uint32_t state[8],
 typedef uint32_t (*arbint_crc32c_fn_t)(uint32_t crc, const uint8_t * data,
                                        size_t len);
 
+/*  SHA256 compress dispatch: x86 SHA-NI > ARM SHA2 > generic.
+    Note: This doesn't use ARBINT_DISPATCH_* macros due to ARM fallback.  */
 static arbint_sha256_compress_fn_t arbint_select_sha256_compress(void) {
 #if HAS_SHA_NI_ALWAYS
   return arbint_sha256_compress_shani;
 #elif HAS_SHA_NI
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_SHA)
-             ? arbint_sha256_compress_shani
-             : arbint_sha256_compress_generic;
-#elif HAS_ARM_SHA2_ALWAYS
+  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_SHA))
+    return arbint_sha256_compress_shani;
+#endif
+#if HAS_ARM_SHA2_ALWAYS
   return arbint_sha256_compress_arm;
 #elif HAS_ARM_SHA2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_SHA2)
-             ? arbint_sha256_compress_arm
-             : arbint_sha256_compress_generic;
-#else
+  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_SHA2))
+    return arbint_sha256_compress_arm;
+#endif
   return arbint_sha256_compress_generic;
-#endif /* HAS_SHA_NI_ALWAYS */
 }
 
+/*  CRC32C dispatch: x86 SSE4.2 > ARM CRC32+PMULL > generic.
+    Note: This doesn't use ARBINT_DISPATCH_* macros due to ARM fallback.  */
 static arbint_crc32c_fn_t arbint_select_crc32c(void) {
 #if HAS_SSE42_CRC32_ALWAYS
   return arbint_crc32c_sse42;
 #elif HAS_SSE42_CRC32
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_CRC32)
-             ? arbint_crc32c_sse42
-             : arbint_crc32c_generic;
-#elif (HAS_ARM_CRC32_ALWAYS && HAS_ARM_PMULL_ALWAYS)
+  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_CRC32))
+    return arbint_crc32c_sse42;
+#endif
+#if (HAS_ARM_CRC32_ALWAYS && HAS_ARM_PMULL_ALWAYS)
   return arbint_crc32c_neon;
 #elif (HAS_ARM_CRC32 && HAS_ARM_PMULL)
-  return (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_CRC32) &&
-          arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_PMULL))
-             ? arbint_crc32c_neon
-             : arbint_crc32c_generic;
-#else
+  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_CRC32) &&
+      arbint_cpu_has_feature(ARBINT_CPU_FEATURE_ARM_PMULL))
+    return arbint_crc32c_neon;
+#endif
   return arbint_crc32c_generic;
-#endif /* HAS_SSE42_CRC32_ALWAYS */
 }
 
 static arbint_sha256_compress_fn_t sha256_compress = NULL;

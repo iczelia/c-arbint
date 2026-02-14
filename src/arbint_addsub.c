@@ -17,9 +17,7 @@
 
 #include "arbint_addsub.h"
 
-#include "config.h"
-
-#include "arbint_cpu.h"
+#include "arbint_dispatch.h"
 #include "arbint_internal_util.h"
 
 #include <assert.h>
@@ -238,17 +236,8 @@ typedef size_t (*arbint_dbl_mag_fn_t)(arbint_limb_t * dst,
                                       const arbint_limb_t * x, size_t nx);
 
 /*  Select the optimal doubling implementation based on CPU features.  */
-static arbint_dbl_mag_fn_t arbint_select_dbl_mag(void) {
-#if HAS_AVX2_ALWAYS
-  return arbint__dbl_mag_avx2;
-#elif HAS_AVX2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_AVX2)
-             ? arbint__dbl_mag_avx2
-             : arbint__dbl_mag_scalar;
-#else
-  return arbint__dbl_mag_scalar;
-#endif /* HAS_AVX2_ALWAYS */
-}
+ARBINT_DISPATCH_AVX2(arbint_select_dbl_mag, arbint_dbl_mag_fn_t,
+                     arbint__dbl_mag_avx2, arbint__dbl_mag_scalar)
 
 /*  Scalar implementation of magnitude doubling (original implementation).  */
 static size_t arbint__dbl_mag_scalar(arbint_limb_t * dst,

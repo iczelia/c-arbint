@@ -19,6 +19,7 @@
 #define ARBINT_GCD_H
 
 #include "arbint_base.h"
+#include "arbint_internal_util.h"
 
 /*  Threshold: when min(an, bn) <= this, use Euclidean with tdiv_r.  */
 #define ARBINT_GCD_EUCLID_THRESHOLD 4u
@@ -38,20 +39,10 @@ typedef struct {
 } arbint_lehmer_matrix_t;
 
 /*  Count trailing zeros across a limb array.
-    Returns the total number of trailing zero bits.
     Precondition: n > 0 and the value is nonzero (at least one nonzero limb).
-    For zero magnitude (n == 0 or all limbs zero), behavior is undefined.  */
+    Uses arbint_mag_ctz_or_size_max from arbint_internal_util.h.  */
 static inline size_t arbint_gcd_mag_ctz(const arbint_limb_t * p, size_t n) {
-  size_t i;
-  size_t ctz = 0u;
-
-  for (i = 0u; i < n && p[i] == 0u; ++i)
-    ctz += ARBINT_LIMB_BITS;
-
-  if (i < n)
-    ctz += arbint_ctz_limb(p[i]);
-
-  return ctz;
+  return arbint_mag_ctz_or_size_max(p, n);
 }
 
 /*  Single-limb Euclidean GCD.  */

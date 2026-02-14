@@ -23,6 +23,40 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/*  Error propagation with goto cleanup.
+    Requires: 'rc' variable and 'cleanup' label in scope.  */
+#define ARBINT_TRY(expr)                                                       \
+  do {                                                                         \
+    rc = (expr);                                                               \
+    if (rc != ARBINT_OK)                                                       \
+      goto cleanup;                                                            \
+  } while (0)
+
+/*  NULL pointer validation macros for public API entry points.  */
+#define ARBINT_CHECK_NONNULL_1(a)                                              \
+  do {                                                                         \
+    if ((a) == NULL)                                                           \
+      return ARBINT_EINVAL;                                                    \
+  } while (0)
+
+#define ARBINT_CHECK_NONNULL_2(a, b)                                           \
+  do {                                                                         \
+    if ((a) == NULL || (b) == NULL)                                            \
+      return ARBINT_EINVAL;                                                    \
+  } while (0)
+
+#define ARBINT_CHECK_NONNULL_3(a, b, c)                                        \
+  do {                                                                         \
+    if ((a) == NULL || (b) == NULL || (c) == NULL)                             \
+      return ARBINT_EINVAL;                                                    \
+  } while (0)
+
+#define ARBINT_CHECK_NONNULL_4(a, b, c, d)                                     \
+  do {                                                                         \
+    if ((a) == NULL || (b) == NULL || (c) == NULL || (d) == NULL)              \
+      return ARBINT_EINVAL;                                                    \
+  } while (0)
+
 /*  Shared lazy-init helper for static dispatch pointers.  */
 #define ARBINT_LAZY_INIT(impl_var, selector_fn)                               \
   do {                                                                        \
@@ -30,12 +64,38 @@
       (impl_var) = (selector_fn) ();                                          \
   } while (0)
 
-/*  Allocator selection helpers (single-threaded context ownership model).  */
+/*  Extract allocator from a single arbint_t.  */
 static inline const arbint_alloc_t *
 arbint_get_alloc_from_obj(const arbint_t x) {
   if (x == NULL || x[0]._ctx == NULL || x[0]._ctx->a.realloc == NULL)
     return NULL;
   return &x[0]._ctx->a;
+}
+
+/*  Extract context from a single arbint_t.  */
+static inline arbint_ctx_t * arbint_get_ctx_from_obj(const arbint_t x) {
+  if (x == NULL)
+    return NULL;
+  return x[0]._ctx;
+}
+
+/*  Select first non-NULL context from 2 arbint_t values.  */
+static inline arbint_ctx_t * arbint_pick_ctx2(const arbint_t a,
+                                               const arbint_t b) {
+  arbint_ctx_t * ctx = arbint_get_ctx_from_obj(a);
+  if (ctx != NULL)
+    return ctx;
+  return arbint_get_ctx_from_obj(b);
+}
+
+/*  Select first non-NULL context from 3 arbint_t values.  */
+static inline arbint_ctx_t * arbint_pick_ctx3(const arbint_t a,
+                                               const arbint_t b,
+                                               const arbint_t c) {
+  arbint_ctx_t * ctx = arbint_pick_ctx2(a, b);
+  if (ctx != NULL)
+    return ctx;
+  return arbint_get_ctx_from_obj(c);
 }
 
 static inline const arbint_alloc_t *
@@ -69,7 +129,21 @@ static inline const arbint_alloc_t * arbint_pick_alloc4(const arbint_t a,
   return arbint_get_alloc_from_obj(d);
 }
 
-/*  Magnitude bit helpers shared by div/gcd/bitops code paths.  */
+/*  Convert bit index to limb index.  */
+static inline size_t arbint_bit_to_limb_idx(size_t bit_idx) {
+  return bit_idx / ARBINT_LIMB_BITS;
+}
+
+/*  Get bit position within a limb (0 to ARBINT_LIMB_BITS-1).  */
+static inline unsigned arbint_bit_in_limb(size_t bit_idx) {
+  return (unsigned) (bit_idx % ARBINT_LIMB_BITS);
+}
+
+/*  Number of limbs needed for k bits (ceiling division).  */
+static inline size_t arbint_limbs_for_bits(size_t k) {
+  return (k + ARBINT_LIMB_BITS - 1u) / ARBINT_LIMB_BITS;
+}
+
 static inline int arbint_u32_is_pow2(uint32_t v) {
   return v != 0u && (v & (v - 1u)) == 0u;
 }

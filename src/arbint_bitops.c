@@ -17,9 +17,8 @@
 
 #include "arbint_bitops.h"
 #include "arbint.h"
-#include "arbint_cpu.h"
+#include "arbint_dispatch.h"
 #include "arbint_internal_util.h"
-#include "config.h"
 
 #include <limits.h>
 #include <string.h>
@@ -211,17 +210,8 @@ static size_t arbint_popcount_limbs_scalar(const arbint_limb_t * x, size_t n) {
 
 typedef size_t (*arbint_popcount_limbs_fn_t)(const arbint_limb_t *, size_t);
 
-static arbint_popcount_limbs_fn_t arbint_select_popcount_limbs(void) {
-#if HAS_POPCNT_ALWAYS
-  return arbint__popcount_limbs_popcnt;
-#elif HAS_POPCNT
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_POPCNT)
-             ? arbint__popcount_limbs_popcnt
-             : arbint_popcount_limbs_scalar;
-#else
-  return arbint_popcount_limbs_scalar;
-#endif /* HAS_POPCNT_ALWAYS */
-}
+ARBINT_DISPATCH_POPCNT(arbint_select_popcount_limbs, arbint_popcount_limbs_fn_t,
+                       arbint__popcount_limbs_popcnt, arbint_popcount_limbs_scalar)
 
 static size_t arbint_popcount_limbs(const arbint_limb_t * x, size_t n) {
   static arbint_popcount_limbs_fn_t impl = NULL;
@@ -253,17 +243,8 @@ static size_t arbint_hamming_limbs_scalar(const arbint_limb_t * a, size_t an,
 typedef size_t (*arbint_hamming_limbs_fn_t)(const arbint_limb_t *, size_t,
                                             const arbint_limb_t *, size_t);
 
-static arbint_hamming_limbs_fn_t arbint_select_hamming_limbs(void) {
-#if HAS_POPCNT_ALWAYS
-  return arbint__hamming_limbs_popcnt;
-#elif HAS_POPCNT
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_POPCNT)
-             ? arbint__hamming_limbs_popcnt
-             : arbint_hamming_limbs_scalar;
-#else
-  return arbint_hamming_limbs_scalar;
-#endif /* HAS_POPCNT_ALWAYS */
-}
+ARBINT_DISPATCH_POPCNT(arbint_select_hamming_limbs, arbint_hamming_limbs_fn_t,
+                       arbint__hamming_limbs_popcnt, arbint_hamming_limbs_scalar)
 
 static size_t arbint_hamming_limbs(const arbint_limb_t * a, size_t an,
                                    const arbint_limb_t * b, size_t bn) {

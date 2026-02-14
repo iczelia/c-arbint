@@ -18,12 +18,11 @@
 #include "arbint_gcd.h"
 
 #include "arbint_addsub.h"
-#include "arbint_cpu.h"
+#include "arbint_dispatch.h"
 #include "arbint_div.h"
 #include "arbint_internal_util.h"
 #include "arbint_mul.h"
 #include "arbint_shift.h"
-#include "config.h"
 
 #include <string.h>
 
@@ -31,31 +30,17 @@
 
     Lehmer GCD has platform-specific implementations that use different
     multiply primitives. The dispatch selects the optimal implementation
-    based on CPU features detected at runtime.  */
+    based on CPU features detected at runtime.
+
+    BMI2 provides _mulx_u64 for fast 64x64->128 multiply (~3x faster
+    than half-limb decomposition used in generic path).  */
 typedef arbint_err_t (*arbint_gcd_lehmer_fn_t)(
     arbint_t g, const arbint_limb_t * ap, size_t an, const arbint_limb_t * bp,
     size_t bn, const arbint_alloc_t * alloc);
 
-/*  Select optimal Lehmer GCD implementation based on CPU features.
-
-    Three-tier dispatch pattern (same as multiplication):
-    1. HAS_BMI2_ALWAYS: library compiled with -mbmi2, always use BMI2
-    2. HAS_BMI2: BMI2 code compiled separately, runtime CPUID check
-    3. Neither: only generic implementation available
-
-    BMI2 provides _mulx_u64 for fast 64x64->128 multiply (~3x faster
-    than half-limb decomposition used in generic path).  */
-static arbint_gcd_lehmer_fn_t arbint_select_gcd_lehmer(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_gcd_lehmer_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_gcd_lehmer_bmi2
-             : arbint_gcd_lehmer_generic;
-#else
-  return arbint_gcd_lehmer_generic;
-#endif
-}
+/*  Select optimal Lehmer GCD implementation based on CPU features.  */
+ARBINT_DISPATCH_BMI2(arbint_select_gcd_lehmer, arbint_gcd_lehmer_fn_t,
+                     arbint_gcd_lehmer_bmi2, arbint_gcd_lehmer_generic)
 
 /*  Cached Lehmer GCD function pointer (lazily initialized).
 

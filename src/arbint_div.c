@@ -18,9 +18,7 @@
 #include "arbint_div.h"
 #include "arbint_div_newton.h"
 
-#include "config.h"
-
-#include "arbint_cpu.h"
+#include "arbint_dispatch.h"
 #include "arbint_internal_util.h"
 
 #include <limits.h>
@@ -233,55 +231,21 @@ typedef arbint_err_t (*arbint_div_mag_two_limb_fn_t)(
 
 /*  Runtime dispatch selectors.  */
 
-static arbint_div_qr_u32_impl_fn_t arbint_select_div_qr_u32_impl(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_div_qr_u32_bmi2_impl;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_div_qr_u32_bmi2_impl
-             : arbint_div_qr_u32_generic_impl;
-#else
-  return arbint_div_qr_u32_generic_impl;
-#endif
-}
+ARBINT_DISPATCH_BMI2(arbint_select_div_qr_u32_impl, arbint_div_qr_u32_impl_fn_t,
+                     arbint_div_qr_u32_bmi2_impl, arbint_div_qr_u32_generic_impl)
 
-static arbint_div_mag_single_limb_fn_t
-arbint_select_div_mag_single_limb(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_div_mag_single_limb_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_div_mag_single_limb_bmi2
-             : arbint_div_mag_single_limb_generic;
-#else
-  return arbint_div_mag_single_limb_generic;
-#endif
-}
+ARBINT_DISPATCH_BMI2(arbint_select_div_mag_single_limb,
+                     arbint_div_mag_single_limb_fn_t,
+                     arbint_div_mag_single_limb_bmi2,
+                     arbint_div_mag_single_limb_generic)
 
-static arbint_mod_u32_barrett_fn_t arbint_select_mod_u32_barrett(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_mod_u32_barrett_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_mod_u32_barrett_bmi2
-             : arbint_mod_u32_barrett_generic;
-#else
-  return arbint_mod_u32_barrett_generic;
-#endif
-}
+ARBINT_DISPATCH_BMI2(arbint_select_mod_u32_barrett, arbint_mod_u32_barrett_fn_t,
+                     arbint_mod_u32_barrett_bmi2, arbint_mod_u32_barrett_generic)
 
-static arbint_tdiv_q_3_fn_t arbint_select_tdiv_q_3(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_tdiv_q_3_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_tdiv_q_3_bmi2
-             : arbint_tdiv_q_3_generic;
-#else
-  return arbint_tdiv_q_3_generic;
-#endif
-}
+ARBINT_DISPATCH_BMI2(arbint_select_tdiv_q_3, arbint_tdiv_q_3_fn_t,
+                     arbint_tdiv_q_3_bmi2, arbint_tdiv_q_3_generic)
 
+/*  Two-limb division fallback: generic path uses Knuth's algorithm.  */
 #if !HAS_BMI2_ALWAYS
 static arbint_err_t
 arbint_div_mag_two_limb_generic_dispatch(const arbint_limb_t * np, size_t nn,
@@ -292,17 +256,9 @@ arbint_div_mag_two_limb_generic_dispatch(const arbint_limb_t * np, size_t nn,
 }
 #endif
 
-static arbint_div_mag_two_limb_fn_t arbint_select_div_mag_two_limb(void) {
-#if HAS_BMI2_ALWAYS
-  return arbint_div_mag_two_limb_bmi2;
-#elif HAS_BMI2
-  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
-             ? arbint_div_mag_two_limb_bmi2
-             : arbint_div_mag_two_limb_generic_dispatch;
-#else
-  return arbint_div_mag_two_limb_generic_dispatch;
-#endif
-}
+ARBINT_DISPATCH_BMI2(arbint_select_div_mag_two_limb,
+                     arbint_div_mag_two_limb_fn_t, arbint_div_mag_two_limb_bmi2,
+                     arbint_div_mag_two_limb_generic_dispatch)
 
 /*  Dispatched Barrett reduction.  */
 

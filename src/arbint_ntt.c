@@ -17,9 +17,8 @@
 
 #include "arbint_ntt.h"
 #include "arbint_ntt_segmented.h"
-#include "arbint_cpu.h"
+#include "arbint_dispatch.h"
 #include "arbint_internal_util.h"
-#include "config.h"
 
 /*  Function pointer type for NTT multiplication dispatch.  */
 typedef arbint_err_t (*arbint_mul_mag_ntt_fn_t)(
@@ -32,52 +31,16 @@ typedef arbint_err_t (*arbint_sqr_mag_ntt_fn_t)(
     const arbint_alloc_t * alloc);
 
 /*  Select optimal NTT implementation based on CPU features.
-    Three-tier dispatch: compile-time always, runtime detection, fallback.
-    Priority: AVX2 > BMI2 > generic.  */
-static arbint_mul_mag_ntt_fn_t arbint_select_mul_mag_ntt(void) {
-  /*  AVX2 tier (highest priority - AVX2 implies BMI2).  */
-#if HAS_AVX2_ALWAYS
-  return arbint_mul_mag_ntt_avx2;
-#elif HAS_AVX2
-  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_AVX2))
-    return arbint_mul_mag_ntt_avx2;
-#endif
-
-  /*  BMI2 tier (intermediate - _mulx_u64 optimization).  */
-#if HAS_BMI2_ALWAYS
-  return arbint_mul_mag_ntt_bmi2;
-#elif HAS_BMI2
-  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2))
-    return arbint_mul_mag_ntt_bmi2;
-#endif
-
-  /*  Generic fallback (portable half-limb multiplication).  */
-  return arbint_mul_mag_ntt_generic;
-}
+    Three-tier dispatch: AVX2 > BMI2 > generic.  */
+ARBINT_DISPATCH_AVX2_BMI2(arbint_select_mul_mag_ntt, arbint_mul_mag_ntt_fn_t,
+                          arbint_mul_mag_ntt_avx2, arbint_mul_mag_ntt_bmi2,
+                          arbint_mul_mag_ntt_generic)
 
 /*  Select optimal NTT squaring implementation based on CPU features.
-    Three-tier dispatch: compile-time always, runtime detection, fallback.
-    Priority: AVX2 > BMI2 > generic.  */
-static arbint_sqr_mag_ntt_fn_t arbint_select_sqr_mag_ntt(void) {
-  /*  AVX2 tier (highest priority - AVX2 implies BMI2).  */
-#if HAS_AVX2_ALWAYS
-  return arbint_sqr_mag_ntt_avx2;
-#elif HAS_AVX2
-  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_AVX2))
-    return arbint_sqr_mag_ntt_avx2;
-#endif
-
-  /*  BMI2 tier (intermediate - _mulx_u64 optimization).  */
-#if HAS_BMI2_ALWAYS
-  return arbint_sqr_mag_ntt_bmi2;
-#elif HAS_BMI2
-  if (arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2))
-    return arbint_sqr_mag_ntt_bmi2;
-#endif
-
-  /*  Generic fallback (portable half-limb multiplication).  */
-  return arbint_sqr_mag_ntt_generic;
-}
+    Three-tier dispatch: AVX2 > BMI2 > generic.  */
+ARBINT_DISPATCH_AVX2_BMI2(arbint_select_sqr_mag_ntt, arbint_sqr_mag_ntt_fn_t,
+                          arbint_sqr_mag_ntt_avx2, arbint_sqr_mag_ntt_bmi2,
+                          arbint_sqr_mag_ntt_generic)
 
 /*  Cached function pointers for NTT multiplication and squaring.
     Lazily initialized on first use.  */
