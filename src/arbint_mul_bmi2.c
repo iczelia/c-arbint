@@ -153,10 +153,81 @@ static size_t arbint_divexact3_bmi2(arbint_limb_t * x, size_t n) {
 
 #define ARBINT_DIVEXACT3_FN arbint_divexact3_bmi2
 #define ARBINT_MUL_LIMB_1_FN arbint_mul_limb_1_bmi2
+#define ARBINT_MUL_LIMB_1_CUSTOM 1
 #define ARBINT_MUL_IMPL_FN arbint_mul_impl_bmi2
 #define ARBINT_SQR_IMPL_FN arbint_sqr_impl_bmi2
 
 #include "arbint_mul_core.inc"
+
+/*  Hand-unrolled single-limb multiply kernel.
+    Dedicated BMI2 path to keep carry chain in registers and reduce loop/control
+    overhead compared to the generic helper-generated version.  */
+size_t arbint_mul_limb_1_bmi2(arbint_limb_t * dst, const arbint_limb_t * a,
+                              size_t an, arbint_limb_t b) {
+  size_t i;
+
+  if (an == 0u)
+    return 0u;
+
+  if (b == 0u) {
+    memset(dst, 0, an * sizeof(arbint_limb_t));
+    return 0u;
+  }
+
+#if ARBINT_HAVE_X86_CARRY_KERNEL
+  {
+    arbint_limb_t carry = 0u;
+    arbint_x86_carry_word_t out = (arbint_x86_carry_word_t) 0;
+
+#define ARBINT_MUL_LIMB_STEP(idx_)                                               \
+  do {                                                                            \
+    arbint_limb_t hi_;                                                            \
+    arbint_limb_t lo_;                                                            \
+    unsigned char c_;                                                             \
+    arbint_mul_wide_limb(a[(idx_)], b, &hi_, &lo_);                              \
+    c_ = ARBINT_X86_ADDCARRY(0u, (arbint_x86_carry_word_t) lo_,                  \
+                             (arbint_x86_carry_word_t) carry, &out);             \
+    dst[(idx_)] = (arbint_limb_t) out;                                            \
+    (void) ARBINT_X86_ADDCARRY(0u, (arbint_x86_carry_word_t) hi_,                \
+                               (arbint_x86_carry_word_t) c_, &out);              \
+    carry = (arbint_limb_t) out;                                                  \
+  } while (0)
+
+    for (i = 0u; i + 4u <= an; i += 4u) {
+      ARBINT_MUL_LIMB_STEP(i);
+      ARBINT_MUL_LIMB_STEP(i + 1u);
+      ARBINT_MUL_LIMB_STEP(i + 2u);
+      ARBINT_MUL_LIMB_STEP(i + 3u);
+    }
+    for (; i < an; ++i)
+      ARBINT_MUL_LIMB_STEP(i);
+
+#undef ARBINT_MUL_LIMB_STEP
+
+    if (carry != 0u) {
+      dst[an] = carry;
+      return an + 1u;
+    }
+  }
+#else
+  {
+    arbint_limb_t carry = 0u;
+
+    for (i = 0u; i < an; ++i) {
+      arbint_limb_t out;
+      carry = arbint_muladd_limb(a[i], b, (arbint_limb_t) 0u, carry, &out);
+      dst[i] = out;
+    }
+
+    if (carry != 0u) {
+      dst[an] = carry;
+      return an + 1u;
+    }
+  }
+#endif
+
+  return arbint_norm_used(dst, an);
+}
 
 /*  Exported wrappers for internal functions used by addmul/submul.  */
 

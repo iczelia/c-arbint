@@ -12,6 +12,7 @@ test_shift
 test_bitops
 test_mul_exhaustive
 test_sqr
+test_div_newton
 test_isqrt
 test_toom3
 test_addmul

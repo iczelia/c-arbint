@@ -90,6 +90,10 @@ arbint_err_t arbint_div_mag_single_limb_bmi2(const arbint_limb_t * np,
 arbint_err_t arbint_mod_u32_barrett_bmi2(arbint_t x, arbint_limb_t d_norm,
                                          arbint_limb_t di, unsigned shift);
 arbint_err_t arbint_tdiv_q_3_bmi2(arbint_t q, const arbint_t n);
+arbint_err_t arbint_div_mag_two_limb_bmi2(const arbint_limb_t * np, size_t nn,
+                                          const arbint_limb_t * dp,
+                                          arbint_limb_t * qp,
+                                          arbint_limb_t * rp);
 #endif /* HAS_BMI2 */
 
 #endif /* ARBINT_DIV_H */

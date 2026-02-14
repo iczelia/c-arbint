@@ -25,6 +25,12 @@
       - ARBINT_MUL_IMPL_FN     -- name for the multi-limb multiply function
       - ARBINT_SQR_IMPL_FN     -- name for the squaring function  */
 
+/*  Token-pasting helper for generating variant names.  */
+#define ARBINT_MUL_CONCAT_(a, b) a##b
+#define ARBINT_MUL_CONCAT(a, b) ARBINT_MUL_CONCAT_(a, b)
+#define ARBINT_MUL_LIMB_1_FN_R ARBINT_MUL_CONCAT(ARBINT_MUL_LIMB_1_FN, _r)
+#define ARBINT_MUL_LIMB_1_FN_IP ARBINT_MUL_CONCAT(ARBINT_MUL_LIMB_1_FN, _ip)
+
 /*  Classical O(n^2) schoolbook multiplication algorithm.
     Multiplies each limb of a by each limb of b, accumulating into result.
     Returns normalized result limb count (usually an+bn, may be an+bn-1 if no
@@ -1311,11 +1317,16 @@ static size_t arbint_mulacc(arbint_limb_t * dst, size_t dst_n, size_t dst_cap,
   return arbint_norm_used(dst, new_n);
 }
 
+#ifndef ARBINT_MUL_LIMB_1_CUSTOM
 /*  Multiply multi-limb integer by single limb (dst = a * b).
     Specialized version of multiplication for single-limb multiplier.
-    Returns normalized result limb count.  */
-size_t ARBINT_MUL_LIMB_1_FN(arbint_limb_t * dst, const arbint_limb_t * a,
-                             size_t an, arbint_limb_t b) {
+    Returns normalized result limb count.
+
+    The restrict version allows the compiler to assume dst and a do not alias,
+    enabling better optimization (no reload of a[i] after storing dst[i]).  */
+static size_t ARBINT_MUL_LIMB_1_FN_R(arbint_limb_t * restrict dst,
+                                     const arbint_limb_t * restrict a,
+                                     size_t an, arbint_limb_t b) {
   size_t i;
   arbint_limb_t carry = 0u;
 
@@ -1332,6 +1343,38 @@ size_t ARBINT_MUL_LIMB_1_FN(arbint_limb_t * dst, const arbint_limb_t * a,
 
   return arbint_norm_used(dst, an);
 }
+
+/*  In-place multiply: x[0..n-1] *= b.
+    Exploits the fact that we process limbs sequentially low-to-high,
+    reading x[i] exactly once before overwriting it.  */
+static size_t ARBINT_MUL_LIMB_1_FN_IP(arbint_limb_t * x, size_t n,
+                                      arbint_limb_t b) {
+  size_t i;
+  arbint_limb_t carry = 0u;
+
+  for (i = 0u; i < n; ++i) {
+    arbint_limb_t xi = x[i];
+    arbint_limb_t out;
+    carry = arbint_muladd_limb(xi, b, (arbint_limb_t) 0u, carry, &out);
+    x[i] = out;
+  }
+
+  if (carry != 0u) {
+    x[n] = carry;
+    return n + 1u;
+  }
+
+  return arbint_norm_used(x, n);
+}
+
+/*  Non-restrict wrapper: dispatches to specialized versions.  */
+size_t ARBINT_MUL_LIMB_1_FN(arbint_limb_t * dst, const arbint_limb_t * a,
+                             size_t an, arbint_limb_t b) {
+  if (dst == a)
+    return ARBINT_MUL_LIMB_1_FN_IP(dst, an, b);
+  return ARBINT_MUL_LIMB_1_FN_R(dst, a, an, b);
+}
+#endif /* ARBINT_MUL_LIMB_1_CUSTOM */
 
 /*  Multi-limb multiplication (rop = a * b).
     Handles aliasing by copying inputs if needed. Uses Karatsuba algorithm

@@ -26,6 +26,7 @@ check_PROGRAMS = \
   test_sqr \
   test_tdiv \
   test_div_pow2 \
+  test_div_newton \
   test_divisible \
   test_large \
   test_stochastic \

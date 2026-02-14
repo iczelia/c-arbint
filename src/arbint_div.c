@@ -16,14 +16,25 @@
     along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "arbint_div.h"
+#include "arbint_div_newton.h"
 
 #include "config.h"
 
 #include "arbint_cpu.h"
 #include "arbint_internal_util.h"
 
+#if ARBINT_COMPILER_MSVC
+  #include <malloc.h>
+#else
+  #include <alloca.h>
+#endif
+
 #include <limits.h>
 #include <string.h>
+
+#ifndef ARBINT_TDIV_STACK_REM_LIMBS_MAX
+#define ARBINT_TDIV_STACK_REM_LIMBS_MAX 8u
+#endif
 
 /*  Power-of-two truncated division: q = n / 2^k, r = n % 2^k.
     Truncated division semantics:
@@ -226,6 +237,9 @@ typedef arbint_err_t (*arbint_mod_u32_barrett_fn_t)(arbint_t x,
                                                     unsigned shift);
 
 typedef arbint_err_t (*arbint_tdiv_q_3_fn_t)(arbint_t q, const arbint_t n);
+typedef arbint_err_t (*arbint_div_mag_two_limb_fn_t)(
+    const arbint_limb_t * np, size_t nn, const arbint_limb_t * dp,
+    arbint_limb_t * qp, arbint_limb_t * rp);
 
 /*  Runtime dispatch selectors.  */
 
@@ -275,6 +289,18 @@ static arbint_tdiv_q_3_fn_t arbint_select_tdiv_q_3(void) {
              : arbint_tdiv_q_3_generic;
 #else
   return arbint_tdiv_q_3_generic;
+#endif
+}
+
+static arbint_div_mag_two_limb_fn_t arbint_select_div_mag_two_limb(void) {
+#if HAS_BMI2_ALWAYS
+  return arbint_div_mag_two_limb_bmi2;
+#elif HAS_BMI2
+  return arbint_cpu_has_feature(ARBINT_CPU_FEATURE_BMI2)
+             ? arbint_div_mag_two_limb_bmi2
+             : NULL;
+#else
+  return NULL;
 #endif
 }
 
@@ -388,6 +414,7 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
   size_t rcap;
   arbint_limb_t * qmag;
   arbint_limb_t * rmag;
+  int rmag_needs_free;
   size_t q_used = 0u;
   size_t r_used;
   int qsign;
@@ -427,16 +454,39 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
       return ARBINT_ENOMEM;
   }
 
-  rmag = arbint_alloc_limbs(alloc, rcap);
-  if (rmag == NULL) {
-    arbint_free_limbs(alloc, qmag);
-    return ARBINT_ENOMEM;
+  rmag_needs_free = 0;
+  if (r == NULL && rcap <= ARBINT_TDIV_STACK_REM_LIMBS_MAX) {
+    rmag = (arbint_limb_t *) alloca(rcap * sizeof(arbint_limb_t));
+  } else {
+    rmag = arbint_alloc_limbs(alloc, rcap);
+    if (rmag == NULL) {
+      arbint_free_limbs(alloc, qmag);
+      return ARBINT_ENOMEM;
+    }
+    rmag_needs_free = 1;
   }
 
   if (dn >= 2u) {
-    rc = arbint_div_mag_knuth(np, nn, dp, dn, qmag, rmag);
+    if (dn == 2u) {
+      static arbint_div_mag_two_limb_fn_t impl2 = NULL;
+      ARBINT_LAZY_INIT(impl2, arbint_select_div_mag_two_limb);
+      if (impl2 != NULL)
+        rc = impl2(np, nn, dp, qmag, rmag);
+      else
+        rc = arbint_div_mag_knuth(np, nn, dp, dn, qmag, rmag);
+    } else {
+      /*  Choose between Newton-Raphson and Knuth Algorithm D.
+          Newton is O(M(n)) vs Knuth's O(n*m), but has higher constant factor.
+          Use Newton for large divisors where asymptotic advantage dominates.  */
+      if (dn >= ARBINT_NEWTON_DIV_THRESHOLD) {
+        rc = arbint_div_mag_newton(np, nn, dp, dn, qmag, rmag, alloc);
+      } else {
+        rc = arbint_div_mag_knuth(np, nn, dp, dn, qmag, rmag);
+      }
+    }
     if (rc != ARBINT_OK) {
-      arbint_free_limbs(alloc, rmag);
+      if (rmag_needs_free)
+        arbint_free_limbs(alloc, rmag);
       arbint_free_limbs(alloc, qmag);
       return rc;
     }
@@ -453,7 +503,8 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
 
     rc = impl(np, nn, dp[0], qmag, &q_used, &rem_limb);
     if (rc != ARBINT_OK) {
-      arbint_free_limbs(alloc, rmag);
+      if (rmag_needs_free)
+        arbint_free_limbs(alloc, rmag);
       arbint_free_limbs(alloc, qmag);
       return rc;
     }
@@ -469,7 +520,8 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
   if (q != NULL) {
     rc = arbint_set_mag_signed(q, qmag, q_used, qsign);
     if (rc != ARBINT_OK) {
-      arbint_free_limbs(alloc, rmag);
+      if (rmag_needs_free)
+        arbint_free_limbs(alloc, rmag);
       arbint_free_limbs(alloc, qmag);
       return rc;
     }
@@ -478,13 +530,15 @@ arbint_tdiv_qr_mag_impl(arbint_t q, arbint_t r, const arbint_limb_t * np,
   if (r != NULL) {
     rc = arbint_set_mag_signed(r, rmag, r_used, rsign);
     if (rc != ARBINT_OK) {
-      arbint_free_limbs(alloc, rmag);
+      if (rmag_needs_free)
+        arbint_free_limbs(alloc, rmag);
       arbint_free_limbs(alloc, qmag);
       return rc;
     }
   }
 
-  arbint_free_limbs(alloc, rmag);
+  if (rmag_needs_free)
+    arbint_free_limbs(alloc, rmag);
   arbint_free_limbs(alloc, qmag);
   return ARBINT_OK;
 }
